@@ -1,0 +1,62 @@
+[
+  {
+    "note_id": 1,
+    "scope": "player",
+    "player_id": 101,
+    "team_code": "CHI",
+    "game_id": null,
+    "note_text": "Ada prefers the short pronunciation.",
+    "source": "manual",
+    "created_at": "2026-07-18T20:00:00+00:00"
+  },
+  {
+    "note_id": 2,
+    "scope": "player",
+    "player_id": 102,
+    "team_code": "CHI",
+    "game_id": null,
+    "note_text": "Private note for Ivy only.",
+    "source": "manual",
+    "created_at": "2026-07-18T20:05:00+00:00"
+  },
+  {
+    "note_id": 3,
+    "scope": "team",
+    "player_id": null,
+    "team_code": "CHI",
+    "game_id": null,
+    "note_text": "Chicago-wide travel context.",
+    "source": "manual",
+    "created_at": "2026-07-18T20:10:00+00:00"
+  },
+  {
+    "note_id": 4,
+    "scope": "game",
+    "player_id": null,
+    "team_code": null,
+    "game_id": "9001",
+    "note_text": "Use only for game 9001.",
+    "source": "manual",
+    "created_at": "2026-07-18T20:15:00+00:00"
+  },
+  {
+    "note_id": 5,
+    "scope": "global",
+    "player_id": null,
+    "team_code": null,
+    "game_id": null,
+    "note_text": "Global production reminder.",
+    "source": "manual",
+    "created_at": "2026-07-18T20:20:00+00:00"
+  },
+  {
+    "note_id": 6,
+    "scope": "",
+    "player_id": 101,
+    "team_code": "CHI",
+    "game_id": null,
+    "note_text": "Legacy row awaiting an explicit migration decision.",
+    "source": "manual",
+    "created_at": "2026-07-17T18:00:00+00:00"
+  }
+]

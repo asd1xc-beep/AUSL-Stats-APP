@@ -1,0 +1,37 @@
+﻿{
+    "schema_version":  1,
+    "snapshot_updated_at":  "2026-07-23T18:08:06.854069+00:00",
+    "files":  [
+                  {
+                      "name":  "ausl_rosters.xlsx",
+                      "sha256":  "fa7e390b645bccea2497eca95eebb914e9cff6e5da214e1604f9b3235eb07840",
+                      "bytes":  33548,
+                      "validation":  "validated_phase_1_core"
+                  },
+                  {
+                      "name":  "ausl_season_stats.xlsx",
+                      "sha256":  "f4aa966c94802944ceba3bfbeeddc54e135b1d13518867945e7e7419f54d8caa",
+                      "bytes":  98380,
+                      "validation":  "validated_phase_1_core"
+                  },
+                  {
+                      "name":  "ausl_career_stats.xlsx",
+                      "sha256":  "c2cfb23f4247baf3baefd40f2dd9cfe34a5ca7c532da9f77238a0bc4a2dc3773",
+                      "bytes":  37535,
+                      "validation":  "validated_phase_1_core"
+                  },
+                  {
+                      "name":  "ausl_team_context.xlsx",
+                      "sha256":  "45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb",
+                      "bytes":  16585,
+                      "validation":  "validated_phase_1_core"
+                  },
+                  {
+                      "name":  "update_manifest.json",
+                      "sha256":  "d2d6fe1445dd81d1e4e077154737745b0d93b3091dd858ba2ea5a73a679beab2",
+                      "bytes":  502,
+                      "validation":  "validated_phase_1_core"
+                  }
+              ],
+    "purpose":  "Validated distributable core snapshot; unverified enrichment is intentionally omitted."
+}

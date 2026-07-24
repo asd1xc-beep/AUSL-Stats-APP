@@ -1,0 +1,99 @@
+{
+  "official_games": [
+    {
+      "season": 369,
+      "game_id": 9001,
+      "game_date": "2026-07-20T19:00:00-04:00",
+      "game_time_zone": "EDT",
+      "away_team": "Chicago Bandits",
+      "home_team": "Carolina Blaze",
+      "away_team_code": "CHI",
+      "home_team_code": "CAR",
+      "venue": "Fixture Stadium",
+      "status": "Scheduled",
+      "source_name": "Official AUSL Schedule",
+      "source_url": "https://theausl.com/game/9001",
+      "imported_at": "2026-07-19T12:00:00+00:00"
+    },
+    {
+      "season": 369,
+      "game_id": 9002,
+      "game_date": "2026-07-27T16:00:00-04:00",
+      "game_time_zone": "EDT",
+      "away_team": "Chicago Bandits",
+      "home_team": "Carolina Blaze",
+      "away_team_code": "CHI",
+      "home_team_code": "CAR",
+      "venue": "Fixture Stadium",
+      "status": "Scheduled",
+      "source_name": "Official AUSL Schedule",
+      "source_url": "https://theausl.com/game/9002",
+      "imported_at": "2026-07-19T12:00:00+00:00"
+    },
+    {
+      "season": 369,
+      "game_id": 9005,
+      "game_date": "2026-07-29T18:00:00-04:00",
+      "game_time_zone": "EDT",
+      "away_team": "Texas Volts",
+      "home_team": "Utah Talons",
+      "away_team_code": "TEX",
+      "home_team_code": "UTA",
+      "venue": null,
+      "status": null,
+      "source_name": "Official AUSL Schedule",
+      "source_url": "https://theausl.com/game/9005",
+      "imported_at": "2026-07-19T12:00:00+00:00"
+    }
+  ],
+  "invalid_rows": [
+    {
+      "season": 369,
+      "game_id": 9003,
+      "game_date": "2026-07-21T19:00:00-04:00",
+      "away_team": "Chicago Bandits",
+      "home_team": "Carolina Blaze",
+      "away_team_code": "CHI",
+      "home_team_code": "CAR",
+      "status": "Scheduled",
+      "source_name": "Official AUSL Schedule",
+      "imported_at": "2026-07-19T12:00:00+00:00"
+    },
+    {
+      "season": 369,
+      "game_id": 9003,
+      "game_date": "2026-07-21T21:00:00-04:00",
+      "away_team": "Texas Volts",
+      "home_team": "Utah Talons",
+      "away_team_code": "TEX",
+      "home_team_code": "UTA",
+      "status": "Scheduled",
+      "source_name": "Official AUSL Schedule",
+      "imported_at": "2026-07-19T12:00:00+00:00"
+    },
+    {
+      "season": 369,
+      "game_id": 9004,
+      "game_date": "2026-07-22T19:00:00-04:00",
+      "away_team": "Chicago Bandits",
+      "home_team": "Carolina Blaze",
+      "away_team_code": "CHI",
+      "home_team_code": "CAR",
+      "status": "Scheduled",
+      "source_name": "Official AUSL Schedule",
+      "imported_at": null
+    },
+    {
+      "season": 369,
+      "game_id": 9006,
+      "game_date": "2026-07-30T19:00:00-04:00",
+      "away_team": "Unknown Club",
+      "home_team": "Carolina Blaze",
+      "away_team_code": "UNK",
+      "home_team_code": "CAR",
+      "status": "Scheduled",
+      "source_name": "Official AUSL Schedule",
+      "imported_at": "2026-07-19T12:00:00+00:00"
+    }
+  ]
+}

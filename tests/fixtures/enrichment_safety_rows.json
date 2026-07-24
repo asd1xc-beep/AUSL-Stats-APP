@@ -1,0 +1,80 @@
+{
+  "media_player": [
+    {
+      "entity_type": "player",
+      "entity_id": 77,
+      "note_category": "bio",
+      "note_text": "Verified short player note.",
+      "source_name": "Fixture media guide",
+      "source_pages": "10",
+      "confidence_score": 0.99,
+      "needs_review": false
+    },
+    {
+      "entity_type": "player",
+      "entity_id": 77,
+      "note_category": "award",
+      "note_text": "Unverified player claim must never render.",
+      "source_name": "Fixture media guide",
+      "source_pages": "11",
+      "confidence_score": 0.99,
+      "needs_review": true
+    }
+  ],
+  "media_team": [
+    {
+      "entity_type": "team",
+      "entity_id": "CHI",
+      "note_category": "history",
+      "note_text": "Verified short team note.",
+      "source_name": "Fixture media guide",
+      "source_pages": "20",
+      "confidence_score": 0.99,
+      "needs_review": false
+    },
+    {
+      "entity_type": "team",
+      "entity_id": "CHI",
+      "note_category": "history",
+      "note_text": "Unverified team claim must never render.",
+      "source_name": "Fixture media guide",
+      "source_pages": "21",
+      "confidence_score": 0.99,
+      "needs_review": true
+    }
+  ],
+  "official_game_notes": [
+    {
+      "team_codes": "CHI|CAR",
+      "game_date": "2026-07-19",
+      "note_category": "matchup",
+      "note_text": "Verified exact-game note.",
+      "game_id": 999,
+      "source_game_id": 999,
+      "source_date": "2026-07-19",
+      "source_pdf": "game-999.pdf",
+      "source_page": 2,
+      "subject_team_code": "CHI",
+      "opposing_team_code": "CAR",
+      "verification_state": "VERIFIED",
+      "confidence_score": 0.99,
+      "needs_review": false
+    },
+    {
+      "team_codes": "CHI|CAR",
+      "game_date": "2026-07-19",
+      "note_category": "injury_availability",
+      "note_text": "Unverified injury claim must never render.",
+      "game_id": 999,
+      "source_game_id": 999,
+      "source_date": "2026-07-19",
+      "source_pdf": "game-999.pdf",
+      "source_page": 3,
+      "subject_team_code": "CAR",
+      "opposing_team_code": "CHI",
+      "verification_state": "VERIFY",
+      "confidence_score": 0.99,
+      "needs_review": true
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "CHI_at_CAR": {
+    "away_team": "Chicago Bandits",
+    "home_team": "Carolina Blaze",
+    "away_code": "CHI",
+    "home_code": "CAR",
+    "source": "manual official lineup entry",
+    "locked_at": "2026-07-18T22:15:00+00:00",
+    "verify_note": "Verify lineups before air.",
+    "away": {
+      "team": "Chicago Bandits",
+      "team_code": "CHI",
+      "starting_pitcher": "Legacy Away Starter",
+      "lineup": [{"batting_order": 1, "player_id": "101", "player_name": "Legacy Away Batter"}]
+    },
+    "home": {
+      "team": "Carolina Blaze",
+      "team_code": "CAR",
+      "starting_pitcher": "Legacy Home Starter",
+      "lineup": [{"batting_order": 1, "player_id": "201", "player_name": "Legacy Home Batter"}]
+    }
+  }
+}

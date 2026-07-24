@@ -1,0 +1,21 @@
+{
+  "screen_sections": [
+    "GAME CONTEXT",
+    "TOP STORYLINES",
+    "AVAILABILITY",
+    "OFFENSE",
+    "PITCHING",
+    "MATCHUP HISTORY",
+    "MILESTONES",
+    "OFFICIAL GAME NOTES",
+    "PLAYERS TO WATCH",
+    "READY-MADE GRAPHICS QUEUE",
+    "VERIFICATION QUEUE"
+  ],
+  "packet_sections": [
+    "GAME CONTEXT",
+    "TOP STORYLINES",
+    "OFFICIAL GAME NOTES",
+    "VERIFICATION QUEUE"
+  ]
+}

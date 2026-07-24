@@ -1,0 +1,31 @@
+{
+  "game": {
+    "gameId": 9001,
+    "recordStatus": "In Progress",
+    "lastUpdated": "2026-07-20T23:12:00+00:00"
+  },
+  "box": {
+    "competitors": [
+      {"eventTeamId": 1, "name": "Chicago Bandits", "abbreviation": "CHI"},
+      {"eventTeamId": 2, "name": "Carolina Blaze", "abbreviation": "CAR"}
+    ],
+    "lineScores": [
+      {"eventTeamId": 1, "runs": 2, "hits": 4, "errors": 0, "innings": [1, 0, 1]},
+      {"eventTeamId": 2, "runs": 1, "hits": 3, "errors": 1, "innings": [0, 1, 0]}
+    ],
+    "batting": {
+      "1": {
+        "players": [
+          {"eventTeamId": 1, "playerName": "Ada Active", "position": "CF", "ab": 2, "r": 1, "h": 2, "rbi": 1, "bb": 0, "so": 0, "lob": 0}
+        ]
+      }
+    },
+    "pitching": {
+      "1": {
+        "players": [
+          {"eventTeamId": 1, "playerName": "Pia Pitcher", "position": "P", "ip": "3.2", "h": 3, "r": 1, "er": 1, "bb": 1, "so": 4, "hr": 0, "np": 54}
+        ]
+      }
+    }
+  }
+}

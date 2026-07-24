@@ -1,0 +1,12 @@
+{
+  "toc_text": "CHICAGO BANDITS ........ 8\nAda Active ........ 14\nPia Pitcher ........ 16",
+  "pages": {
+    "14": "ADA ACTIVE\nOF | Example State\n2025 AUSL: Fixture biography begins here.",
+    "15": "ADA ACTIVE (continued)\nCollege awards and hometown context.",
+    "16": "PIA PITCHER\nP | Audit College\nPitching biography."
+  },
+  "expected_ranges": {
+    "Ada Active": [14, 15],
+    "Pia Pitcher": [16, 16]
+  }
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "label": "long outing",
+    "inningsPitched": "31.2",
+    "hitsAllowed": 20,
+    "baseOnBalls": 12,
+    "source_whip": 9.99,
+    "expected_outs": 95,
+    "expected_whip": 1.0105263157894737,
+    "expected_display": "1.01"
+  },
+  {
+    "label": "one and two thirds",
+    "inningsPitched": "1.2",
+    "hitsAllowed": 2,
+    "baseOnBalls": 1,
+    "source_whip": 9.99,
+    "expected_outs": 5,
+    "expected_whip": 1.8,
+    "expected_display": "1.80"
+  },
+  {
+    "label": "two outs",
+    "inningsPitched": "0.2",
+    "hitsAllowed": 0,
+    "baseOnBalls": 1,
+    "source_whip": 9.99,
+    "expected_outs": 2,
+    "expected_whip": 1.5,
+    "expected_display": "1.50"
+  },
+  {
+    "label": "missing innings",
+    "inningsPitched": null,
+    "hitsAllowed": 1,
+    "baseOnBalls": 1,
+    "source_whip": 9.99,
+    "expected_outs": null,
+    "expected_whip": null,
+    "expected_display": "—"
+  },
+  {
+    "label": "malformed innings",
+    "inningsPitched": "1.3",
+    "hitsAllowed": 1,
+    "baseOnBalls": 1,
+    "source_whip": 9.99,
+    "expected_outs": null,
+    "expected_whip": null,
+    "expected_display": "—"
+  }
+]

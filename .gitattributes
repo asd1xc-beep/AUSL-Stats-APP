@@ -1,0 +1,23 @@
+* text=auto
+
+# Keep source and documentation diffs consistent across Windows and CI.
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.ini text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Large source documents and generated workbooks use Git LFS.
+*.pdf filter=lfs diff=lfs merge=lfs -text
+*.xlsx filter=lfs diff=lfs merge=lfs -text
+
+# Other binary assets should never receive text normalization.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.zip binary
+*.exe binary

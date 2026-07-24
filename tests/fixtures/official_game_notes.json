@@ -1,0 +1,28 @@
+[
+  {
+    "game_id": 9001,
+    "game_date": "2026-07-20",
+    "team_codes": "CHI,CAR",
+    "note_text": "Ada Active enters two hits shy of 50 AUSL career hits.",
+    "note_category": "milestone",
+    "player_ids": "101",
+    "source_url": "https://theausl.com/game-notes/9001.pdf",
+    "source_page": 3,
+    "imported_at": "2026-07-18T22:00:00+00:00",
+    "confidence_score": 0.95,
+    "needs_review": false
+  },
+  {
+    "game_id": 9002,
+    "game_date": "2026-07-27",
+    "team_codes": "CHI,CAR",
+    "note_text": "This belongs to the later repeat-opponent game.",
+    "note_category": "matchup",
+    "player_ids": "",
+    "source_url": "https://theausl.com/game-notes/9002.pdf",
+    "source_page": 2,
+    "imported_at": "2026-07-25T22:00:00+00:00",
+    "confidence_score": 0.90,
+    "needs_review": false
+  }
+]

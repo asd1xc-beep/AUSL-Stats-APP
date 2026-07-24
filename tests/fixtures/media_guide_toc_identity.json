@@ -1,0 +1,58 @@
+{
+  "guide_date": "2026-06-01",
+  "expected_pdf_offset": 2,
+  "roster": [
+    {"player_id": 1001, "player_name": "Morgan Zerkle"},
+    {"player_id": 1002, "player_name": "Sydney Romero"},
+    {"player_id": 1003, "player_name": "Rachel Garcia"},
+    {"player_id": 1004, "player_name": "Mariah Mazon"},
+    {"player_id": 1005, "player_name": "Elise Sokolsky"},
+    {"player_id": 1006, "player_name": "Reese Newcomer"}
+  ],
+  "pages": [
+    {
+      "page": 3,
+      "raw_text": "TABLE OF CONTENTS\nMorgan Zerkle ........................ 47-48\nSydney Romero ....................... 141-142\nRachel Garcia ....................... 204-206\nMariah Mazon ........................ 241-242\nElise Sokolsky ...................... 251\nThe information in this guide is accurate as of June 1, 2026."
+    },
+    {
+      "page": 49,
+      "raw_text": "MORGAN ZERKLE\nAUSL/ATHLETES UNLIMITED EXPERIENCE\nMorgan biography first page marker."
+    },
+    {
+      "page": 50,
+      "raw_text": "MORGAN ZERKLE (CONTINUED)\nCOLLEGE EXPERIENCE\nMorgan biography second page marker."
+    },
+    {
+      "page": 143,
+      "raw_text": "SYDNEY ROMERO\nAUSL/ATHLETES UNLIMITED EXPERIENCE\nSydney biography first page marker."
+    },
+    {
+      "page": 144,
+      "raw_text": "SYDNEY ROMERO (CONTINUED)\nPERSONAL\nSydney biography second page marker."
+    },
+    {
+      "page": 206,
+      "raw_text": "RACHEL GARCIA\nAUSL/ATHLETES UNLIMITED EXPERIENCE\nRachel biography first page marker."
+    },
+    {
+      "page": 207,
+      "raw_text": "RACHEL GARCIA (CONTINUED)\nCOLLEGE EXPERIENCE\nRachel biography second page marker."
+    },
+    {
+      "page": 208,
+      "raw_text": "RACHEL GARCIA (CONTINUED)\nPERSONAL\nRachel biography third page marker."
+    },
+    {
+      "page": 243,
+      "raw_text": "MARIAH MAZON\nAUSL/ATHLETES UNLIMITED EXPERIENCE\nMariah biography marker mentioning Rachel Garcia."
+    },
+    {
+      "page": 244,
+      "raw_text": "MARIAH MAZON (CONTINUED)\nCOLLEGE EXPERIENCE\nMariah biography second page marker."
+    },
+    {
+      "page": 253,
+      "raw_text": "ELISE SOKOLSKY\nCOLLEGE EXPERIENCE\nElise biography marker mentioning Sydney Romero and Morgan Zerkle."
+    }
+  ]
+}

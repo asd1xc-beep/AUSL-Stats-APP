@@ -1,0 +1,86 @@
+{
+  "classification_cases": [
+    {
+      "note": "Morgan Ellis finished her AUSL career with 42 hits.",
+      "category": "career_summary"
+    },
+    {
+      "note": "The two pitchers last met at the Women's College World Series.",
+      "category": "background"
+    },
+    {
+      "note": "The starting pitchers combined for 12 strikeouts in last week's game.",
+      "category": "recent_trend"
+    },
+    {
+      "note": "The team announced its starting pitcher before last week's game.",
+      "category": "recent_trend"
+    },
+    {
+      "note": "The teams were tied after six innings.",
+      "category": "background"
+    },
+    {
+      "note": "Ada Active is inactive tonight with an illness.",
+      "category": "availability"
+    },
+    {
+      "note": "Ada Active needs two hits to reach 50 AUSL career hits.",
+      "category": "milestone_watch"
+    },
+    {
+      "note": "Ada Active became the first AUSL player to reach 50 career hits.",
+      "category": "milestone_reached"
+    },
+    {
+      "note": "The Bandits announced Ada Active as tonight's starting pitcher.",
+      "category": "probable_starter"
+    },
+    {
+      "note": "The Bandits and Blaze meet in an AUSL rematch tonight.",
+      "category": "matchup_history"
+    },
+    {
+      "note": "Ada Active has reached base in eight straight games.",
+      "category": "recent_trend"
+    },
+    {
+      "note": "Ada Active has a .325 average this AUSL season.",
+      "category": "season_context"
+    },
+    {
+      "note": "Ada Active grew up in Raleigh and played college softball at State U.",
+      "category": "background"
+    }
+  ],
+  "duplicate_rows": [
+    {
+      "game_id": 9000,
+      "game_date": "2026-07-18",
+      "note_text": "Ada Active needs two hits to reach 50 AUSL career hits.",
+      "subject_player_id": "101",
+      "subject_player_name": "Ada Active",
+      "subject_team_code": "CHI",
+      "opposing_team_code": "CAR",
+      "source_url": "https://theausl.com/notes/older.pdf",
+      "source_pdf": "older.pdf",
+      "source_page": 3,
+      "source_date": "2026-07-18",
+      "verification_state": "VERIFY"
+    },
+    {
+      "game_id": 9001,
+      "game_date": "2026-07-20",
+      "note_text": "  ADA ACTIVE needs two hits to reach 50 AUSL career hits! ",
+      "subject_player_id": "101",
+      "subject_player_name": "Ada Active",
+      "subject_team_code": "CHI",
+      "opposing_team_code": "CAR",
+      "source_url": "https://theausl.com/notes/newer.pdf",
+      "source_pdf": "newer.pdf",
+      "source_page": 5,
+      "source_date": "2026-07-20",
+      "verification_state": "VERIFIED"
+    }
+  ]
+}

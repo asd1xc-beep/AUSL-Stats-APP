@@ -1,0 +1,74 @@
+[
+  {
+    "player_id": 101,
+    "player_name": "Ada Active",
+    "first_name": "Ada",
+    "last_name": "Active",
+    "team": "Chicago Bandits",
+    "team_code": "CHI",
+    "jersey_number": 7,
+    "position": "OF",
+    "roster_status": "Active",
+    "college": "Example State"
+  },
+  {
+    "player_id": 102,
+    "player_name": "Ivy Inactive",
+    "first_name": "Ivy",
+    "last_name": "Inactive",
+    "team": "Chicago Bandits",
+    "team_code": "CHI",
+    "jersey_number": 12,
+    "position": "OF",
+    "roster_status": "Inactive",
+    "college": "Fixture Tech"
+  },
+  {
+    "player_id": 103,
+    "player_name": "Rae Reserve",
+    "first_name": "Rae",
+    "last_name": "Reserve",
+    "team": "Chicago Bandits",
+    "team_code": "CHI",
+    "jersey_number": 22,
+    "position": "P",
+    "roster_status": "Reserve Athlete Pool",
+    "college": "Sample University"
+  },
+  {
+    "player_id": 104,
+    "player_name": "Uma Unknown",
+    "first_name": "Uma",
+    "last_name": "Unknown",
+    "team": "Chicago Bandits",
+    "team_code": "CHI",
+    "jersey_number": null,
+    "position": "IF",
+    "roster_status": null,
+    "college": null
+  },
+  {
+    "player_id": 105,
+    "player_name": "Pia Pitcher",
+    "first_name": "Pia",
+    "last_name": "Pitcher",
+    "team": "Chicago Bandits",
+    "team_code": "CHI",
+    "jersey_number": 30,
+    "position": "P",
+    "roster_status": "Active",
+    "college": "Audit College"
+  },
+  {
+    "player_id": 106,
+    "player_name": "Tess Teamless",
+    "first_name": "Tess",
+    "last_name": "Teamless",
+    "team": null,
+    "team_code": null,
+    "jersey_number": null,
+    "position": "IF",
+    "roster_status": "Active",
+    "college": null
+  }
+]

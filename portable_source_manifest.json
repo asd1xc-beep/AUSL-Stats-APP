@@ -1,0 +1,436 @@
+﻿{
+    "schema_version":  1,
+    "package_name":  "AUSL-Broadcast-Stats-Portable-Source-2026-07-23-refresh",
+    "generated_at":  "2026-07-23T18:16:11.4020967Z",
+    "git_branch":  "codex/phase-4-official-storylines",
+    "git_commit":  "a6d0324",
+    "working_tree_changes_included":  true,
+    "snapshot_updated_at":  "2026-07-23T18:08:06.854069+00:00",
+    "validation":  {
+                       "refresh_safeguards":  "11 passed",
+                       "focused_snapshot_refresh":  "53 passed",
+                       "full_regression":  "392 passed in 9.91 s",
+                       "full_regression_warnings_as_errors":  "392 passed in 9.73 s",
+                       "compileall":  "passed",
+                       "pip_check":  "no broken requirements",
+                       "tkinter_smoke":  "passed"
+                   },
+    "included_file_count":  80,
+    "files":  [
+                  {
+                      "path":  ".gitattributes",
+                      "bytes":  523,
+                      "sha256":  "116e281d425200cfda3dffb1fdf3f7df43765317948fcf7230df00881cc31a99"
+                  },
+                  {
+                      "path":  ".gitignore",
+                      "bytes":  410,
+                      "sha256":  "5f8d5db80a5013b9e7368a4baa044d9230c59c75abf02be724a5c73267f8ede3"
+                  },
+                  {
+                      "path":  "Build Safer No-EXE AUSL App.bat",
+                      "bytes":  203,
+                      "sha256":  "f5d922db86ddc100be7c2e47fbb042cee366866d25ab1b2344793037bf3eed2e"
+                  },
+                  {
+                      "path":  "Build Safer No-EXE AUSL App.ps1",
+                      "bytes":  5363,
+                      "sha256":  "96d144f1a5063932d9d206a7983711f4b07085e60446cfc76cc0fa7702f142e6"
+                  },
+                  {
+                      "path":  "Build Shareable AUSL App.bat",
+                      "bytes":  197,
+                      "sha256":  "68d674382a1c2fbf2f887f5ad9795bba61e9b76890fda4164253887899e3b3eb"
+                  },
+                  {
+                      "path":  "Build Shareable AUSL App.ps1",
+                      "bytes":  8055,
+                      "sha256":  "ff4a85f27d48e77b47fbf91e702cd07ea732803d68269a93decee61ea1e44269"
+                  },
+                  {
+                      "path":  "constraints.txt",
+                      "bytes":  573,
+                      "sha256":  "dea049dde0d82bd8a21a1d52981ef064edb7f45e3cb602ca2d862f5fa8be2611"
+                  },
+                  {
+                      "path":  "data/exports/ausl_career_stats.xlsx",
+                      "bytes":  37535,
+                      "sha256":  "c2cfb23f4247baf3baefd40f2dd9cfe34a5ca7c532da9f77238a0bc4a2dc3773"
+                  },
+                  {
+                      "path":  "data/exports/ausl_rosters.xlsx",
+                      "bytes":  33548,
+                      "sha256":  "fa7e390b645bccea2497eca95eebb914e9cff6e5da214e1604f9b3235eb07840"
+                  },
+                  {
+                      "path":  "data/exports/ausl_season_stats.xlsx",
+                      "bytes":  98380,
+                      "sha256":  "f4aa966c94802944ceba3bfbeeddc54e135b1d13518867945e7e7419f54d8caa"
+                  },
+                  {
+                      "path":  "data/exports/ausl_team_context.xlsx",
+                      "bytes":  16585,
+                      "sha256":  "45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb"
+                  },
+                  {
+                      "path":  "data/exports/distribution_manifest.json",
+                      "bytes":  1762,
+                      "sha256":  "b77008256fabfa1f849e93ffeed1c8b73393f24759a186eb8cda0a6559ee766f"
+                  },
+                  {
+                      "path":  "data/exports/update_manifest.json",
+                      "bytes":  502,
+                      "sha256":  "d2d6fe1445dd81d1e4e077154737745b0d93b3091dd858ba2ea5a73a679beab2"
+                  },
+                  {
+                      "path":  "Implementation guide/AUSL_Broadcast_Stats_Implementation_Guide.md",
+                      "bytes":  44963,
+                      "sha256":  "0b03b8b7b28f2e2d9408521d9b837e1f1dde55188aadf4f4c69804419b1b5ebd"
+                  },
+                  {
+                      "path":  "Implementation guide/AUSL_Broadcast_Stats_Improvement_Tracker.md",
+                      "bytes":  55372,
+                      "sha256":  "7334d18d04482c7d3884db3c17ca345b3b48dc199773c699916eb5a8b54b1257"
+                  },
+                  {
+                      "path":  "Implementation guide/AUSL_Current_Portable_Source_Completion_Report_2026-07-23.md",
+                      "bytes":  3675,
+                      "sha256":  "d4d908a6e02f2f7877847109e787d9586f3c54e40f0bf3154ac5261c0ec00282"
+                  },
+                  {
+                      "path":  "Launch AUSL Stats App.bat",
+                      "bytes":  186,
+                      "sha256":  "99a394ade254a06328701f21e0b6a24703c0ac0aa176615b71a40699c7f569e5"
+                  },
+                  {
+                      "path":  "pytest.ini",
+                      "bytes":  84,
+                      "sha256":  "6806516391614d3856e11258749ad87a43e4de38ce07018c0e68c62b7b8008ed"
+                  },
+                  {
+                      "path":  "README.txt",
+                      "bytes":  11457,
+                      "sha256":  "c56c1e1e2567c5abffc8b0309a11ab9a19c6f0b9d392405043e87505a77069dc"
+                  },
+                  {
+                      "path":  "requirements.txt",
+                      "bytes":  63,
+                      "sha256":  "ddef0b4f9744daa3f5bc2f8432a3b847379232aa1e96bd7a4347ada9399115ea"
+                  },
+                  {
+                      "path":  "requirements-build.txt",
+                      "bytes":  75,
+                      "sha256":  "ad369f81792cda2ad66e9b35ba6adb2d5f66e6e2e75460ceda5f66fc3db35f53"
+                  },
+                  {
+                      "path":  "requirements-dev.txt",
+                      "bytes":  35,
+                      "sha256":  "bb6b51d88d97f957e8084d866e2661e368fdce33cae59777a707b378cfb0c035"
+                  },
+                  {
+                      "path":  "requirements-test.txt",
+                      "bytes":  14,
+                      "sha256":  "8b34769de764bda4fcf37e320401d9f51b431be3610d9d78db814423bde8037b"
+                  },
+                  {
+                      "path":  "Setup AUSL Environment.bat",
+                      "bytes":  606,
+                      "sha256":  "219948f251a2428a64fbce654508f4784d49278c283413b88097ed8cbaec8cb7"
+                  },
+                  {
+                      "path":  "src/ausl_data.py",
+                      "bytes":  116925,
+                      "sha256":  "f5fc70603cc02a884df60cf9a16f8077fc522e999da522ce6192c1f78bff5777"
+                  },
+                  {
+                      "path":  "src/ausl_logging.py",
+                      "bytes":  3099,
+                      "sha256":  "e8066c3a9b4640e82c9c5f2e659e07bed2b74ce858244cdb08dfbe6c4f60bc3d"
+                  },
+                  {
+                      "path":  "src/ausl_stats_app.py",
+                      "bytes":  234165,
+                      "sha256":  "73b0b255171ce951fb2616839f44ee3c15121dd00502de3b33889e21434eacd7"
+                  },
+                  {
+                      "path":  "tests/conftest.py",
+                      "bytes":  2161,
+                      "sha256":  "d5001774ab83743402f33c77c0700888c39370c2056901230977a1898312f75d"
+                  },
+                  {
+                      "path":  "tests/fixtures/enrichment_safety_rows.json",
+                      "bytes":  2206,
+                      "sha256":  "72d372a09736e11c4be00e3cd45ed25f97bae1975c74b3700ab7e2259ad9e5f0"
+                  },
+                  {
+                      "path":  "tests/fixtures/legacy_lineup_locks.json",
+                      "bytes":  734,
+                      "sha256":  "7538eaf4c525130d01bb25d6011d786623669857d53a7a88d3788d06423e73a1"
+                  },
+                  {
+                      "path":  "tests/fixtures/lineup_examples.json",
+                      "bytes":  462,
+                      "sha256":  "e777f591b22753900eaa326f6ffdaedd6b8fed7be7cfde84cbf8c4c080fdb959"
+                  },
+                  {
+                      "path":  "tests/fixtures/lineup_validation.json",
+                      "bytes":  4840,
+                      "sha256":  "7ed08c7125024047841202852872c3e826c7083b47cd89ba2701e08a1d5911e8"
+                  },
+                  {
+                      "path":  "tests/fixtures/live_box_response.json",
+                      "bytes":  948,
+                      "sha256":  "febe3fee7ebad812095ad155a533dc9431d7193b2f3a115199a4f9c7c9614a0f"
+                  },
+                  {
+                      "path":  "tests/fixtures/media_guide_excerpt.json",
+                      "bytes":  423,
+                      "sha256":  "f4b1357773adbe7732135629b8e9d827ff62234d3ff34aec958a9eea25a79e38"
+                  },
+                  {
+                      "path":  "tests/fixtures/media_guide_toc_identity.json",
+                      "bytes":  2180,
+                      "sha256":  "f638d3bea9ff65ede7cdd7897601c06b11394ceaa7b39e5db27ae4a0823a3aea"
+                  },
+                  {
+                      "path":  "tests/fixtures/official_game_note_selection.json",
+                      "bytes":  4467,
+                      "sha256":  "f65bb77ed153725174cad362b47f88284bd57223fa3d6c49f87f789f072962c6"
+                  },
+                  {
+                      "path":  "tests/fixtures/official_game_notes.json",
+                      "bytes":  813,
+                      "sha256":  "04eb8096d480b28b6b3cd21822d184e5de1439da648f45a2b11b71933a2e01e7"
+                  },
+                  {
+                      "path":  "tests/fixtures/official_game_notes_phase4.json",
+                      "bytes":  2608,
+                      "sha256":  "e7cb7671d7ef4960fb9cb87ddcdfca5d260cd4a08fb694df1033f9b79d9c21df"
+                  },
+                  {
+                      "path":  "tests/fixtures/producer_prep_phase4.json",
+                      "bytes":  396,
+                      "sha256":  "5b7cfc59eea757ad872a972f32e24c2b9186fbbe6ae6f98ae098c216873c58a4"
+                  },
+                  {
+                      "path":  "tests/fixtures/roster_statuses.json",
+                      "bytes":  1679,
+                      "sha256":  "4b645b64b706f954267e620d8d7d165250b1fc7b20479a35df3c84580245c459"
+                  },
+                  {
+                      "path":  "tests/fixtures/scoped_manual_notes.json",
+                      "bytes":  1435,
+                      "sha256":  "43034062380d7183b54480b4839c032c2bee55f7f5c7e6f0192bb533c440701a"
+                  },
+                  {
+                      "path":  "tests/fixtures/season_pitching_whip_cases.json",
+                      "bytes":  1121,
+                      "sha256":  "fbbf4f3b4e377a8815c94fa41c4c5836a8b00ae9443aa00bcbf9e429f28edab1"
+                  },
+                  {
+                      "path":  "tests/fixtures/season_stats.json",
+                      "bytes":  5472,
+                      "sha256":  "83f21bbc92af4dc0c5baf3dd28772669d0ef8f3f049fe64f7c362eb5f183ada8"
+                  },
+                  {
+                      "path":  "tests/fixtures/selected_games.json",
+                      "bytes":  2916,
+                      "sha256":  "844f1acb68f40c70fbfb840379ba509aabfbde5a99a1a9ce6ccef2b3db4394df"
+                  },
+                  {
+                      "path":  "tests/fixtures/standings_schedule.json",
+                      "bytes":  3485,
+                      "sha256":  "94d929cd54a2f0d5081c55beb09454b52db3444b0a4ae54cc97abf9f457db93c"
+                  },
+                  {
+                      "path":  "tests/README.md",
+                      "bytes":  630,
+                      "sha256":  "9a513187cfe0b2dc2ef009af7abe2ca7b5507217105859275353486b973e8597"
+                  },
+                  {
+                      "path":  "tests/test_baseline_characterization.py",
+                      "bytes":  8524,
+                      "sha256":  "e18ea1ef389e13740966d153c0e2ab4d3c12efb2fcabdecee15bb6eecda08630"
+                  },
+                  {
+                      "path":  "tests/test_build_privacy.py",
+                      "bytes":  9159,
+                      "sha256":  "316ec34ac64a2e197dbf0e0508dddd2782638324113c63ec3c611a37de8c63e3"
+                  },
+                  {
+                      "path":  "tests/test_callbacks.py",
+                      "bytes":  10916,
+                      "sha256":  "c07588c2139812ee49595018e0e068d614d2cdfc51e8b2d5b3e8c07c801cfc7c"
+                  },
+                  {
+                      "path":  "tests/test_career_pitching.py",
+                      "bytes":  6360,
+                      "sha256":  "46895135edb65001e561e00ebc91d01c24f4d00984bf6cc4f33cce1374957eb2"
+                  },
+                  {
+                      "path":  "tests/test_copy_and_status.py",
+                      "bytes":  7865,
+                      "sha256":  "b1f969083ceb787908facafd81620cb10c48648f177e96711787fe716b933ec6"
+                  },
+                  {
+                      "path":  "tests/test_copy_semantics.py",
+                      "bytes":  4477,
+                      "sha256":  "b71f66d6b1ae3b41e2feab9f79f8695651e190aeb6593f0a95c456e72cd16a1d"
+                  },
+                  {
+                      "path":  "tests/test_data_identifiers.py",
+                      "bytes":  3657,
+                      "sha256":  "747f3dadec2ac95e70f830af40c87bbbdde993e4a6a1427461311a4ca27b7fcc"
+                  },
+                  {
+                      "path":  "tests/test_enrichment_safety.py",
+                      "bytes":  8009,
+                      "sha256":  "ee93a41097d7317996e17874c2b100ba5447b78a536b0b3a4920f68b6061a014"
+                  },
+                  {
+                      "path":  "tests/test_formatting.py",
+                      "bytes":  5049,
+                      "sha256":  "955d72d4071bf408716abcaed6766ca92d518f81e1e29c452bd099859be53ccb"
+                  },
+                  {
+                      "path":  "tests/test_historical_game_context.py",
+                      "bytes":  3517,
+                      "sha256":  "7895e9356becf3df2b814010cc55cee2748f140994e0c5f8542aae550653c807"
+                  },
+                  {
+                      "path":  "tests/test_lineup_storage.py",
+                      "bytes":  15552,
+                      "sha256":  "8d94bfd76c8caf66327b5d25b9b9eee2b7ef5369e17a6fa843e731eda58d4497"
+                  },
+                  {
+                      "path":  "tests/test_lineup_validation.py",
+                      "bytes":  10033,
+                      "sha256":  "d3de4b764e0844c7cb2da05ec42c1ab4230be6ed44ecc1cfe8ab8b7b7493250f"
+                  },
+                  {
+                      "path":  "tests/test_live_health.py",
+                      "bytes":  2091,
+                      "sha256":  "4b692d3f1cb44ccafc00d0ffd2bd62ddce1a15432ee78cb1d3a9b81751e0b3b0"
+                  },
+                  {
+                      "path":  "tests/test_logging.py",
+                      "bytes":  4290,
+                      "sha256":  "60426a55aa20588abe8aaad7171547bf47133808899750cf972a9bfa931b0b95"
+                  },
+                  {
+                      "path":  "tests/test_manual_note_migration.py",
+                      "bytes":  2973,
+                      "sha256":  "e5af9800a2a4d43457cdff0ee2d813a3f9d9e420f68a2b16bf7b183e83ce6f08"
+                  },
+                  {
+                      "path":  "tests/test_manual_notes.py",
+                      "bytes":  6600,
+                      "sha256":  "3d874c250c93fdc9a1f93d299a0a44a3e319456bdad89c37b59fdbaf73b4270c"
+                  },
+                  {
+                      "path":  "tests/test_media_approval.py",
+                      "bytes":  4564,
+                      "sha256":  "cc35d13fc50ecde4c21063ad9e71d0633a7a8b495dd12ef56bd09cebd104ad67"
+                  },
+                  {
+                      "path":  "tests/test_media_guide_identity.py",
+                      "bytes":  8047,
+                      "sha256":  "040c214c36851d9334a1e6f1a7f7509d1d133be59b1e8404766e9ddb859ee047"
+                  },
+                  {
+                      "path":  "tests/test_media_guide_quality.py",
+                      "bytes":  9749,
+                      "sha256":  "f5d4411bc16628381e0711f5a17d9c10aa32ab08abf6c597859c4b7e080ac582"
+                  },
+                  {
+                      "path":  "tests/test_official_game_notes_phase4.py",
+                      "bytes":  3764,
+                      "sha256":  "46b0b6aace40938bf4c4aa4857f797836c7108d2715c780d5795b50dab394b46"
+                  },
+                  {
+                      "path":  "tests/test_official_note_selection.py",
+                      "bytes":  3296,
+                      "sha256":  "d367456466baecace07575350ed2c26a8668cf51428f38777b2e4344ab4012c8"
+                  },
+                  {
+                      "path":  "tests/test_packet_identity.py",
+                      "bytes":  5113,
+                      "sha256":  "c5e974ab8def6f6af30bf7d24a13d27919b88910360be3a38b6188fb3eadbdee"
+                  },
+                  {
+                      "path":  "tests/test_portable_zip.py",
+                      "bytes":  1544,
+                      "sha256":  "40af53a25ad330a5f7c07ba9aa81fa7fefb5365f5b3575a976007a490316dfce"
+                  },
+                  {
+                      "path":  "tests/test_producer_prep_phase4.py",
+                      "bytes":  4824,
+                      "sha256":  "e01c79de76bb67fdd29aaa3a2a3f78a5b72d730247937efa973f2ece9f0ecf48"
+                  },
+                  {
+                      "path":  "tests/test_production_snapshot_regression.py",
+                      "bytes":  5763,
+                      "sha256":  "84e272ec5b09574f7764d4113a8990aec4c43913826be4abd0298dbd05ecc489"
+                  },
+                  {
+                      "path":  "tests/test_refresh_staging.py",
+                      "bytes":  6143,
+                      "sha256":  "a11e225ce427799143911c63948c2e94a9a4c97b4bdf16186f97a4ec03ecb9c8"
+                  },
+                  {
+                      "path":  "tests/test_refresh_state.py",
+                      "bytes":  3702,
+                      "sha256":  "c4c6fb07538e336416bf92e5ccd619418b1350a155e24184848bc90becde1212"
+                  },
+                  {
+                      "path":  "tests/test_search_state.py",
+                      "bytes":  2739,
+                      "sha256":  "90ac31cfa87a9433a03ef32d3a19de098b7f7514af945a7c6e4cfa201d5e59b7"
+                  },
+                  {
+                      "path":  "tests/test_season_pitching.py",
+                      "bytes":  5047,
+                      "sha256":  "dfdb4fd5936b1bfcd234acec1a0224292abcf12aab48ecbc601ca4cf15b85b04"
+                  },
+                  {
+                      "path":  "tests/test_selected_game.py",
+                      "bytes":  7311,
+                      "sha256":  "3c2979c8e8d5a492b43297185f784eb9852e53405d4a6a6a9dc1ae9ae95e09e5"
+                  },
+                  {
+                      "path":  "tests/test_team_snapshots.py",
+                      "bytes":  10006,
+                      "sha256":  "26b4f9cc72ddf817855d7e7ae5f5b84f195bacb3a7e12e9a28a4e2443fe593a1"
+                  },
+                  {
+                      "path":  "tools/create_portable_zip.py",
+                      "bytes":  2017,
+                      "sha256":  "5a8989ab4d1044e0e31ed61e5bdc2814695d1ca33b786a5d7e1723654bf97311"
+                  },
+                  {
+                      "path":  "tools/verify_distribution.py",
+                      "bytes":  13263,
+                      "sha256":  "d4bf660b3fed86e29c93d2cffa4ad1b4acc092e978e192867ce1c72265241a89"
+                  },
+                  {
+                      "path":  "Update AUSL Database.bat",
+                      "bytes":  176,
+                      "sha256":  "63d8878df639f5709d1feb0500b9200784cdbda3a1d9b782bfb669cfd3016986"
+                  }
+              ],
+    "exclusions":  [
+                       ".venv/",
+                       "build/",
+                       "dist/",
+                       "_backups/",
+                       "work/",
+                       "caches and __pycache__/",
+                       "logs/",
+                       "data/manual/",
+                       "producer packets",
+                       "personal notes and lineup locks",
+                       "source PDFs",
+                       "credentials",
+                       "unverified enrichment workbooks"
+                   ]
+}

@@ -1,0 +1,32 @@
+{
+  "roster": [
+    {"player_id": "CHI-1", "player_name": "Chi One", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 1, "position": "OF", "roster_status": "Active"},
+    {"player_id": "CHI-2", "player_name": "Chi Two", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 2, "position": "IF", "roster_status": "Active"},
+    {"player_id": "CHI-3", "player_name": "Chi Three", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 3, "position": "C", "roster_status": "Active"},
+    {"player_id": "CHI-4", "player_name": "Chi Four", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 4, "position": "IF", "roster_status": "Active"},
+    {"player_id": "CHI-5", "player_name": "Chi Five", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 5, "position": "IF", "roster_status": "Active"},
+    {"player_id": "CHI-6", "player_name": "Chi Six", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 6, "position": "OF", "roster_status": "Active"},
+    {"player_id": "CHI-7", "player_name": "Chi Seven", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 7, "position": "IF", "roster_status": "Active"},
+    {"player_id": "CHI-8", "player_name": "Chi Eight", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 8, "position": "UTIL", "roster_status": "Active"},
+    {"player_id": "CHI-9", "player_name": "Chi Nine", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 9, "position": "OF", "roster_status": "Active"},
+    {"player_id": "CHI-F", "player_name": "Chi Flex", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 10, "position": "P", "roster_status": "Active"},
+    {"player_id": "CHI-P", "player_name": "Chi Pitch", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 30, "position": "P", "roster_status": "Active"},
+    {"player_id": "CHI-I", "player_name": "Chi Inactive", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 12, "position": "OF", "roster_status": "Inactive"},
+    {"player_id": "CHI-M", "player_name": "Chi Missing", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": null, "position": null, "roster_status": null},
+    {"player_id": "CHI-A1", "player_name": "Alex Same", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 40, "position": "IF", "roster_status": "Active"},
+    {"player_id": "CHI-A2", "player_name": "Alex Same", "team": "Chicago Bandits", "team_code": "CHI", "jersey_number": 41, "position": "OF", "roster_status": "Active"},
+    {"player_id": "CAR-1", "player_name": "Car One", "team": "Carolina Blaze", "team_code": "CAR", "jersey_number": 21, "position": "OF", "roster_status": "Active"}
+  ],
+  "valid_lineup": "1. #1 Chi One - CF\n2. #2 Chi Two - SS\n3. #3 Chi Three - C\n4. #4 Chi Four - 1B\n5. #5 Chi Five - 2B\n6. #6 Chi Six - LF\n7. #7 Chi Seven - 3B\n8. #8 Chi Eight - DP\n9. #9 Chi Nine - RF\nFLEX. #10 Chi Flex - FLEX",
+  "cases": {
+    "duplicate_order": "1. Chi One - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n8. Chi Nine - RF\nFLEX. Chi Flex - FLEX",
+    "duplicate_player": "1. Chi One - CF\n2. Chi One - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Nine - RF\nFLEX. Chi Flex - FLEX",
+    "unresolved": "1. Mystery Player - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Nine - RF\nFLEX. Chi Flex - FLEX",
+    "ambiguous": "1. Alex Same - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Nine - RF\nFLEX. Chi Flex - FLEX",
+    "wrong_team": "1. Car One - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Nine - RF\nFLEX. Chi Flex - FLEX",
+    "bad_position": "1. Chi One - QB\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Nine - RF\nFLEX. Chi Flex - FLEX",
+    "malformed_flex": "1. Chi One - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Nine - RF\n10. Chi Flex - FLEX",
+    "inactive_warning": "1. Chi One - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Inactive - RF\nFLEX. Chi Flex - FLEX",
+    "missing_fields_warning": "1. Chi One - CF\n2. Chi Two - SS\n3. Chi Three - C\n4. Chi Four - 1B\n5. Chi Five - 2B\n6. Chi Six - LF\n7. Chi Seven - 3B\n8. Chi Eight - DP\n9. Chi Missing\nFLEX. Chi Flex - FLEX"
+  }
+}

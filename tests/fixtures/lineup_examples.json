@@ -1,0 +1,21 @@
+{
+  "valid": {
+    "game_id": "9001",
+    "team_code": "CHI",
+    "text": "1. #7 Ada Active - CF\n2. #12 Ivy Inactive - DP\nFLEX. #30 Pia Pitcher - P"
+  },
+  "invalid": [
+    {
+      "case": "duplicate batting order",
+      "text": "1. #7 Ada Active - CF\n1. #12 Ivy Inactive - DP"
+    },
+    {
+      "case": "ambiguous typed player",
+      "text": "1. Ada - CF"
+    },
+    {
+      "case": "DP without FLEX",
+      "text": "1. #12 Ivy Inactive - DP"
+    }
+  ]
+}
