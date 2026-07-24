@@ -1,6 +1,6 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 Project source reviewed: `AUSL_BROADCAST_STATS_project_backup_2026-07-18_223756.zip`  
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -262,15 +262,17 @@ Required identity regressions:
 - [x] `REFRESH-003` — Preserve last-known-good data after optional-source failure. **P0 · COMPLETE**
   - A failed optional source must not replace a valid workbook with an empty one.
 
-- [ ] `REFRESH-004` — Add a per-source health manifest. **P1 · PLANNED**
+- [x] `REFRESH-004` — Add a per-source health manifest. **P1 · COMPLETE**
   - Track attempt/success time, row count, content hash/ETag, status, error, fallback, and parser version.
 
-- [ ] `REFRESH-005` — Cache and incrementally process unchanged PDFs. **P1 · PLANNED**
+- [x] `REFRESH-005` — Cache and incrementally process unchanged PDFs. **P1 · COMPLETE**
+  - Official game-note PDFs are hashed after download; an unchanged hash reuses its cached parsed rows instead of a second `PdfReader` pass.
 
-- [ ] `REFRESH-006` — Add bounded timeouts, retry/backoff, cancellation, and deterministic cleanup. **P1 · PLANNED**
+- [ ] `REFRESH-006` — Add bounded timeouts, retry/backoff, cancellation, and deterministic cleanup. **P1 · IN PROGRESS**
+  - Bounded timeouts and deterministic single-flight cleanup were already in place (`SAFE-002`/`LIVE-001`). Bounded retry/backoff on transient network failures (`URLError`/timeout/`ConnectionError`/HTTP 429/5xx, 3 attempts, exponential backoff) is now added to `_get_json`, `_get_text`, and `_download_file`. Still missing: true mid-flight cancellation of an already-started request — the existing in-flight flags only prevent a *new* job from starting while one is running, they do not abort a request already sent to `urlopen`.
 
-- [ ] `HEALTH-001` — Add visible per-source freshness and green/yellow/red health. **P1 · PLANNED**
-  - Use text/icons as well as color.
+- [x] `HEALTH-001` — Add visible per-source freshness and green/yellow/red health. **P1 · COMPLETE**
+  - The color/marker/text health strip already existed in the UI, but the data layer could only ever emit green or red — yellow was unreachable. The manifest builder now carries forward the previous successful timestamp for each optional/enrichment source and reports yellow ("usable last-known-good, aging") while that data is within a 24-hour freshness target, and red once it ages out or nothing has ever been promoted. This carry-forward is scoped to the three optional/enrichment sources; a core-source failure still fails the whole refresh closed before any manifest is written (`REFRESH-003`), so yellow is not reachable there by design.
 
 - [x] `HEALTH-002` — Display live feed `lastUpdated`, connection state, and staleness. **P0 · COMPLETE**
 
@@ -485,3 +487,13 @@ When working on this tracker:
 - Completed `PACKET-001` in source commit `5b7c362`. Failing-first evidence was 4 identity/path failures plus 1 exclusive-write failure. The exact-game, lineup, and packet-focused suite passed 36 tests, source compilation passed, and the full offline suite passed 301 tests in 13.46 s using `work\pytest-phase2-packet-full`. Packet creation now requires an official selected game, filenames contain a UTC microsecond timestamp, exact game ID, and lineup revision when present, and exclusive creation prevents silent overwrite. Manual source-app smoke generated isolated `20260719T223111615212Z_game_985_producer_packet.txt`; its header contained the matching generated timestamp, Official Game ID 985, schedule source/freshness, and `PROJECTED LINEUPS ONLY — NOT OFFICIAL`. No real lineup lock was created; the smoke packet remained only under ignored `work` test output.
 - Completed `SEARCH-001`, `SEARCH-002`, and `SEARCH-003` in source commit `2b97692`. Failing-first evidence was 5 search/scope failures plus 1 stale team-view-on-game-change failure. The focused search, selected-game, and packet suite passed 18 tests, source compilation passed, and the full offline suite passed 306 tests in 13.40 s using `work\pytest-phase2-search-full`. Manual source-app smoke showed an explicit all-player label while the game-scope preference remained checked, returned the same four players for `#22` and `22`, returned reserve-pool players for `reserve`, and showed only the Oklahoma City roster after `Show Away Roster` without mutating the checked preference. Temporary team views now reset during an official game change so labels and visible results cannot describe the previous game.
 - Completed `STATE-001`, `GAME-002`, and Milestone 2 at source commit `e8e490b`. Four failing-first refresh tests established that a retained player selection must be rerendered from the replacement database and that missing or duplicate identity must clear the player and clipboard note. The final refresh/adjacent suite passed 79 tests in 0.74 s; the dedicated Phase 2 acceptance suite passed 45 tests in 0.55 s; the full offline regression passed 310 tests in 12.92 s; compilation passed; and `pip check` found no broken requirements. In the offline Windows smoke, Reese Atwood's selected card changed to the fixture marker `[REFRESHED]` after Quick Refresh and the broadcast note was regenerated from the same replacement database. Combined Phase 2 smokes also verified repeat-matchup game isolation, validation/confirmation, exact packet identity, and explicit search scope. No live source, manual note, real lineup lock, or producer packet was written. Remaining limitations are recorded in the Milestone 2 acceptance record; Phase 3 has not started.
+
+### 2026-07-24
+
+- Closed three of the four remaining Phase 5 gaps identified by an independent review of `REFRESH-004`, `REFRESH-005`, `REFRESH-006`, and `HEALTH-001`, plus 11 new tests in `tests/test_refresh_health.py`.
+  - `REFRESH-004`/content hash: `content_hash_or_etag` in the source-health manifest was populated but always `None`. It is now a real sha256 fingerprint of each promoted source's content (frame CSV fingerprint for tabular sources; downloaded-bytes hash for PDFs).
+  - `REFRESH-005`: `fetch_official_game_notes_frame` now keeps a `.notes_parse_cache.json` sidecar keyed by PDF content hash. An unchanged PDF reuses its cached parsed rows instead of a second `PdfReader` pass; a changed or newly-downloaded PDF is reparsed and the cache entry is replaced.
+  - `REFRESH-006`: added bounded retry/backoff (`_fetch_with_retry`, 3 attempts, exponential backoff) to `_get_json`, `_get_text`, and `_download_file` for transient errors (`URLError`, timeouts, `ConnectionError`, HTTP 429/5xx); non-transient HTTP errors (404, etc.) still fail on the first attempt. Left `[ ]` / **IN PROGRESS** because true mid-flight request cancellation is still not implemented.
+  - `HEALTH-001`: the UI-side green/yellow/red health strip already existed, but the manifest builder could only ever emit green or red. Added `_previous_source_health` (reads the prior manifest) and `_enrichment_source_health_entry` (carries forward the last successful timestamp for the three optional/enrichment sources and reports yellow while that data is within a 24-hour freshness target, red once it ages out). Deliberately did not extend this to the four core sources: a core-source failure fails the whole refresh closed before any manifest write (`REFRESH-003`), and an existing test (`test_standings_failure_preserves_entire_last_known_good_core_snapshot`) asserts the manifest is byte-identical after a core failure — changing that would contradict a locked acceptance test, so core failures remain hard red/abort by design, not yellow.
+  - Test evidence: new focused suite `python3 -m pytest -q tests/test_refresh_health.py` — 11 passed. Full offline suite `python3 -m pytest -q` — 387 passed (376 prior + 11 new), plus the same 3 pre-existing failures and 14 pre-existing errors caused by Git LFS pointer files (not real `.xlsx` bytes) in this sandbox clone, unrelated to this change and unchanged before/after. `python3 -m compileall -q src tests` passed. `pip check` reported the same pre-existing, unrelated `camelot-py`/`pypdf` pin conflict as before this change.
+  - Not done in this pass: no Windows/Tkinter smoke test, no git commit, and no deployment to a live folder — this was sandbox-only verification against the offline suite. `REFRESH-006`'s cancellation requirement remains open. The Milestone 4 acceptance record is intentionally left blank pending a real rehearsal and sign-off.

@@ -13,9 +13,11 @@ import ssl
 import sys
 import tempfile
 import unicodedata
+import socket
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -208,6 +210,62 @@ def export_dir() -> Path:
     return path
 
 
+# Bounded retry/backoff for transient network failures (REFRESH-006). Attempts
+# and the base delay are module-level so tests can shrink the delay to zero
+# instead of sleeping for real.
+NETWORK_RETRY_ATTEMPTS = 3
+NETWORK_RETRY_BASE_DELAY_SECONDS = 1.0
+_RETRYABLE_TRANSPORT_ERRORS = (URLError, TimeoutError, socket.timeout, ConnectionError)
+
+
+def _is_retryable_http_error(exc: HTTPError) -> bool:
+    # 5xx and 429 are worth a retry; 4xx client errors (404, 403, ...) will not
+    # resolve themselves on a second attempt.
+    return exc.code == 429 or exc.code >= 500
+
+
+def _retry_delay_seconds(attempt: int, base_delay: float) -> float:
+    return base_delay * (2 ** (attempt - 1))
+
+
+def _fetch_with_retry(operation, *, attempts: int = NETWORK_RETRY_ATTEMPTS, base_delay: float = NETWORK_RETRY_BASE_DELAY_SECONDS):
+    """Run ``operation`` with bounded retry/backoff on transient network errors.
+
+    Non-transient failures (4xx other than 429) fail immediately. Any error
+    still failing on the final attempt is re-raised unchanged.
+    """
+
+    last_exc: Exception | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            return operation()
+        except HTTPError as exc:
+            if not _is_retryable_http_error(exc) or attempt == attempts:
+                raise
+            last_exc = exc
+        except _RETRYABLE_TRANSPORT_ERRORS as exc:
+            if attempt == attempts:
+                raise
+            last_exc = exc
+        time.sleep(_retry_delay_seconds(attempt, base_delay))
+    if last_exc is not None:  # pragma: no cover - defensive, loop always returns/raises above
+        raise last_exc
+    raise RuntimeError("retry loop exited without a result")  # pragma: no cover
+
+
+def _sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _frame_fingerprint(frame) -> str | None:
+    """A stable content hash for a validated frame, for the source-health manifest."""
+
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        return None
+    payload = frame.to_csv(index=False).encode("utf-8")
+    return _sha256_hex(payload)
+
+
 def _get_json(path: str) -> dict:
     url = path if path.startswith("http") else BASE_URL + path
     request = Request(
@@ -215,8 +273,12 @@ def _get_json(path: str) -> dict:
         headers={"User-Agent": "AUSL-Broadcast-Stats/1.0 (local desktop tool)"},
     )
     context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
-    with urlopen(request, timeout=45, context=context) as response:
-        return json.loads(response.read().decode("utf-8"))
+
+    def _do_request():
+        with urlopen(request, timeout=45, context=context) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    return _fetch_with_retry(_do_request)
 
 
 def _get_text(path: str) -> str:
@@ -226,16 +288,28 @@ def _get_text(path: str) -> str:
         headers={"User-Agent": "AUSL-Broadcast-Stats/1.0 (local desktop tool)"},
     )
     context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
-    with urlopen(request, timeout=45, context=context) as response:
-        return response.read().decode("utf-8", "ignore")
+
+    def _do_request():
+        with urlopen(request, timeout=45, context=context) as response:
+            return response.read().decode("utf-8", "ignore")
+
+    return _fetch_with_retry(_do_request)
 
 
-def _download_file(url: str, path: Path) -> None:
+def _download_file(url: str, path: Path) -> str:
+    """Download ``url`` to ``path`` and return a sha256 hex hash of its bytes."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     request = Request(url, headers={"User-Agent": "AUSL-Broadcast-Stats/1.0 (local desktop tool)"})
     context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
-    with urlopen(request, timeout=90, context=context) as response:
-        path.write_bytes(response.read())
+
+    def _do_request():
+        with urlopen(request, timeout=90, context=context) as response:
+            return response.read()
+
+    payload = _fetch_with_retry(_do_request)
+    path.write_bytes(payload)
+    return _sha256_hex(payload)
 
 
 def _clean_text(text: str) -> str:
@@ -1801,6 +1875,40 @@ def _deduplicate_official_game_notes(frame: pd.DataFrame) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
+def _game_notes_cache_path() -> Path:
+    return app_root() / "data" / "sources" / "game_notes" / ".notes_parse_cache.json"
+
+
+def _load_game_notes_cache() -> dict:
+    """Load the per-PDF parsed-note cache, keyed by local PDF filename.
+
+    Each entry records the sha256 of the PDF bytes it was parsed from, so an
+    unchanged file can reuse its cached rows instead of being re-parsed
+    (REFRESH-005: cache and incrementally process unchanged PDFs).
+    """
+
+    cache_path = _game_notes_cache_path()
+    if not cache_path.exists():
+        return {}
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return cache if isinstance(cache, dict) else {}
+
+
+def _save_game_notes_cache(cache: dict) -> None:
+    cache_path = _game_notes_cache_path()
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _json_safe(value):
+        if hasattr(value, "item"):
+            return value.item()
+        return str(value)
+
+    cache_path.write_text(json.dumps(cache, indent=2, default=_json_safe), encoding="utf-8")
+
+
 def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame, progress=None, limit: int | None = None) -> pd.DataFrame:
     progress = progress or (lambda _message: None)
     if schedule.empty or "game_notes" not in schedule:
@@ -1836,6 +1944,9 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
                     }
                 )
 
+    notes_cache = _load_game_notes_cache()
+    cache_dirty = False
+
     for game, url in note_urls:
         game_id = game.get("game_id", "")
         safe_url_tail = re.sub(r"[^A-Za-z0-9]+", "_", url.split("/")[-1]).strip("_")[:80] or "notes"
@@ -1843,15 +1954,30 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
         if not pdf_path.exists() or pdf_path.stat().st_size < 10_000:
             progress(f"Downloading official game notes for game {game_id}...")
             try:
-                _download_file(url, pdf_path)
+                content_hash = _download_file(url, pdf_path)
             except Exception as exc:
                 progress(f"Skipping game notes {game_id}: {exc}")
                 continue
+        else:
+            try:
+                content_hash = _sha256_hex(pdf_path.read_bytes())
+            except OSError as exc:
+                progress(f"Skipping unreadable game notes {game_id}: {exc}")
+                continue
+
+        cache_key = pdf_path.name
+        cached_entry = notes_cache.get(cache_key)
+        if isinstance(cached_entry, dict) and cached_entry.get("content_hash") == content_hash:
+            progress(f"Reusing cached parse for unchanged game notes {game_id}.")
+            rows.extend(cached_entry.get("rows") or [])
+            continue
+
         try:
             reader = PdfReader(str(pdf_path))
         except Exception as exc:
             progress(f"Skipping unreadable game notes {game_id}: {exc}")
             continue
+        file_rows = []
         for page_number, page in enumerate(reader.pages, 1):
             try:
                 page_text = page.extract_text() or ""
@@ -1860,7 +1986,7 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
             for parsed_note in _split_game_note_items(page_text, player_lookup):
                 note = parsed_note["note_text"]
                 mentioned_ids = [player["player_id"] for player in player_lookup if player["name"].lower() in note.lower()]
-                rows.append(
+                file_rows.append(
                     _official_game_note_row(
                         game,
                         parsed_note,
@@ -1870,6 +1996,13 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
                         mentioned_ids=mentioned_ids,
                     )
                 )
+        rows.extend(file_rows)
+        notes_cache[cache_key] = {"content_hash": content_hash, "rows": file_rows}
+        cache_dirty = True
+
+    if cache_dirty:
+        _save_game_notes_cache(notes_cache)
+
     return _deduplicate_official_game_notes(pd.DataFrame(rows))
 
 
@@ -2541,6 +2674,104 @@ def _validate_core_refresh_frames(
         )
 
 
+# Freshness target for the yellow (usable-but-aging) source-health state
+# (5C). Only reachable for optional/enrichment sources: a core-source
+# failure fails the whole refresh closed (REFRESH-003) before any manifest
+# is written, so it never reaches this state by design.
+ENRICHMENT_FRESHNESS_TARGET_SECONDS = 24 * 3600
+
+
+def _previous_source_health(manifest_path: Path) -> dict:
+    """Best-effort read of the prior manifest's ``source_health`` block."""
+
+    if not manifest_path.exists():
+        return {}
+    try:
+        previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    entries = previous.get("source_health") if isinstance(previous, dict) else None
+    return entries if isinstance(entries, dict) else {}
+
+
+def _age_seconds(timestamp, *, now: datetime) -> float | None:
+    if not timestamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return (now.astimezone(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
+
+
+def _enrichment_source_health_entry(
+    *,
+    source_name: str,
+    ok: bool,
+    now_iso: str,
+    now: datetime,
+    row_count: int,
+    content_hash: str | None,
+    status_detail_ok: str,
+    error_summary: str | None,
+    previous_entry: dict | None,
+    freshness_target_seconds: int = ENRICHMENT_FRESHNESS_TARGET_SECONDS,
+) -> dict:
+    """Build a source-health entry for an optional/enrichment source.
+
+    A successful attempt is green. A failed attempt that still has usable
+    last-known-good data (REFRESH-003 keeps that file on disk untouched) is
+    yellow while that data is within its freshness target, and red once it
+    ages out or none has ever been promoted.
+    """
+
+    if ok:
+        return {
+            "source_name": source_name,
+            "source_type": "optional_enrichment",
+            "status": "green",
+            "last_attempt_at": now_iso,
+            "last_success_at": now_iso,
+            "row_count": row_count,
+            "content_hash_or_etag": content_hash,
+            "status_detail": status_detail_ok,
+            "error_summary": None,
+            "used_fallback": False,
+            "parser_version": "2026-07-24",
+        }
+
+    previous_entry = previous_entry or {}
+    previous_success = previous_entry.get("last_success_at")
+    age = _age_seconds(previous_success, now=now)
+    if previous_success and age is not None and age <= freshness_target_seconds:
+        status = "yellow"
+        age_minutes = int(age // 60)
+        detail = (
+            f"using last-known-good data ({age_minutes}m old); "
+            f"{error_summary or 'this refresh did not update it'}"
+        )
+    else:
+        status = "red"
+        detail = error_summary or "no usable data has ever been promoted"
+    return {
+        "source_name": source_name,
+        "source_type": "optional_enrichment",
+        "status": status,
+        "last_attempt_at": now_iso,
+        "last_success_at": previous_success,
+        "row_count": previous_entry.get("row_count", 0) if status == "yellow" else 0,
+        "content_hash_or_etag": (
+            previous_entry.get("content_hash_or_etag") if status == "yellow" else None
+        ),
+        "status_detail": detail,
+        "error_summary": error_summary,
+        "used_fallback": True,
+        "parser_version": previous_entry.get("parser_version", "2026-07-24"),
+    }
+
+
 def _promote_file_set(staged_to_final: dict[Path, Path]) -> None:
     """Promote a file set transactionally and restore every prior file on failure."""
 
@@ -2748,6 +2979,12 @@ def update_all_data(
     raw_media_chunks_path = output / "ausl_media_guide_raw_chunks.xlsx"
     official_game_notes_path = output / "official_game_notes.xlsx"
     manifest_path = output / "update_manifest.json"
+    now_dt = datetime.now(timezone.utc)
+    previous_health = _previous_source_health(manifest_path)
+    latest_roster = rosters[max(SEASONS)] if rosters else None
+    latest_stats_frames = [
+        frames[max(SEASONS)] for frames in (batting, pitching, fielding) if frames
+    ]
     source_health = {
         "official_rosters": {
             "source_name": "Official AUSL rosters",
@@ -2756,7 +2993,7 @@ def update_all_data(
             "last_attempt_at": imported_at,
             "last_success_at": imported_at if rosters else None,
             "row_count": int(len(rosters[max(SEASONS)])) if rosters else 0,
-            "content_hash_or_etag": None,
+            "content_hash_or_etag": _frame_fingerprint(latest_roster),
             "status_detail": "validated roster refresh",
             "error_summary": None,
             "used_fallback": False,
@@ -2769,7 +3006,13 @@ def update_all_data(
             "last_attempt_at": imported_at,
             "last_success_at": imported_at if (batting and pitching and fielding) else None,
             "row_count": sum(len(frames[max(SEASONS)]) for frames in (batting, pitching, fielding) if frames),
-            "content_hash_or_etag": None,
+            "content_hash_or_etag": (
+                _sha256_hex(
+                    "".join(sorted(frame.to_csv(index=False) for frame in latest_stats_frames)).encode("utf-8")
+                )
+                if latest_stats_frames
+                else None
+            ),
             "status_detail": "validated stat refresh",
             "error_summary": None,
             "used_fallback": False,
@@ -2782,7 +3025,7 @@ def update_all_data(
             "last_attempt_at": imported_at,
             "last_success_at": imported_at if not standings.empty else None,
             "row_count": int(len(standings)) if isinstance(standings, pd.DataFrame) else 0,
-            "content_hash_or_etag": None,
+            "content_hash_or_etag": _frame_fingerprint(standings),
             "status_detail": "validated standings refresh",
             "error_summary": None if not standings.empty else "official standings failed validation",
             "used_fallback": standings.empty,
@@ -2795,7 +3038,7 @@ def update_all_data(
             "last_attempt_at": imported_at,
             "last_success_at": imported_at if not schedule.empty else None,
             "row_count": int(len(schedule)) if isinstance(schedule, pd.DataFrame) else 0,
-            "content_hash_or_etag": None,
+            "content_hash_or_etag": _frame_fingerprint(schedule),
             "status_detail": "validated schedule refresh",
             "error_summary": None if not schedule.empty else "official schedule failed validation",
             "used_fallback": schedule.empty,
@@ -2803,49 +3046,44 @@ def update_all_data(
         },
     }
     if include_enrichment:
-        source_health["official_game_notes"] = {
-            "source_name": "Official AUSL game notes",
-            "source_type": "optional_enrichment",
-            "status": "green" if official_game_notes_ready else "red",
-            "last_attempt_at": imported_at,
-            "last_success_at": imported_at if official_game_notes_ready else None,
-            "row_count": int(len(official_game_notes)) if isinstance(official_game_notes, pd.DataFrame) else 0,
-            "content_hash_or_etag": None,
-            "status_detail": "validated official note refresh" if official_game_notes_ready else "official notes unavailable",
-            "error_summary": None if official_game_notes_ready else "official game notes were not promoted",
-            "used_fallback": not official_game_notes_ready,
-            "parser_version": "2026-07-24",
-        }
-        source_health["media_guide"] = {
-            "source_name": "AUSL media guide",
-            "source_type": "optional_enrichment",
-            "status": "green" if media_guide_ready else "red",
-            "last_attempt_at": imported_at,
-            "last_success_at": imported_at if media_guide_ready else None,
-            "row_count": int(len(media_players)) if isinstance(media_players, pd.DataFrame) else 0,
-            "content_hash_or_etag": None,
-            "status_detail": "validated media-guide enrichment" if media_guide_ready else "media-guide enrichment unavailable",
-            "error_summary": None if media_guide_ready else "media guide enrichment was not promoted",
-            "used_fallback": not media_guide_ready,
-            "parser_version": "2026-07-24",
-        }
-        source_health["split_stats"] = {
-            "source_name": "Official AUSL split stats",
-            "source_type": "optional_enrichment",
-            "status": "green" if split_refresh_complete else "red",
-            "last_attempt_at": imported_at,
-            "last_success_at": imported_at if split_refresh_complete else None,
-            "row_count": sum(
+        source_health["official_game_notes"] = _enrichment_source_health_entry(
+            source_name="Official AUSL game notes",
+            ok=official_game_notes_ready,
+            now_iso=imported_at,
+            now=now_dt,
+            row_count=int(len(official_game_notes)) if isinstance(official_game_notes, pd.DataFrame) else 0,
+            content_hash=_frame_fingerprint(official_game_notes),
+            status_detail_ok="validated official note refresh",
+            error_summary=None if official_game_notes_ready else "official game notes were not promoted",
+            previous_entry=previous_health.get("official_game_notes"),
+        )
+        source_health["media_guide"] = _enrichment_source_health_entry(
+            source_name="AUSL media guide",
+            ok=media_guide_ready,
+            now_iso=imported_at,
+            now=now_dt,
+            row_count=int(len(media_players)) if isinstance(media_players, pd.DataFrame) else 0,
+            content_hash=_frame_fingerprint(media_players),
+            status_detail_ok="validated media-guide enrichment",
+            error_summary=None if media_guide_ready else "media guide enrichment was not promoted",
+            previous_entry=previous_health.get("media_guide"),
+        )
+        combined_split_frame = combined([*split_batting, *split_pitching, *split_fielding])
+        source_health["split_stats"] = _enrichment_source_health_entry(
+            source_name="Official AUSL split stats",
+            ok=split_refresh_complete,
+            now_iso=imported_at,
+            now=now_dt,
+            row_count=sum(
                 int(len(frame))
                 for frame in (split_batting, split_pitching, split_fielding)
                 if isinstance(frame, list)
             ),
-            "content_hash_or_etag": None,
-            "status_detail": "validated split refresh" if split_refresh_complete else "split refresh unavailable",
-            "error_summary": None if split_refresh_complete else "split statistics were not promoted",
-            "used_fallback": not split_refresh_complete,
-            "parser_version": "2026-07-24",
-        }
+            content_hash=_frame_fingerprint(combined_split_frame),
+            status_detail_ok="validated split refresh",
+            error_summary=None if split_refresh_complete else "split statistics were not promoted",
+            previous_entry=previous_health.get("split_stats"),
+        )
     else:
         source_health["optional_enrichment"] = {
             "source_name": "Optional enrichment",
