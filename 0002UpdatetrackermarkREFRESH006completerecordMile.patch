@@ -1,0 +1,117 @@
+From b69313f271060ec446c8982affa4d791ee77a5a8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 25 Jul 2026 01:22:40 +0000
+Subject: [PATCH 2/2] Update tracker: mark REFRESH-006 complete, record
+ Milestone 4 evidence
+
+Mark REFRESH-006 [x] COMPLETE with the mid-flight cancellation mechanism
+and test evidence, fill in the Milestone 4 acceptance record (code-complete,
+not yet producer-signed-off), fix the stale Phase 4 "Current milestone"
+section to reflect Phase 5/Milestone 4, update Last updated, and add a dated
+2026-07-25 change-log entry with commit hash, test/smoke evidence, and the
+current status of the previously-noted Git LFS test gaps and camelot-py/
+pypdf pin conflict.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011y6TeGFRuAByW9jqigaXwq
+---
+ ...USL_Broadcast_Stats_Improvement_Tracker.md | 54 ++++++++++++-------
+ 1 file changed, 34 insertions(+), 20 deletions(-)
+
+diff --git a/Implementation guide/AUSL_Broadcast_Stats_Improvement_Tracker.md b/Implementation guide/AUSL_Broadcast_Stats_Improvement_Tracker.md
+index 5f7b167..03b7dca 100644
+--- a/Implementation guide/AUSL_Broadcast_Stats_Improvement_Tracker.md	
++++ b/Implementation guide/AUSL_Broadcast_Stats_Improvement_Tracker.md	
+@@ -1,6 +1,6 @@
+ # AUSL Broadcast Stats — Improvement Tracker
+ 
+-Last updated: 2026-07-24
++Last updated: 2026-07-25
+ Project source reviewed: `AUSL_BROADCAST_STATS_project_backup_2026-07-18_223756.zip`  
+ Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
+ 
+@@ -32,21 +32,23 @@ Priority legend:
+ 
+ ## Current milestone
+ 
+-### Milestone 3 — Verified media and official storylines
++### Milestone 4 — Resilient refresh and producer UX (Phase 5 slice)
+ 
+-Target outcome for the current phase: turn official notes into a small,
+-exact-game, balanced, source-labeled rundown and make producer prep
+-nonduplicative.
++Target outcome for the current phase: make background refresh/live work
++deterministic and recoverable (bounded timeouts, retry/backoff, real
++cancellation, per-source health, deterministic cleanup) before starting
++Phase 6's producer-speed UX work.
+ 
+-Current implementation unit: none. The independent Phase 4 stability-audit
+-remediation passed its exact-game live, historical-prep, lineup round-trip,
+-starter-position, packet-label, media-approval, Tk ownership, refresh rollback,
+-and portable-build acceptance gates.
++Current implementation unit: `REFRESH-006` (mid-flight cancellation). With
++this pass, all of `REFRESH-001` through `REFRESH-006` and `HEALTH-001`/
++`HEALTH-002` are `[x]` COMPLETE — the Phase 5 refresh-resilience slice of
++Milestone 4 is code-complete. Phase 6's producer-speed items (`UX-001`
++through `UX-005`) remain `PLANNED`/`BACKLOG` and have not been started.
+ 
+-The master list below is the single source of task status. No Phase 4 item is
++The master list below is the single source of task status. No item is
+ complete until its tests and stated acceptance behavior pass.
+ 
+-Status: **COMPLETE — PHASE 4 STABILITY REMEDIATION — 2026-07-22**
++Status: **CODE-COMPLETE — PHASE 5 REFRESH RESILIENCE (MILESTONE 4 SLICE) — 2026-07-25 — NOT YET PRODUCER-SIGNED-OFF (Gate C pending a human rehearsal)**
+ 
+ ## Master improvement list
+ 
+@@ -268,8 +270,8 @@ Required identity regressions:
+ - [x] `REFRESH-005` — Cache and incrementally process unchanged PDFs. **P1 · COMPLETE**
+   - Official game-note PDFs are hashed after download; an unchanged hash reuses its cached parsed rows instead of a second `PdfReader` pass.
+ 
+-- [ ] `REFRESH-006` — Add bounded timeouts, retry/backoff, cancellation, and deterministic cleanup. **P1 · IN PROGRESS**
+-  - Bounded timeouts and deterministic single-flight cleanup were already in place (`SAFE-002`/`LIVE-001`). Bounded retry/backoff on transient network failures (`URLError`/timeout/`ConnectionError`/HTTP 429/5xx, 3 attempts, exponential backoff) is now added to `_get_json`, `_get_text`, and `_download_file`. Still missing: true mid-flight cancellation of an already-started request — the existing in-flight flags only prevent a *new* job from starting while one is running, they do not abort a request already sent to `urlopen`.
++- [x] `REFRESH-006` — Add bounded timeouts, retry/backoff, cancellation, and deterministic cleanup. **P1 · COMPLETE**
++  - Bounded timeouts and deterministic single-flight cleanup were already in place (`SAFE-002`/`LIVE-001`). Bounded retry/backoff on transient network failures was added in the 2026-07-24 pass. This pass closes the remaining gap: real mid-flight cancellation. A `CancelToken`/`RefreshCancelled` pair in `ausl_data.py` is threaded through `_fetch_with_retry`, `_get_json`, `_get_text`, `_download_file`, `fetch_standings_frame`, `fetch_schedule_frame`, `update_all_data`, and `fetch_live_game`; cancellation is checked before every attempt and during the retry backoff wait (`Event.wait` instead of `time.sleep`), so a cancelled job stops retrying immediately instead of working through its full timeout/retry budget, and `update_all_data` re-checks cancellation once more immediately before staging/promotion so a cancelled Quick Refresh can never write or promote a partial result. In `ausl_stats_app.py`, `cancel_data_update()`/`cancel_live_refresh()` (wired to new Cancel buttons, a game change, and app shutdown) give each job a token/token-identity check so a late success/error/cancelled callback from an abandoned background thread is a safe no-op rather than a promotion or a crash. Python/`urllib` offer no safe way to force-abort a call already inside `urlopen`; this is a cooperative design (documented in `CancelToken`'s docstring) rather than a raw socket-level abort — see the change-log entry below for what that means in practice.
+ 
+ - [x] `HEALTH-001` — Add visible per-source freshness and green/yellow/red health. **P1 · COMPLETE**
+   - The color/marker/text health strip already existed in the UI, but the data layer could only ever emit green or red — yellow was unreachable. The manifest builder now carries forward the previous successful timestamp for each optional/enrichment source and reports yellow ("usable last-known-good, aging") while that data is within a 24-hour freshness target, and red once it ages out or nothing has ever been promoted. This carry-forward is scoped to the three optional/enrichment sources; a core-source failure still fails the whole refresh closed before any manifest is written (`REFRESH-003`), so yellow is not reachable there by design.
+@@ -397,13 +399,13 @@ Fill in one record when a milestone or major item is completed.
+ 
+ ### Milestone 4 — Resilient refresh and producer UX
+ 
+-- Completion date:
+-- Source version/commit:
+-- Automated test command and result:
+-- Refresh failure/staleness checks:
+-- Rehearsal result:
+-- Known limitations remaining:
+-- Verified by:
++- Completion date: 2026-07-25 (`REFRESH-006` only; Milestone 4 covers only `REFRESH-004` through `REFRESH-006`, `HEALTH-001`/`HEALTH-002`, and Phase 6's producer-speed items, so this record reflects the Phase 5 refresh-resilience slice of Milestone 4, not the still-`PLANNED`/`BACKLOG` Phase 6 UX items.)
++- Source version/commit: `b30e97472662e2edc751aa8e82a29a5187fd13fc` on branch `claude/refresh-006-mid-flight-cancel-125ykx`, following the 2026-07-24 `REFRESH-004`/`REFRESH-005`/`HEALTH-001` pass.
++- Automated test command and result: focused suites `python -m pytest -q tests/test_refresh_cancellation.py tests/test_app_refresh_cancellation.py` — 28 passed (13 `ausl_data` cancellation-primitive/`update_all_data`/`fetch_live_game` tests, 15 app-layer `cancel_data_update`/`cancel_live_refresh` tests). Full offline suite `python -m pytest -q` (and again with `-W error`) — 415 passed, plus the same 3 pre-existing failures and 14 pre-existing errors caused by Git LFS pointer files (not real `.xlsx` bytes) in this sandbox clone, confirmed unrelated to this change and unchanged before/after (see the change-log entry below). `python -m compileall -q src tests tools` passed. `pip check` reported no broken requirements in this sandbox's environment (see the change-log entry for the camelot-py/pypdf note).
++- Refresh failure/staleness checks: covered by the existing `REFRESH-002`/`REFRESH-003`/`HEALTH-001` tests (unchanged by this pass) plus the new cancellation tests, which specifically assert that a cancelled `update_all_data` call writes nothing to the export directory (checkpoints before the roster/stats loop, mid-loop, and immediately before staging) and that a cancelled/superseded live or Quick Refresh callback never promotes into `app.db`/`app.live_game`.
++- Rehearsal result: a real Tkinter smoke ran under Xvfb on this Linux sandbox (not a Windows machine) — see the change-log entry for exactly what it exercised. No producer rehearsal has occurred; this is code-complete verification only.
++- Known limitations remaining: cancellation is cooperative, not a raw socket abort — an already-in-flight single `urlopen` call cannot be forcibly killed by Python/`urllib`, so if a job is cancelled while genuinely blocked on the network (not merely between retries), the app's UI and in-flight state free up immediately, but the abandoned OS-level request may continue running in its daemon thread until it naturally completes or times out before being discarded; this is documented on `CancelToken`. `REFRESH-004`/`REFRESH-005`/`HEALTH-001` limitations from 2026-07-24 are unchanged. Phase 6 producer-speed items (`UX-001` through `UX-005`) remain `PLANNED`/`BACKLOG` and are not part of this record. No producer acceptance rehearsal has occurred; Gate C is not met.
++- Verified by: Codex failing-first offline tests (`ausl_data`-layer and app-layer), full regression/compile/dependency gates, and a no-network Linux/Xvfb Tkinter smoke; not yet producer-signed-off.
+ 
+ ## Producer-meeting questions to preserve
+ 
+@@ -497,3 +499,15 @@ When working on this tracker:
+   - `HEALTH-001`: the UI-side green/yellow/red health strip already existed, but the manifest builder could only ever emit green or red. Added `_previous_source_health` (reads the prior manifest) and `_enrichment_source_health_entry` (carries forward the last successful timestamp for the three optional/enrichment sources and reports yellow while that data is within a 24-hour freshness target, red once it ages out). Deliberately did not extend this to the four core sources: a core-source failure fails the whole refresh closed before any manifest write (`REFRESH-003`), and an existing test (`test_standings_failure_preserves_entire_last_known_good_core_snapshot`) asserts the manifest is byte-identical after a core failure — changing that would contradict a locked acceptance test, so core failures remain hard red/abort by design, not yellow.
+   - Test evidence: new focused suite `python3 -m pytest -q tests/test_refresh_health.py` — 11 passed. Full offline suite `python3 -m pytest -q` — 387 passed (376 prior + 11 new), plus the same 3 pre-existing failures and 14 pre-existing errors caused by Git LFS pointer files (not real `.xlsx` bytes) in this sandbox clone, unrelated to this change and unchanged before/after. `python3 -m compileall -q src tests` passed. `pip check` reported the same pre-existing, unrelated `camelot-py`/`pypdf` pin conflict as before this change.
+   - Not done in this pass: no Windows/Tkinter smoke test, no git commit, and no deployment to a live folder — this was sandbox-only verification against the offline suite. `REFRESH-006`'s cancellation requirement remains open. The Milestone 4 acceptance record is intentionally left blank pending a real rehearsal and sign-off.
++
++### 2026-07-25
++
++- Closed the remaining `REFRESH-006` gap: true mid-flight cancellation of a running refresh/live job.
++  - Mechanism: a `CancelToken`/`RefreshCancelled` pair (`src/ausl_data.py`) — a `threading.Event`-backed, idempotent cancellation signal. `cancel_token` is now an optional kwarg on `_fetch_with_retry`, `_get_json`, `_get_text`, `_download_file`, `fetch_standings_frame`, `fetch_schedule_frame`, `update_all_data`, and `fetch_live_game`. Cancellation is checked before every attempt and, during the retry backoff wait, `Event.wait(delay)` replaces `time.sleep(delay)` so a cancel during backoff returns immediately instead of sleeping out the remaining budget. `update_all_data` re-checks cancellation once more immediately before staging/promoting any file, so a cancelled Quick Refresh can never write or promote a partial result (existing `REFRESH-002` atomic staging is otherwise untouched — once staging starts, it still runs to completion rather than being interrupted mid-write).
++  - App layer (`src/ausl_stats_app.py`): `update_data()`/`refresh_live()` now create a `CancelToken` per job. New `cancel_data_update()`/`cancel_live_refresh()` methods cancel the token and free the in-flight flag/button state immediately, without waiting for the abandoned background thread's network call to finish or time out. New "Cancel Refresh" and "Cancel" buttons call these; a game change (`_invalidate_live_context`, already used for `SAFE-002`/`LIVE-001` staleness) and app shutdown (`root.protocol("WM_DELETE_WINDOW", ...)`) also cancel any in-flight job. Each job's success/error/cancelled callback checks token identity (`_data_update_token_is_current`, the pre-existing `_live_request_is_current`) before acting, so a late callback from an abandoned/superseded job is a silent no-op — no crash, no stale-data promotion, no dialog. Repeated cancel calls are no-ops (idempotent).
++  - Honest limitation: Python/`urllib` provide no safe way to forcibly abort a single call already blocked inside `urlopen` without touching raw sockets, which this narrowly-scoped change does not attempt (would have meant replacing `urlopen` with a hand-rolled `http.client` connection-capture shim across every call site — out of scope for "narrowest change"). Cancellation is therefore cooperative: it stops further retries/backoff immediately and guarantees the app-visible state (UI, in-flight flag, `app.db`/`app.live_game`) is never left waiting on or contaminated by an abandoned call, but a single already-in-flight attempt may keep running in its daemon thread in the background until it naturally completes or times out, at which point its result is discarded via the token check. This is documented on `CancelToken` itself and in the Milestone 4 acceptance record below.
++  - Test evidence (failing-first): `tests/test_refresh_cancellation.py` (13 tests, `ausl_data` layer — cancel before start, cancel while blocked in a real background thread with the retry loop provably not sleeping out its backoff, a success racing cancellation still returning its result so the *caller* decides whether to discard it, `update_all_data` writing nothing when cancelled before start/mid-loop/immediately before staging, and `fetch_live_game` stopping before its second call) and `tests/test_app_refresh_cancellation.py` (15 tests, app layer — cancel with nothing in flight is a no-op, cancel frees UI state immediately, repeated cancel calls, a stale success/error/cancelled callback after cancel is discarded without promoting or opening a dialog, and a game change cancels an in-flight live refresh's token). Focused command: `python -m pytest -q tests/test_refresh_cancellation.py tests/test_app_refresh_cancellation.py` — 28 passed. Existing test doubles for `_get_json`/`_get_text`/`fetch_standings_frame`/`fetch_schedule_frame`/`update_all_data`/`fetch_live_game` across `tests/test_callbacks.py` and elsewhere were updated to accept the new optional `cancel_token` kwarg; no other test file needed changes.
++  - Full-suite evidence: `python -m pytest -q` (and again with `-W error`) — 415 passed (387 prior + 28 new), plus the same 3 pre-existing failures and 14 pre-existing errors caused by Git LFS pointer files (`data/exports/*.xlsx` are LFS pointer text, not real spreadsheet bytes, in this sandbox clone) — confirmed present before this change too and unrelated to it. `python -m compileall -q src tests tools` passed. `python -m pip check` reported **no broken requirements** in this sandbox's environment (Python 3.12 venv built from `constraints.txt`); `camelot-py` does not appear in any `requirements*.txt`/`constraints.txt` in this repository, so the camelot-py/pypdf pin conflict noted on 2026-07-24 did not reproduce here — reported as-observed rather than assumed still present; it may be specific to a different (e.g. fuller dev/Windows) environment than this sandbox's clean venv.
++  - Smoke test: **not a Windows smoke** — this sandbox is Linux. A real Tkinter smoke ran under `xvfb-run` (Xvfb was available in this sandbox), driving the actual `AUSLStatsApp` class, its real `threading.Thread` worker, the real Tk event loop, and the real `cancel_data_update()`/Cancel-Refresh-button code path, with `update_all_data` stubbed to block until released (simulating a stalled network call; no real network request was made). It confirmed: the UI stays responsive (the Tk event loop keeps pumping) while the job is blocked; cancelling frees the in-flight flag and re-enables the button immediately, before the blocked call returns; `app.db`/freshness text are untouched by the cancel; repeated cancel calls are harmless; and the abandoned thread's late `RefreshCancelled`, once released, is a silent no-op that does not promote or crash. Confirmed reliable across 5 repeated runs. This is real-GUI verification on this platform, not a substitute for the Windows/Tkinter rehearsal the project's smoke tests otherwise run on.
++  - Commit: `b30e97472662e2edc751aa8e82a29a5187fd13fc` on branch `claude/refresh-006-mid-flight-cancel-125ykx`. **Push to `origin` failed**: `git push -u origin claude/refresh-006-mid-flight-cancel-125ykx` returned a persistent `403` from this session's local git proxy (`http://127.0.0.1:41729/...`) on four attempts with exponential backoff; the commit exists locally but has not reached the remote as of this entry. This needs a human/session-owner to grant push access or push the branch manually.
++  - Scope: only `REFRESH-006` was touched. `SPLIT-001/002/003`, `NOTE-004`, `UI-001/002/003`, `UX-001/002/003`, `SEARCH-004`, and Phase 6/7 items were not started and remain exactly `PLANNED`/`BACKLOG` as before. No redesign was performed; the existing one-job-per-source model, `_fetch_with_retry`'s bounded timeout/retry shape, and REFRESH-002's atomic staging/promotion are unchanged in structure.
+-- 
+2.43.0
+
