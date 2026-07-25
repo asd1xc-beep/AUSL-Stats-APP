@@ -145,7 +145,7 @@ def test_data_update_reports_the_original_error_after_deferred_callback(monkeypa
     monkeypatch.setattr(
         ausl_stats_app,
         "update_all_data",
-        lambda _progress, *, include_enrichment: (_ for _ in ()).throw(
+        lambda _progress, *, include_enrichment, cancel_token=None: (_ for _ in ()).throw(
             RuntimeError("update fixture failure")
         ),
     )
@@ -164,7 +164,7 @@ def test_data_update_suppresses_duplicate_and_restores_button_on_success(monkeyp
     updates = []
     app._finish_load = lambda _data: app.status_var.set("Ready")
 
-    def update_once(_progress, *, include_enrichment):
+    def update_once(_progress, *, include_enrichment, cancel_token=None):
         assert include_enrichment is False
         updates.append("update")
 
@@ -195,7 +195,7 @@ def test_live_refresh_reports_the_original_error_after_deferred_callback(monkeyp
     monkeypatch.setattr(
         ausl_stats_app,
         "fetch_live_game",
-        lambda _game_id: (_ for _ in ()).throw(RuntimeError("live fixture failure")),
+        lambda _game_id, *, cancel_token=None: (_ for _ in ()).throw(RuntimeError("live fixture failure")),
     )
 
     app.refresh_live()
@@ -211,7 +211,7 @@ def test_live_refresh_suppresses_duplicate_and_restores_button_on_success(monkey
     select_official_game(app)
     fetches = []
 
-    def fetch_once(game_id):
+    def fetch_once(game_id, *, cancel_token=None):
         fetches.append(game_id)
         return {"gameId": int(game_id), "recordStatus": "Scheduled"}, {"competitors": []}
 
@@ -240,7 +240,7 @@ def test_live_refresh_rejects_a_response_for_a_different_official_game(monkeypat
     monkeypatch.setattr(
         ausl_stats_app,
         "fetch_live_game",
-        lambda _game_id: ({"gameId": 9002, "recordStatus": "Scheduled"}, {}),
+        lambda _game_id, *, cancel_token=None: ({"gameId": 9002, "recordStatus": "Scheduled"}, {}),
     )
 
     app.refresh_live()
@@ -268,7 +268,7 @@ def test_refresh_lifecycle_emits_structured_events_without_payload_contents(monk
     monkeypatch.setattr(
         ausl_stats_app,
         "fetch_live_game",
-        lambda _game_id: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
+        lambda _game_id, *, cancel_token=None: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
     )
 
     app.refresh_live()
@@ -307,7 +307,7 @@ def test_live_refresh_rejects_late_response_after_selected_game_changes(monkeypa
     monkeypatch.setattr(
         ausl_stats_app,
         "fetch_live_game",
-        lambda _game_id: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
+        lambda _game_id, *, cancel_token=None: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
     )
 
     app.refresh_live()
@@ -366,7 +366,7 @@ def test_live_worker_never_calls_tk_after_directly(monkeypatch):
     monkeypatch.setattr(
         ausl_stats_app,
         "fetch_live_game",
-        lambda _game_id: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
+        lambda _game_id, *, cancel_token=None: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
     )
     app._finish_live = lambda *_args: None
 

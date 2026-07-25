@@ -12,6 +12,7 @@ import shutil
 import ssl
 import sys
 import tempfile
+import threading
 import unicodedata
 import socket
 import time
@@ -228,15 +229,75 @@ def _retry_delay_seconds(attempt: int, base_delay: float) -> float:
     return base_delay * (2 ** (attempt - 1))
 
 
-def _fetch_with_retry(operation, *, attempts: int = NETWORK_RETRY_ATTEMPTS, base_delay: float = NETWORK_RETRY_BASE_DELAY_SECONDS):
+class RefreshCancelled(Exception):
+    """Raised when a caller cancels a refresh/live job that is still running."""
+
+
+class CancelToken:
+    """Thread-safe, idempotent cancellation signal for one refresh/live job.
+
+    ``cancel()`` is meant to be called from the main thread, at any time,
+    including while the owning background thread is blocked inside a
+    network call. Python/``urllib`` give no safe way to force-abort a call
+    already inside ``urlopen``, so this does not kill that call; instead,
+    every attempt boundary and the backoff wait between attempts check the
+    token so a cancelled job stops retrying immediately (rather than
+    waiting out its remaining timeout/retry budget) and callers can check
+    ``cancelled`` before promoting a result to avoid promoting stale work.
+    """
+
+    def __init__(self):
+        self._event = threading.Event()
+
+    def cancel(self) -> None:
+        self._event.set()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._event.is_set()
+
+    def wait(self, timeout: float) -> bool:
+        """Sleep up to ``timeout`` seconds; return True if cancelled first."""
+
+        return self._event.wait(timeout)
+
+    def raise_if_cancelled(self) -> None:
+        if self._event.is_set():
+            raise RefreshCancelled()
+
+
+def _cancel_kwargs(cancel_token: CancelToken | None) -> dict:
+    """Only pass ``cancel_token`` through when a caller actually supplied one.
+
+    Keeps every call site source-compatible with callers (including test
+    doubles) that stub out ``_get_json``/``_get_text``/``fetch_standings_frame``/
+    ``fetch_schedule_frame`` with their pre-cancellation, fixed-argument
+    signatures and were never asked to opt into cancellation.
+    """
+
+    return {} if cancel_token is None else {"cancel_token": cancel_token}
+
+
+def _fetch_with_retry(
+    operation,
+    *,
+    attempts: int = NETWORK_RETRY_ATTEMPTS,
+    base_delay: float = NETWORK_RETRY_BASE_DELAY_SECONDS,
+    cancel_token: CancelToken | None = None,
+):
     """Run ``operation`` with bounded retry/backoff on transient network errors.
 
     Non-transient failures (4xx other than 429) fail immediately. Any error
-    still failing on the final attempt is re-raised unchanged.
+    still failing on the final attempt is re-raised unchanged. If
+    ``cancel_token`` is cancelled before an attempt starts, or during the
+    backoff wait between attempts, this raises ``RefreshCancelled`` instead
+    of retrying.
     """
 
     last_exc: Exception | None = None
     for attempt in range(1, max(1, attempts) + 1):
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         try:
             return operation()
         except HTTPError as exc:
@@ -247,7 +308,12 @@ def _fetch_with_retry(operation, *, attempts: int = NETWORK_RETRY_ATTEMPTS, base
             if attempt == attempts:
                 raise
             last_exc = exc
-        time.sleep(_retry_delay_seconds(attempt, base_delay))
+        delay = _retry_delay_seconds(attempt, base_delay)
+        if cancel_token is not None:
+            if cancel_token.wait(delay):
+                raise RefreshCancelled()
+        else:
+            time.sleep(delay)
     if last_exc is not None:  # pragma: no cover - defensive, loop always returns/raises above
         raise last_exc
     raise RuntimeError("retry loop exited without a result")  # pragma: no cover
@@ -266,7 +332,9 @@ def _frame_fingerprint(frame) -> str | None:
     return _sha256_hex(payload)
 
 
-def _get_json(path: str) -> dict:
+def _get_json(path: str, *, cancel_token: CancelToken | None = None) -> dict:
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
     url = path if path.startswith("http") else BASE_URL + path
     request = Request(
         url,
@@ -278,10 +346,12 @@ def _get_json(path: str) -> dict:
         with urlopen(request, timeout=45, context=context) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    return _fetch_with_retry(_do_request)
+    return _fetch_with_retry(_do_request, cancel_token=cancel_token)
 
 
-def _get_text(path: str) -> str:
+def _get_text(path: str, *, cancel_token: CancelToken | None = None) -> str:
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
     url = path if path.startswith("http") else BASE_URL + path
     request = Request(
         url,
@@ -293,12 +363,14 @@ def _get_text(path: str) -> str:
         with urlopen(request, timeout=45, context=context) as response:
             return response.read().decode("utf-8", "ignore")
 
-    return _fetch_with_retry(_do_request)
+    return _fetch_with_retry(_do_request, cancel_token=cancel_token)
 
 
-def _download_file(url: str, path: Path) -> str:
+def _download_file(url: str, path: Path, *, cancel_token: CancelToken | None = None) -> str:
     """Download ``url`` to ``path`` and return a sha256 hex hash of its bytes."""
 
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
     path.parent.mkdir(parents=True, exist_ok=True)
     request = Request(url, headers={"User-Agent": "AUSL-Broadcast-Stats/1.0 (local desktop tool)"})
     context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
@@ -307,7 +379,7 @@ def _download_file(url: str, path: Path) -> str:
         with urlopen(request, timeout=90, context=context) as response:
             return response.read()
 
-    payload = _fetch_with_retry(_do_request)
+    payload = _fetch_with_retry(_do_request, cancel_token=cancel_token)
     path.write_bytes(payload)
     return _sha256_hex(payload)
 
@@ -1491,9 +1563,9 @@ def fetch_split_payload(season_id: int, split_key: str) -> tuple[dict, str]:
     return _get_json(api_path), BASE_URL + api_path
 
 
-def fetch_standings_frame() -> pd.DataFrame:
+def fetch_standings_frame(*, cancel_token: CancelToken | None = None) -> pd.DataFrame:
     imported_at = datetime.now(timezone.utc).isoformat()
-    page = _get_text("/standings/")
+    page = _get_text("/standings/", **_cancel_kwargs(cancel_token))
     decoded = page.encode("utf-8").decode("unicode_escape", errors="ignore")
     rows = _json_array_after(decoded, '"standings":')
     if not rows:
@@ -1507,9 +1579,9 @@ def fetch_standings_frame() -> pd.DataFrame:
     return frame
 
 
-def fetch_schedule_frame() -> pd.DataFrame:
+def fetch_schedule_frame(*, cancel_token: CancelToken | None = None) -> pd.DataFrame:
     imported_at = datetime.now(timezone.utc).isoformat()
-    page = _get_text("/schedule/")
+    page = _get_text("/schedule/", **_cancel_kwargs(cancel_token))
     decoded = page.encode("utf-8").decode("unicode_escape", errors="ignore")
     games = _json_array_after(decoded, '"games":')
     rows = []
@@ -2805,9 +2877,22 @@ def _promote_file_set(staged_to_final: dict[Path, Path]) -> None:
 
 
 def update_all_data(
-    progress=None, *, include_enrichment: bool = False
+    progress=None,
+    *,
+    include_enrichment: bool = False,
+    cancel_token: CancelToken | None = None,
 ) -> dict[str, Path]:
-    """Refresh validated core data, with enrichment opt-in for development only."""
+    """Refresh validated core data, with enrichment opt-in for development only.
+
+    If ``cancel_token`` is cancelled, this raises ``RefreshCancelled`` as soon
+    as the next cancellation checkpoint is reached (before each network call,
+    and once more before any file is staged/promoted) instead of continuing.
+    Once staging/promotion begins, the refresh runs to completion rather than
+    cancelling mid-write, so the atomic REFRESH-002 promotion is never left
+    partially applied.
+    """
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
     progress = progress or (lambda _message: None)
     imported_at = datetime.now(timezone.utc).isoformat()
     refresh_source = (
@@ -2817,9 +2902,9 @@ def update_all_data(
     roster_payloads, stats_payloads = {}, {}
     for year, season_id in SEASONS.items():
         progress(f"Downloading {year} AUSL rosters...")
-        roster_payloads[year] = _get_json(f"/data/playersApiData_{season_id}.json")
+        roster_payloads[year] = _get_json(f"/data/playersApiData_{season_id}.json", **_cancel_kwargs(cancel_token))
         progress(f"Downloading {year} AUSL stats...")
-        stats_payloads[year] = _get_json(f"/data/statsApiData_{season_id}.json")
+        stats_payloads[year] = _get_json(f"/data/statsApiData_{season_id}.json", **_cancel_kwargs(cancel_token))
 
     rosters = {year: roster_frame(payload, year) for year, payload in roster_payloads.items()}
     batting, pitching, fielding = {}, {}, {}
@@ -2860,7 +2945,9 @@ def update_all_data(
     progress("Downloading AUSL standings and schedule context...")
     core_source_errors = []
     try:
-        standings = fetch_standings_frame()
+        standings = fetch_standings_frame(**_cancel_kwargs(cancel_token))
+    except RefreshCancelled:
+        raise
     except Exception as exc:
         progress(f"Skipping standings context: {exc}")
         standings = pd.DataFrame()
@@ -2876,7 +2963,9 @@ def update_all_data(
     else:
         log_source_result("official_standings", standings, status="parsed")
     try:
-        schedule = fetch_schedule_frame()
+        schedule = fetch_schedule_frame(**_cancel_kwargs(cancel_token))
+    except RefreshCancelled:
+        raise
     except Exception as exc:
         progress(f"Skipping schedule context: {exc}")
         schedule = pd.DataFrame()
@@ -2891,6 +2980,12 @@ def update_all_data(
         )
     else:
         log_source_result("official_schedule", schedule, status="parsed")
+
+    # Last checkpoint before any file is staged/promoted: a cancellation that
+    # arrives after the final network call still lands here before anything
+    # is written, so a cancelled refresh cannot promote a partial result.
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
 
     _validate_core_refresh_frames(
         rosters=rosters,
@@ -3342,12 +3437,16 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
     return result
 
 
-def fetch_live_game(game_id: str) -> tuple[dict, dict]:
+def fetch_live_game(game_id: str, *, cancel_token: CancelToken | None = None) -> tuple[dict, dict]:
     game_id = str(game_id).strip()
     if not game_id.isdigit():
         raise ValueError("Enter the numeric game ID from an AUSL game-page URL.")
-    game = _get_json(f"/api/game-data/{game_id}/?sport=AUSL")
-    box = _get_json(f"/api/box-score/ausl/{game_id}")
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    game = _get_json(f"/api/game-data/{game_id}/?sport=AUSL", **_cancel_kwargs(cancel_token))
+    if cancel_token is not None:
+        cancel_token.raise_if_cancelled()
+    box = _get_json(f"/api/box-score/ausl/{game_id}", **_cancel_kwargs(cancel_token))
     return game, box.get("data", box)
 
 

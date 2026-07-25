@@ -21,6 +21,8 @@ from ausl_data import (
     TEAM_NAMES,
     media_guide_source_context,
     _deduplicate_official_game_notes,
+    CancelToken,
+    RefreshCancelled,
     canonical_pitching_whip,
     empty_locked_lineup_store,
     export_dir,
@@ -1409,7 +1411,9 @@ class AUSLStatsApp:
         self.producer_prep_copy_text = ""
         self._initial_load_in_flight = False
         self._data_update_in_flight = False
+        self._data_update_cancel_token = None
         self._live_refresh_in_flight = False
+        self._live_refresh_cancel_token = None
         self._live_request_generation = 0
         self._active_live_request = None
         self._live_timer_id = None
@@ -1418,7 +1422,20 @@ class AUSLStatsApp:
         self.locked_lineups = self.load_locked_lineups()
         self._style()
         self._build()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._load_initial()
+
+    def _on_close(self):
+        """Cancel any in-flight refresh/live jobs before closing.
+
+        Their abandoned background threads are daemons and would not block
+        shutdown either way, but cancelling first stops wasted retries and
+        keeps behavior consistent with an explicit cancel action.
+        """
+        self.cancel_data_update()
+        self.cancel_live_refresh()
+        self._cancel_live_timer()
+        self.root.destroy()
 
     def _style(self):
         style = ttk.Style()
@@ -1436,14 +1453,16 @@ class AUSLStatsApp:
         ttk.Label(top, text="AUSL Broadcast Stats", style="Header.TLabel").grid(row=0, column=1, sticky="w", padx=(0, 18))
         self.update_button = ttk.Button(top, text="Quick Refresh (Core)", style="Accent.TButton", command=self.update_data)
         self.update_button.grid(row=0, column=2, padx=4)
+        self.cancel_update_button = ttk.Button(top, text="Cancel Refresh", state="disabled", command=self.cancel_data_update)
+        self.cancel_update_button.grid(row=0, column=3, padx=4)
         self.status_var = tk.StringVar(value="Loading local database...")
-        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=3, sticky="w", padx=10)
+        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=4, sticky="w", padx=10)
         self.data_freshness_var = tk.StringVar(value=self.data_freshness_text)
-        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=3, sticky="w", pady=(4, 0))
+        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=4, sticky="w", pady=(4, 0))
         self.data_health_var = tk.StringVar(value="Data health: loading...")
         self.data_health_label = ttk.Label(top, textvariable=self.data_health_var, style="Sub.TLabel")
-        self.data_health_label.grid(row=2, column=1, columnspan=3, sticky="w", pady=(2, 0))
-        top.columnconfigure(3, weight=1)
+        self.data_health_label.grid(row=2, column=1, columnspan=4, sticky="w", pady=(2, 0))
+        top.columnconfigure(4, weight=1)
 
         game = ttk.LabelFrame(self.root, text="Game Setup", padding=8)
         game.pack(fill="x", padx=10, pady=(0, 8))
@@ -1731,6 +1750,8 @@ class AUSLStatsApp:
         self.live_game_id_entry.pack(side="left", padx=6)
         self.live_refresh_button = ttk.Button(controls, text="Load / Refresh Game", command=self.refresh_live)
         self.live_refresh_button.pack(side="left")
+        self.cancel_live_button = ttk.Button(controls, text="Cancel", state="disabled", command=self.cancel_live_refresh)
+        self.cancel_live_button.pack(side="left", padx=(6, 0))
         self.auto_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(controls, text="Auto-refresh every 30 seconds", variable=self.auto_var, command=self._schedule_live).pack(side="left", padx=16)
         self.live_status = tk.StringVar(value="Enter the number at the end of an AUSL game-page URL.")
@@ -1838,13 +1859,15 @@ class AUSLStatsApp:
             button.configure(state=state)
 
     def _sync_update_button(self):
-        disabled = bool(
-            getattr(self, "_initial_load_in_flight", False)
-            or getattr(self, "_data_update_in_flight", False)
-        )
+        in_flight = bool(getattr(self, "_data_update_in_flight", False))
+        disabled = bool(getattr(self, "_initial_load_in_flight", False)) or in_flight
         self._set_button_state(
             getattr(self, "update_button", None),
             "disabled" if disabled else "normal",
+        )
+        self._set_button_state(
+            getattr(self, "cancel_update_button", None),
+            "normal" if in_flight else "disabled",
         )
 
     def _sync_live_refresh_button(self):
@@ -1852,6 +1875,10 @@ class AUSLStatsApp:
         self._set_button_state(
             getattr(self, "live_refresh_button", None),
             "disabled" if disabled else "normal",
+        )
+        self._set_button_state(
+            getattr(self, "cancel_live_button", None),
+            "normal" if disabled else "disabled",
         )
 
     def _ensure_main_thread_dispatch(self):
@@ -2173,6 +2200,13 @@ class AUSLStatsApp:
             getattr(self, "_live_request_generation", 0) + 1
         )
         self._active_live_request = None
+        # Also stop the abandoned request's own retries immediately, rather
+        # than just marking it stale for the app to discover once its
+        # network call eventually returns.
+        token = getattr(self, "_live_refresh_cancel_token", None)
+        if token is not None:
+            token.cancel()
+        self._live_refresh_cancel_token = None
         self._live_refresh_in_flight = False
         self._sync_live_refresh_button()
 
@@ -2815,6 +2849,8 @@ class AUSLStatsApp:
             self.status_var.set("Wait for the initial database load to finish before updating.")
             return
 
+        cancel_token = CancelToken()
+        self._data_update_cancel_token = cancel_token
         self._data_update_in_flight = True
         self._ensure_main_thread_dispatch()
         self._sync_update_button()
@@ -2826,26 +2862,55 @@ class AUSLStatsApp:
 
         def work():
             try:
-                update_all_data(progress, include_enrichment=False)
+                update_all_data(progress, include_enrichment=False, cancel_token=cancel_token)
                 data = load_database(include_enrichment=False)
-            except Exception as exc:
-                self._post_main_thread(self._finish_data_update_error, exc)
+            except RefreshCancelled:
+                self._post_main_thread(self._finish_data_update_cancelled, cancel_token)
                 return
-            self._post_main_thread(self._finish_data_update_success, data)
+            except Exception as exc:
+                self._post_main_thread(self._finish_data_update_error, exc, cancel_token)
+                return
+            self._post_main_thread(self._finish_data_update_success, data, cancel_token)
 
         try:
             threading.Thread(target=work, daemon=True).start()
         except Exception as exc:
-            self._finish_data_update_error(exc)
+            self._finish_data_update_error(exc, cancel_token)
 
-    def _finish_data_update_success(self, data):
+    def _data_update_token_is_current(self, token):
+        return token is not None and token is getattr(self, "_data_update_cancel_token", None)
+
+    def cancel_data_update(self):
+        """Cancel an in-flight Quick Refresh immediately.
+
+        Frees the in-flight flag and re-enables the update button right
+        away, without waiting for the abandoned background thread's network
+        call to finish or time out. That thread's eventual success/error
+        callback is discarded as stale once it arrives (see
+        ``_data_update_token_is_current``).
+        """
+
+        token = getattr(self, "_data_update_cancel_token", None)
+        if token is None:
+            return
+        token.cancel()
+        self._data_update_cancel_token = None
+        self._data_update_in_flight = False
+        self._sync_update_button()
+        self.status_var.set("Cancelling data update; last-known-good data retained.")
+        self._log_event("data_update_cancel_requested", source="official_ausl_core_data")
+
+    def _finish_data_update_success(self, data, token):
+        if not self._data_update_token_is_current(token):
+            return
         try:
             self._finish_load(data)
         except Exception as exc:
-            self._finish_data_update_error(exc)
+            self._finish_data_update_error(exc, token)
             return
         row_count = self._roster_count(data)
         self._data_update_in_flight = False
+        self._data_update_cancel_token = None
         self._sync_update_button()
         self.status_var.set(f"Update complete — {row_count} current players loaded")
         self._log_event(
@@ -2854,8 +2919,11 @@ class AUSLStatsApp:
             row_count=row_count,
         )
 
-    def _finish_data_update_error(self, exc):
+    def _finish_data_update_error(self, exc, token):
+        if not self._data_update_token_is_current(token):
+            return
         self._data_update_in_flight = False
+        self._data_update_cancel_token = None
         self._sync_update_button()
         self.status_var.set(f"Data update failed: {exc}")
         self._log_event(
@@ -2865,6 +2933,15 @@ class AUSLStatsApp:
             error=str(exc),
         )
         messagebox.showerror("AUSL Data Update", str(exc))
+
+    def _finish_data_update_cancelled(self, token):
+        if not self._data_update_token_is_current(token):
+            return
+        self._data_update_in_flight = False
+        self._data_update_cancel_token = None
+        self._sync_update_button()
+        self.status_var.set("Data update cancelled; last-known-good data retained.")
+        self._log_event("data_update_cancelled", source="official_ausl_core_data")
 
     @staticmethod
     def _data_health_color(state):
@@ -5118,7 +5195,9 @@ class AUSLStatsApp:
         generation = getattr(self, "_live_request_generation", 0) + 1
         self._live_request_generation = generation
         request_token = LiveRequestToken(selected.game_id, generation)
+        cancel_token = CancelToken()
         self._active_live_request = request_token
+        self._live_refresh_cancel_token = cancel_token
         self._live_refresh_in_flight = True
         self._ensure_main_thread_dispatch()
         self._sync_live_refresh_button()
@@ -5127,7 +5206,13 @@ class AUSLStatsApp:
 
         def work():
             try:
-                game, box = fetch_live_game(game_id)
+                game, box = fetch_live_game(game_id, cancel_token=cancel_token)
+            except RefreshCancelled:
+                self._post_main_thread(
+                    self._finish_live_refresh_cancelled,
+                    request_token,
+                )
+                return
             except Exception as exc:
                 self._post_main_thread(
                     self._finish_live_refresh_error,
@@ -5146,6 +5231,32 @@ class AUSLStatsApp:
             threading.Thread(target=work, daemon=True).start()
         except Exception as exc:
             self._finish_live_refresh_error(exc, request_token)
+
+    def cancel_live_refresh(self):
+        """Cancel an in-flight live refresh immediately.
+
+        Frees the in-flight flag and re-enables the live refresh button
+        right away, without waiting for the abandoned background thread's
+        network call to finish or time out. Its eventual callback is
+        discarded as stale once it arrives (see ``_live_request_is_current``).
+        """
+
+        token = getattr(self, "_live_refresh_cancel_token", None)
+        request_token = getattr(self, "_active_live_request", None)
+        if token is None and request_token is None:
+            return
+        if token is not None:
+            token.cancel()
+        self._live_refresh_cancel_token = None
+        self._active_live_request = None
+        self._live_refresh_in_flight = False
+        self._sync_live_refresh_button()
+        self.live_status.set("Live refresh cancelled; last-known-good live data retained.")
+        self._log_event(
+            "live_refresh_cancel_requested",
+            source="official_live_feed",
+            game_id=getattr(request_token, "selected_game_id", ""),
+        )
 
     def _live_request_is_current(self, request_token):
         selected = getattr(self, "selected_game", None)
@@ -5199,6 +5310,7 @@ class AUSLStatsApp:
             self._finish_live_refresh_error(exc, request_token)
             return
         self._active_live_request = None
+        self._live_refresh_cancel_token = None
         self._live_refresh_in_flight = False
         self._sync_live_refresh_button()
         self._log_event(
@@ -5215,6 +5327,7 @@ class AUSLStatsApp:
             return
         requested_game_id = request_token.selected_game_id
         self._active_live_request = None
+        self._live_refresh_cancel_token = None
         self._live_refresh_in_flight = False
         self.live_health = LiveFeedHealth(
             "RED", "DISCONNECTED", None, "", None, "REFRESH FAILED"
@@ -5227,6 +5340,22 @@ class AUSLStatsApp:
             game_id=requested_game_id,
             error_type=type(exc).__name__,
             error=str(exc),
+        )
+
+    def _finish_live_refresh_cancelled(self, request_token):
+        if not self._live_request_is_current(request_token):
+            self._discard_stale_live_callback(request_token)
+            return
+        requested_game_id = request_token.selected_game_id
+        self._active_live_request = None
+        self._live_refresh_cancel_token = None
+        self._live_refresh_in_flight = False
+        self._sync_live_refresh_button()
+        self.live_status.set("Live refresh cancelled; last-known-good live data retained.")
+        self._log_event(
+            "live_refresh_cancelled",
+            source="official_live_feed",
+            game_id=requested_game_id,
         )
 
     def _finish_live(self, game, box):
