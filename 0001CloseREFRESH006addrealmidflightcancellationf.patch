@@ -1,0 +1,1326 @@
+From b30e97472662e2edc751aa8e82a29a5187fd13fc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 25 Jul 2026 01:22:39 +0000
+Subject: [PATCH 1/2] Close REFRESH-006: add real mid-flight cancellation for
+ refresh/live jobs
+
+Add CancelToken/RefreshCancelled to ausl_data.py and thread cancel_token
+through _fetch_with_retry, _get_json, _get_text, _download_file,
+fetch_standings_frame, fetch_schedule_frame, update_all_data, and
+fetch_live_game. Cancellation is checked before each network attempt and
+during the retry backoff wait (via Event.wait instead of time.sleep), so a
+cancelled job stops retrying immediately instead of working through its
+full timeout/retry budget. update_all_data also re-checks cancellation
+right before staging/promotion so a cancelled Quick Refresh can never write
+or promote a partial result.
+
+In ausl_stats_app.py, add cancel_data_update()/cancel_live_refresh() plus
+Cancel buttons, wire game changes and app shutdown to cancel an in-flight
+live/refresh job, and give each job a per-call CancelToken/token-identity
+check so a late success/error/cancelled callback from an abandoned
+background thread is a safe no-op instead of promoting stale data or
+crashing. Idempotent: repeated cancel calls and a cancel racing a
+just-completed success/failure are all handled safely.
+
+Existing test doubles for _get_json/_get_text/fetch_standings_frame/
+fetch_schedule_frame/update_all_data/fetch_live_game are updated to accept
+the new optional cancel_token parameter.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011y6TeGFRuAByW9jqigaXwq
+---
+ src/ausl_data.py                       | 143 +++++++++--
+ src/ausl_stats_app.py                  | 161 +++++++++++--
+ tests/test_app_refresh_cancellation.py | 287 ++++++++++++++++++++++
+ tests/test_callbacks.py                |  16 +-
+ tests/test_refresh_cancellation.py     | 318 +++++++++++++++++++++++++
+ 5 files changed, 879 insertions(+), 46 deletions(-)
+ create mode 100644 tests/test_app_refresh_cancellation.py
+ create mode 100644 tests/test_refresh_cancellation.py
+
+diff --git a/src/ausl_data.py b/src/ausl_data.py
+index 9b4343e..04cc97d 100644
+--- a/src/ausl_data.py
++++ b/src/ausl_data.py
+@@ -12,6 +12,7 @@ import shutil
+ import ssl
+ import sys
+ import tempfile
++import threading
+ import unicodedata
+ import socket
+ import time
+@@ -228,15 +229,75 @@ def _retry_delay_seconds(attempt: int, base_delay: float) -> float:
+     return base_delay * (2 ** (attempt - 1))
+ 
+ 
+-def _fetch_with_retry(operation, *, attempts: int = NETWORK_RETRY_ATTEMPTS, base_delay: float = NETWORK_RETRY_BASE_DELAY_SECONDS):
++class RefreshCancelled(Exception):
++    """Raised when a caller cancels a refresh/live job that is still running."""
++
++
++class CancelToken:
++    """Thread-safe, idempotent cancellation signal for one refresh/live job.
++
++    ``cancel()`` is meant to be called from the main thread, at any time,
++    including while the owning background thread is blocked inside a
++    network call. Python/``urllib`` give no safe way to force-abort a call
++    already inside ``urlopen``, so this does not kill that call; instead,
++    every attempt boundary and the backoff wait between attempts check the
++    token so a cancelled job stops retrying immediately (rather than
++    waiting out its remaining timeout/retry budget) and callers can check
++    ``cancelled`` before promoting a result to avoid promoting stale work.
++    """
++
++    def __init__(self):
++        self._event = threading.Event()
++
++    def cancel(self) -> None:
++        self._event.set()
++
++    @property
++    def cancelled(self) -> bool:
++        return self._event.is_set()
++
++    def wait(self, timeout: float) -> bool:
++        """Sleep up to ``timeout`` seconds; return True if cancelled first."""
++
++        return self._event.wait(timeout)
++
++    def raise_if_cancelled(self) -> None:
++        if self._event.is_set():
++            raise RefreshCancelled()
++
++
++def _cancel_kwargs(cancel_token: CancelToken | None) -> dict:
++    """Only pass ``cancel_token`` through when a caller actually supplied one.
++
++    Keeps every call site source-compatible with callers (including test
++    doubles) that stub out ``_get_json``/``_get_text``/``fetch_standings_frame``/
++    ``fetch_schedule_frame`` with their pre-cancellation, fixed-argument
++    signatures and were never asked to opt into cancellation.
++    """
++
++    return {} if cancel_token is None else {"cancel_token": cancel_token}
++
++
++def _fetch_with_retry(
++    operation,
++    *,
++    attempts: int = NETWORK_RETRY_ATTEMPTS,
++    base_delay: float = NETWORK_RETRY_BASE_DELAY_SECONDS,
++    cancel_token: CancelToken | None = None,
++):
+     """Run ``operation`` with bounded retry/backoff on transient network errors.
+ 
+     Non-transient failures (4xx other than 429) fail immediately. Any error
+-    still failing on the final attempt is re-raised unchanged.
++    still failing on the final attempt is re-raised unchanged. If
++    ``cancel_token`` is cancelled before an attempt starts, or during the
++    backoff wait between attempts, this raises ``RefreshCancelled`` instead
++    of retrying.
+     """
+ 
+     last_exc: Exception | None = None
+     for attempt in range(1, max(1, attempts) + 1):
++        if cancel_token is not None:
++            cancel_token.raise_if_cancelled()
+         try:
+             return operation()
+         except HTTPError as exc:
+@@ -247,7 +308,12 @@ def _fetch_with_retry(operation, *, attempts: int = NETWORK_RETRY_ATTEMPTS, base
+             if attempt == attempts:
+                 raise
+             last_exc = exc
+-        time.sleep(_retry_delay_seconds(attempt, base_delay))
++        delay = _retry_delay_seconds(attempt, base_delay)
++        if cancel_token is not None:
++            if cancel_token.wait(delay):
++                raise RefreshCancelled()
++        else:
++            time.sleep(delay)
+     if last_exc is not None:  # pragma: no cover - defensive, loop always returns/raises above
+         raise last_exc
+     raise RuntimeError("retry loop exited without a result")  # pragma: no cover
+@@ -266,7 +332,9 @@ def _frame_fingerprint(frame) -> str | None:
+     return _sha256_hex(payload)
+ 
+ 
+-def _get_json(path: str) -> dict:
++def _get_json(path: str, *, cancel_token: CancelToken | None = None) -> dict:
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
+     url = path if path.startswith("http") else BASE_URL + path
+     request = Request(
+         url,
+@@ -278,10 +346,12 @@ def _get_json(path: str) -> dict:
+         with urlopen(request, timeout=45, context=context) as response:
+             return json.loads(response.read().decode("utf-8"))
+ 
+-    return _fetch_with_retry(_do_request)
++    return _fetch_with_retry(_do_request, cancel_token=cancel_token)
+ 
+ 
+-def _get_text(path: str) -> str:
++def _get_text(path: str, *, cancel_token: CancelToken | None = None) -> str:
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
+     url = path if path.startswith("http") else BASE_URL + path
+     request = Request(
+         url,
+@@ -293,12 +363,14 @@ def _get_text(path: str) -> str:
+         with urlopen(request, timeout=45, context=context) as response:
+             return response.read().decode("utf-8", "ignore")
+ 
+-    return _fetch_with_retry(_do_request)
++    return _fetch_with_retry(_do_request, cancel_token=cancel_token)
+ 
+ 
+-def _download_file(url: str, path: Path) -> str:
++def _download_file(url: str, path: Path, *, cancel_token: CancelToken | None = None) -> str:
+     """Download ``url`` to ``path`` and return a sha256 hex hash of its bytes."""
+ 
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
+     path.parent.mkdir(parents=True, exist_ok=True)
+     request = Request(url, headers={"User-Agent": "AUSL-Broadcast-Stats/1.0 (local desktop tool)"})
+     context = ssl.create_default_context(cafile=certifi.where()) if certifi else ssl.create_default_context()
+@@ -307,7 +379,7 @@ def _download_file(url: str, path: Path) -> str:
+         with urlopen(request, timeout=90, context=context) as response:
+             return response.read()
+ 
+-    payload = _fetch_with_retry(_do_request)
++    payload = _fetch_with_retry(_do_request, cancel_token=cancel_token)
+     path.write_bytes(payload)
+     return _sha256_hex(payload)
+ 
+@@ -1491,9 +1563,9 @@ def fetch_split_payload(season_id: int, split_key: str) -> tuple[dict, str]:
+     return _get_json(api_path), BASE_URL + api_path
+ 
+ 
+-def fetch_standings_frame() -> pd.DataFrame:
++def fetch_standings_frame(*, cancel_token: CancelToken | None = None) -> pd.DataFrame:
+     imported_at = datetime.now(timezone.utc).isoformat()
+-    page = _get_text("/standings/")
++    page = _get_text("/standings/", **_cancel_kwargs(cancel_token))
+     decoded = page.encode("utf-8").decode("unicode_escape", errors="ignore")
+     rows = _json_array_after(decoded, '"standings":')
+     if not rows:
+@@ -1507,9 +1579,9 @@ def fetch_standings_frame() -> pd.DataFrame:
+     return frame
+ 
+ 
+-def fetch_schedule_frame() -> pd.DataFrame:
++def fetch_schedule_frame(*, cancel_token: CancelToken | None = None) -> pd.DataFrame:
+     imported_at = datetime.now(timezone.utc).isoformat()
+-    page = _get_text("/schedule/")
++    page = _get_text("/schedule/", **_cancel_kwargs(cancel_token))
+     decoded = page.encode("utf-8").decode("unicode_escape", errors="ignore")
+     games = _json_array_after(decoded, '"games":')
+     rows = []
+@@ -2805,9 +2877,22 @@ def _promote_file_set(staged_to_final: dict[Path, Path]) -> None:
+ 
+ 
+ def update_all_data(
+-    progress=None, *, include_enrichment: bool = False
++    progress=None,
++    *,
++    include_enrichment: bool = False,
++    cancel_token: CancelToken | None = None,
+ ) -> dict[str, Path]:
+-    """Refresh validated core data, with enrichment opt-in for development only."""
++    """Refresh validated core data, with enrichment opt-in for development only.
++
++    If ``cancel_token`` is cancelled, this raises ``RefreshCancelled`` as soon
++    as the next cancellation checkpoint is reached (before each network call,
++    and once more before any file is staged/promoted) instead of continuing.
++    Once staging/promotion begins, the refresh runs to completion rather than
++    cancelling mid-write, so the atomic REFRESH-002 promotion is never left
++    partially applied.
++    """
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
+     progress = progress or (lambda _message: None)
+     imported_at = datetime.now(timezone.utc).isoformat()
+     refresh_source = (
+@@ -2817,9 +2902,9 @@ def update_all_data(
+     roster_payloads, stats_payloads = {}, {}
+     for year, season_id in SEASONS.items():
+         progress(f"Downloading {year} AUSL rosters...")
+-        roster_payloads[year] = _get_json(f"/data/playersApiData_{season_id}.json")
++        roster_payloads[year] = _get_json(f"/data/playersApiData_{season_id}.json", **_cancel_kwargs(cancel_token))
+         progress(f"Downloading {year} AUSL stats...")
+-        stats_payloads[year] = _get_json(f"/data/statsApiData_{season_id}.json")
++        stats_payloads[year] = _get_json(f"/data/statsApiData_{season_id}.json", **_cancel_kwargs(cancel_token))
+ 
+     rosters = {year: roster_frame(payload, year) for year, payload in roster_payloads.items()}
+     batting, pitching, fielding = {}, {}, {}
+@@ -2860,7 +2945,9 @@ def update_all_data(
+     progress("Downloading AUSL standings and schedule context...")
+     core_source_errors = []
+     try:
+-        standings = fetch_standings_frame()
++        standings = fetch_standings_frame(**_cancel_kwargs(cancel_token))
++    except RefreshCancelled:
++        raise
+     except Exception as exc:
+         progress(f"Skipping standings context: {exc}")
+         standings = pd.DataFrame()
+@@ -2876,7 +2963,9 @@ def update_all_data(
+     else:
+         log_source_result("official_standings", standings, status="parsed")
+     try:
+-        schedule = fetch_schedule_frame()
++        schedule = fetch_schedule_frame(**_cancel_kwargs(cancel_token))
++    except RefreshCancelled:
++        raise
+     except Exception as exc:
+         progress(f"Skipping schedule context: {exc}")
+         schedule = pd.DataFrame()
+@@ -2892,6 +2981,12 @@ def update_all_data(
+     else:
+         log_source_result("official_schedule", schedule, status="parsed")
+ 
++    # Last checkpoint before any file is staged/promoted: a cancellation that
++    # arrives after the final network call still lands here before anything
++    # is written, so a cancelled refresh cannot promote a partial result.
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
++
+     _validate_core_refresh_frames(
+         rosters=rosters,
+         batting=batting,
+@@ -3342,12 +3437,16 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
+     return result
+ 
+ 
+-def fetch_live_game(game_id: str) -> tuple[dict, dict]:
++def fetch_live_game(game_id: str, *, cancel_token: CancelToken | None = None) -> tuple[dict, dict]:
+     game_id = str(game_id).strip()
+     if not game_id.isdigit():
+         raise ValueError("Enter the numeric game ID from an AUSL game-page URL.")
+-    game = _get_json(f"/api/game-data/{game_id}/?sport=AUSL")
+-    box = _get_json(f"/api/box-score/ausl/{game_id}")
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
++    game = _get_json(f"/api/game-data/{game_id}/?sport=AUSL", **_cancel_kwargs(cancel_token))
++    if cancel_token is not None:
++        cancel_token.raise_if_cancelled()
++    box = _get_json(f"/api/box-score/ausl/{game_id}", **_cancel_kwargs(cancel_token))
+     return game, box.get("data", box)
+ 
+ 
+diff --git a/src/ausl_stats_app.py b/src/ausl_stats_app.py
+index f0feddb..d1d0bde 100644
+--- a/src/ausl_stats_app.py
++++ b/src/ausl_stats_app.py
+@@ -21,6 +21,8 @@ from ausl_data import (
+     TEAM_NAMES,
+     media_guide_source_context,
+     _deduplicate_official_game_notes,
++    CancelToken,
++    RefreshCancelled,
+     canonical_pitching_whip,
+     empty_locked_lineup_store,
+     export_dir,
+@@ -1409,7 +1411,9 @@ class AUSLStatsApp:
+         self.producer_prep_copy_text = ""
+         self._initial_load_in_flight = False
+         self._data_update_in_flight = False
++        self._data_update_cancel_token = None
+         self._live_refresh_in_flight = False
++        self._live_refresh_cancel_token = None
+         self._live_request_generation = 0
+         self._active_live_request = None
+         self._live_timer_id = None
+@@ -1418,8 +1422,21 @@ class AUSLStatsApp:
+         self.locked_lineups = self.load_locked_lineups()
+         self._style()
+         self._build()
++        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+         self._load_initial()
+ 
++    def _on_close(self):
++        """Cancel any in-flight refresh/live jobs before closing.
++
++        Their abandoned background threads are daemons and would not block
++        shutdown either way, but cancelling first stops wasted retries and
++        keeps behavior consistent with an explicit cancel action.
++        """
++        self.cancel_data_update()
++        self.cancel_live_refresh()
++        self._cancel_live_timer()
++        self.root.destroy()
++
+     def _style(self):
+         style = ttk.Style()
+         if "clam" in style.theme_names():
+@@ -1436,14 +1453,16 @@ class AUSLStatsApp:
+         ttk.Label(top, text="AUSL Broadcast Stats", style="Header.TLabel").grid(row=0, column=1, sticky="w", padx=(0, 18))
+         self.update_button = ttk.Button(top, text="Quick Refresh (Core)", style="Accent.TButton", command=self.update_data)
+         self.update_button.grid(row=0, column=2, padx=4)
++        self.cancel_update_button = ttk.Button(top, text="Cancel Refresh", state="disabled", command=self.cancel_data_update)
++        self.cancel_update_button.grid(row=0, column=3, padx=4)
+         self.status_var = tk.StringVar(value="Loading local database...")
+-        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=3, sticky="w", padx=10)
++        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=4, sticky="w", padx=10)
+         self.data_freshness_var = tk.StringVar(value=self.data_freshness_text)
+-        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=3, sticky="w", pady=(4, 0))
++        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=4, sticky="w", pady=(4, 0))
+         self.data_health_var = tk.StringVar(value="Data health: loading...")
+         self.data_health_label = ttk.Label(top, textvariable=self.data_health_var, style="Sub.TLabel")
+-        self.data_health_label.grid(row=2, column=1, columnspan=3, sticky="w", pady=(2, 0))
+-        top.columnconfigure(3, weight=1)
++        self.data_health_label.grid(row=2, column=1, columnspan=4, sticky="w", pady=(2, 0))
++        top.columnconfigure(4, weight=1)
+ 
+         game = ttk.LabelFrame(self.root, text="Game Setup", padding=8)
+         game.pack(fill="x", padx=10, pady=(0, 8))
+@@ -1731,6 +1750,8 @@ class AUSLStatsApp:
+         self.live_game_id_entry.pack(side="left", padx=6)
+         self.live_refresh_button = ttk.Button(controls, text="Load / Refresh Game", command=self.refresh_live)
+         self.live_refresh_button.pack(side="left")
++        self.cancel_live_button = ttk.Button(controls, text="Cancel", state="disabled", command=self.cancel_live_refresh)
++        self.cancel_live_button.pack(side="left", padx=(6, 0))
+         self.auto_var = tk.BooleanVar(value=False)
+         ttk.Checkbutton(controls, text="Auto-refresh every 30 seconds", variable=self.auto_var, command=self._schedule_live).pack(side="left", padx=16)
+         self.live_status = tk.StringVar(value="Enter the number at the end of an AUSL game-page URL.")
+@@ -1838,14 +1859,16 @@ class AUSLStatsApp:
+             button.configure(state=state)
+ 
+     def _sync_update_button(self):
+-        disabled = bool(
+-            getattr(self, "_initial_load_in_flight", False)
+-            or getattr(self, "_data_update_in_flight", False)
+-        )
++        in_flight = bool(getattr(self, "_data_update_in_flight", False))
++        disabled = bool(getattr(self, "_initial_load_in_flight", False)) or in_flight
+         self._set_button_state(
+             getattr(self, "update_button", None),
+             "disabled" if disabled else "normal",
+         )
++        self._set_button_state(
++            getattr(self, "cancel_update_button", None),
++            "normal" if in_flight else "disabled",
++        )
+ 
+     def _sync_live_refresh_button(self):
+         disabled = bool(getattr(self, "_live_refresh_in_flight", False))
+@@ -1853,6 +1876,10 @@ class AUSLStatsApp:
+             getattr(self, "live_refresh_button", None),
+             "disabled" if disabled else "normal",
+         )
++        self._set_button_state(
++            getattr(self, "cancel_live_button", None),
++            "normal" if disabled else "disabled",
++        )
+ 
+     def _ensure_main_thread_dispatch(self):
+         if not hasattr(self, "_main_thread_results"):
+@@ -2173,6 +2200,13 @@ class AUSLStatsApp:
+             getattr(self, "_live_request_generation", 0) + 1
+         )
+         self._active_live_request = None
++        # Also stop the abandoned request's own retries immediately, rather
++        # than just marking it stale for the app to discover once its
++        # network call eventually returns.
++        token = getattr(self, "_live_refresh_cancel_token", None)
++        if token is not None:
++            token.cancel()
++        self._live_refresh_cancel_token = None
+         self._live_refresh_in_flight = False
+         self._sync_live_refresh_button()
+ 
+@@ -2815,6 +2849,8 @@ class AUSLStatsApp:
+             self.status_var.set("Wait for the initial database load to finish before updating.")
+             return
+ 
++        cancel_token = CancelToken()
++        self._data_update_cancel_token = cancel_token
+         self._data_update_in_flight = True
+         self._ensure_main_thread_dispatch()
+         self._sync_update_button()
+@@ -2826,26 +2862,55 @@ class AUSLStatsApp:
+ 
+         def work():
+             try:
+-                update_all_data(progress, include_enrichment=False)
++                update_all_data(progress, include_enrichment=False, cancel_token=cancel_token)
+                 data = load_database(include_enrichment=False)
++            except RefreshCancelled:
++                self._post_main_thread(self._finish_data_update_cancelled, cancel_token)
++                return
+             except Exception as exc:
+-                self._post_main_thread(self._finish_data_update_error, exc)
++                self._post_main_thread(self._finish_data_update_error, exc, cancel_token)
+                 return
+-            self._post_main_thread(self._finish_data_update_success, data)
++            self._post_main_thread(self._finish_data_update_success, data, cancel_token)
+ 
+         try:
+             threading.Thread(target=work, daemon=True).start()
+         except Exception as exc:
+-            self._finish_data_update_error(exc)
++            self._finish_data_update_error(exc, cancel_token)
++
++    def _data_update_token_is_current(self, token):
++        return token is not None and token is getattr(self, "_data_update_cancel_token", None)
++
++    def cancel_data_update(self):
++        """Cancel an in-flight Quick Refresh immediately.
++
++        Frees the in-flight flag and re-enables the update button right
++        away, without waiting for the abandoned background thread's network
++        call to finish or time out. That thread's eventual success/error
++        callback is discarded as stale once it arrives (see
++        ``_data_update_token_is_current``).
++        """
+ 
+-    def _finish_data_update_success(self, data):
++        token = getattr(self, "_data_update_cancel_token", None)
++        if token is None:
++            return
++        token.cancel()
++        self._data_update_cancel_token = None
++        self._data_update_in_flight = False
++        self._sync_update_button()
++        self.status_var.set("Cancelling data update; last-known-good data retained.")
++        self._log_event("data_update_cancel_requested", source="official_ausl_core_data")
++
++    def _finish_data_update_success(self, data, token):
++        if not self._data_update_token_is_current(token):
++            return
+         try:
+             self._finish_load(data)
+         except Exception as exc:
+-            self._finish_data_update_error(exc)
++            self._finish_data_update_error(exc, token)
+             return
+         row_count = self._roster_count(data)
+         self._data_update_in_flight = False
++        self._data_update_cancel_token = None
+         self._sync_update_button()
+         self.status_var.set(f"Update complete — {row_count} current players loaded")
+         self._log_event(
+@@ -2854,8 +2919,11 @@ class AUSLStatsApp:
+             row_count=row_count,
+         )
+ 
+-    def _finish_data_update_error(self, exc):
++    def _finish_data_update_error(self, exc, token):
++        if not self._data_update_token_is_current(token):
++            return
+         self._data_update_in_flight = False
++        self._data_update_cancel_token = None
+         self._sync_update_button()
+         self.status_var.set(f"Data update failed: {exc}")
+         self._log_event(
+@@ -2866,6 +2934,15 @@ class AUSLStatsApp:
+         )
+         messagebox.showerror("AUSL Data Update", str(exc))
+ 
++    def _finish_data_update_cancelled(self, token):
++        if not self._data_update_token_is_current(token):
++            return
++        self._data_update_in_flight = False
++        self._data_update_cancel_token = None
++        self._sync_update_button()
++        self.status_var.set("Data update cancelled; last-known-good data retained.")
++        self._log_event("data_update_cancelled", source="official_ausl_core_data")
++
+     @staticmethod
+     def _data_health_color(state):
+         return {
+@@ -5118,7 +5195,9 @@ class AUSLStatsApp:
+         generation = getattr(self, "_live_request_generation", 0) + 1
+         self._live_request_generation = generation
+         request_token = LiveRequestToken(selected.game_id, generation)
++        cancel_token = CancelToken()
+         self._active_live_request = request_token
++        self._live_refresh_cancel_token = cancel_token
+         self._live_refresh_in_flight = True
+         self._ensure_main_thread_dispatch()
+         self._sync_live_refresh_button()
+@@ -5127,7 +5206,13 @@ class AUSLStatsApp:
+ 
+         def work():
+             try:
+-                game, box = fetch_live_game(game_id)
++                game, box = fetch_live_game(game_id, cancel_token=cancel_token)
++            except RefreshCancelled:
++                self._post_main_thread(
++                    self._finish_live_refresh_cancelled,
++                    request_token,
++                )
++                return
+             except Exception as exc:
+                 self._post_main_thread(
+                     self._finish_live_refresh_error,
+@@ -5147,6 +5232,32 @@ class AUSLStatsApp:
+         except Exception as exc:
+             self._finish_live_refresh_error(exc, request_token)
+ 
++    def cancel_live_refresh(self):
++        """Cancel an in-flight live refresh immediately.
++
++        Frees the in-flight flag and re-enables the live refresh button
++        right away, without waiting for the abandoned background thread's
++        network call to finish or time out. Its eventual callback is
++        discarded as stale once it arrives (see ``_live_request_is_current``).
++        """
++
++        token = getattr(self, "_live_refresh_cancel_token", None)
++        request_token = getattr(self, "_active_live_request", None)
++        if token is None and request_token is None:
++            return
++        if token is not None:
++            token.cancel()
++        self._live_refresh_cancel_token = None
++        self._active_live_request = None
++        self._live_refresh_in_flight = False
++        self._sync_live_refresh_button()
++        self.live_status.set("Live refresh cancelled; last-known-good live data retained.")
++        self._log_event(
++            "live_refresh_cancel_requested",
++            source="official_live_feed",
++            game_id=getattr(request_token, "selected_game_id", ""),
++        )
++
+     def _live_request_is_current(self, request_token):
+         selected = getattr(self, "selected_game", None)
+         return (
+@@ -5199,6 +5310,7 @@ class AUSLStatsApp:
+             self._finish_live_refresh_error(exc, request_token)
+             return
+         self._active_live_request = None
++        self._live_refresh_cancel_token = None
+         self._live_refresh_in_flight = False
+         self._sync_live_refresh_button()
+         self._log_event(
+@@ -5215,6 +5327,7 @@ class AUSLStatsApp:
+             return
+         requested_game_id = request_token.selected_game_id
+         self._active_live_request = None
++        self._live_refresh_cancel_token = None
+         self._live_refresh_in_flight = False
+         self.live_health = LiveFeedHealth(
+             "RED", "DISCONNECTED", None, "", None, "REFRESH FAILED"
+@@ -5229,6 +5342,22 @@ class AUSLStatsApp:
+             error=str(exc),
+         )
+ 
++    def _finish_live_refresh_cancelled(self, request_token):
++        if not self._live_request_is_current(request_token):
++            self._discard_stale_live_callback(request_token)
++            return
++        requested_game_id = request_token.selected_game_id
++        self._active_live_request = None
++        self._live_refresh_cancel_token = None
++        self._live_refresh_in_flight = False
++        self._sync_live_refresh_button()
++        self.live_status.set("Live refresh cancelled; last-known-good live data retained.")
++        self._log_event(
++            "live_refresh_cancelled",
++            source="official_live_feed",
++            game_id=requested_game_id,
++        )
++
+     def _finish_live(self, game, box):
+         self.live_game, self.live_box = game, box
+         self.live_health = live_feed_health(game)
+diff --git a/tests/test_app_refresh_cancellation.py b/tests/test_app_refresh_cancellation.py
+new file mode 100644
+index 0000000..f730b95
+--- /dev/null
++++ b/tests/test_app_refresh_cancellation.py
+@@ -0,0 +1,287 @@
++from __future__ import annotations
++
++from datetime import datetime, timezone
++
++import pandas as pd
++import pytest
++
++import ausl_data
++import ausl_stats_app
++
++
++class FakeVar:
++    def __init__(self, value=""):
++        self.value = value
++
++    def get(self):
++        return self.value
++
++    def set(self, value):
++        self.value = value
++
++
++class FakeButton:
++    def __init__(self):
++        self.state = "normal"
++
++    def configure(self, state=None, **_kwargs):
++        if state is not None:
++            self.state = state
++
++
++def bare_app():
++    app = ausl_stats_app.AUSLStatsApp.__new__(ausl_stats_app.AUSLStatsApp)
++    app.status_var = FakeVar()
++    app.live_status = FakeVar()
++    app.update_button = FakeButton()
++    app.cancel_update_button = FakeButton()
++    app.live_refresh_button = FakeButton()
++    app.cancel_live_button = FakeButton()
++    app._data_update_in_flight = False
++    app._initial_load_in_flight = False
++    app._live_refresh_in_flight = False
++    app._data_update_cancel_token = None
++    app._live_refresh_cancel_token = None
++    app._active_live_request = None
++    app._live_request_generation = 0
++    app._live_timer_id = None
++    app.selected_game = None
++    app.game_id_var = FakeVar()
++    app._log_event = lambda *_args, **_kwargs: None
++    return app
++
++
++# ---------------------------------------------------------------------------
++# Quick Refresh (core data update) cancellation
++# ---------------------------------------------------------------------------
++
++
++def test_cancel_data_update_with_nothing_in_flight_is_a_safe_noop():
++    app = bare_app()
++
++    app.cancel_data_update()  # must not raise
++
++    assert app._data_update_in_flight is False
++    assert app._data_update_cancel_token is None
++
++
++def test_cancel_data_update_frees_ui_state_immediately_without_waiting():
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    app._data_update_in_flight = True
++    app._data_update_cancel_token = token
++
++    app.cancel_data_update()
++
++    assert token.cancelled is True
++    assert app._data_update_in_flight is False
++    assert app._data_update_cancel_token is None
++    assert app.update_button.state == "normal"
++    assert app.cancel_update_button.state == "disabled"
++
++
++def test_cancel_data_update_is_idempotent_across_repeated_calls():
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    app._data_update_in_flight = True
++    app._data_update_cancel_token = token
++
++    app.cancel_data_update()
++    app.cancel_data_update()
++    app.cancel_data_update()
++
++    assert app._data_update_in_flight is False
++    assert app._data_update_cancel_token is None
++
++
++def test_stale_data_update_success_after_cancel_does_not_promote():
++    app = bare_app()
++    app._data_update_cancel_token = None  # already cancelled/cleared
++    promoted = []
++    app._finish_load = lambda data: promoted.append(data)
++    stale_token = ausl_data.CancelToken()
++
++    app._finish_data_update_success({"roster": pd.DataFrame()}, stale_token)
++
++    assert promoted == []
++    assert app._data_update_in_flight is False
++
++
++def test_stale_data_update_error_after_cancel_does_not_show_dialog(monkeypatch):
++    app = bare_app()
++    app._data_update_cancel_token = None
++    shown = []
++    monkeypatch.setattr(ausl_stats_app.messagebox, "showerror", lambda *a: shown.append(a))
++    stale_token = ausl_data.CancelToken()
++
++    app._finish_data_update_error(RuntimeError("boom"), stale_token)
++
++    assert shown == []
++
++
++def test_finish_data_update_success_promotes_when_token_is_current():
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    app._data_update_in_flight = True
++    app._data_update_cancel_token = token
++    promoted = []
++    app._finish_load = lambda data: promoted.append(data)
++    app._roster_count = lambda _data: 1
++    data = {"roster": pd.DataFrame([{"player_id": 1}])}
++
++    app._finish_data_update_success(data, token)
++
++    assert len(promoted) == 1
++    assert promoted[0] is data
++    assert app._data_update_in_flight is False
++    assert app._data_update_cancel_token is None
++
++
++def test_finish_data_update_cancelled_updates_status_when_current():
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    app._data_update_in_flight = True
++    app._data_update_cancel_token = token
++
++    app._finish_data_update_cancelled(token)
++
++    assert app._data_update_in_flight is False
++    assert app._data_update_cancel_token is None
++    assert "cancel" in app.status_var.get().lower()
++
++
++def test_finish_data_update_cancelled_is_a_noop_when_superseded():
++    app = bare_app()
++    app._data_update_cancel_token = None
++    app._data_update_in_flight = True  # a newer job is now active
++    stale_token = ausl_data.CancelToken()
++
++    app._finish_data_update_cancelled(stale_token)
++
++    # Must not stomp on a newer in-flight job's state.
++    assert app._data_update_in_flight is True
++
++
++# ---------------------------------------------------------------------------
++# Live refresh cancellation
++# ---------------------------------------------------------------------------
++
++
++def _live_token(app, game_id="9001", generation=1):
++    request_token = ausl_stats_app.LiveRequestToken(game_id, generation)
++    app._active_live_request = request_token
++    app._live_request_generation = generation
++    app.selected_game = ausl_stats_app.SelectedGame(
++        game_id=game_id,
++        season=2026,
++        date_time=datetime(2026, 7, 20, 19, 0, tzinfo=timezone.utc),
++        away_team="Chicago Bandits",
++        home_team="Carolina Blaze",
++        away_team_code="CHI",
++        home_team_code="CAR",
++        time_zone="UTC",
++        venue="",
++        status="Final",
++        source_updated_at="",
++        source_name="Official AUSL Schedule",
++    )
++    app.game_id_var.set(game_id)
++    return request_token
++
++
++def test_cancel_live_refresh_with_nothing_in_flight_is_a_safe_noop():
++    app = bare_app()
++
++    app.cancel_live_refresh()  # must not raise
++
++    assert app._live_refresh_in_flight is False
++
++
++def test_cancel_live_refresh_frees_ui_state_immediately_without_waiting():
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    request_token = _live_token(app)
++    app._live_refresh_cancel_token = token
++    app._live_refresh_in_flight = True
++
++    app.cancel_live_refresh()
++
++    assert token.cancelled is True
++    assert app._live_refresh_in_flight is False
++    assert app._active_live_request is None
++    assert app.live_refresh_button.state == "normal"
++    assert app.cancel_live_button.state == "disabled"
++    assert request_token is not None  # sanity: fixture actually set one up
++
++
++def test_cancel_live_refresh_is_idempotent_across_repeated_calls():
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    _live_token(app)
++    app._live_refresh_cancel_token = token
++    app._live_refresh_in_flight = True
++
++    app.cancel_live_refresh()
++    app.cancel_live_refresh()
++    app.cancel_live_refresh()
++
++    assert app._live_refresh_in_flight is False
++
++
++def test_stale_live_refresh_success_after_cancel_is_discarded():
++    app = bare_app()
++    request_token = _live_token(app)
++    app._live_refresh_in_flight = True
++    app.cancel_live_refresh()  # clears _active_live_request -> token now stale
++    rendered = []
++    app._finish_live = lambda game, box: rendered.append((game, box))
++
++    app._finish_live_refresh_success({"gameId": "9001"}, {}, request_token)
++
++    assert rendered == []
++
++
++def test_stale_live_refresh_error_after_cancel_is_discarded():
++    app = bare_app()
++    request_token = _live_token(app)
++    app._live_refresh_in_flight = True
++    app.cancel_live_refresh()
++    app.live_status.set("cancelled")
++
++    app._finish_live_refresh_error(RuntimeError("boom"), request_token)
++
++    # The cancel-time status message must not be clobbered by a late error.
++    assert "cancelled" in app.live_status.get().lower()
++
++
++def test_finish_live_refresh_cancelled_updates_status_when_current():
++    app = bare_app()
++    request_token = _live_token(app)
++    app._live_refresh_in_flight = True
++    app._live_refresh_cancel_token = ausl_data.CancelToken()
++
++    app._finish_live_refresh_cancelled(request_token)
++
++    assert app._live_refresh_in_flight is False
++    assert app._active_live_request is None
++    assert "cancel" in app.live_status.get().lower()
++
++
++def test_game_change_cancels_in_flight_live_refresh_immediately():
++    """A game change already cleared _live_refresh_in_flight immediately
++    (pre-existing SAFE-002/LIVE-001 behavior); what REFRESH-006 adds is
++    cancelling the abandoned request's own CancelToken too, so it stops
++    retrying instead of working through its full retry/backoff budget in
++    the background."""
++
++    app = bare_app()
++    token = ausl_data.CancelToken()
++    _live_token(app)
++    app._live_refresh_cancel_token = token
++    app._live_refresh_in_flight = True
++
++    app._invalidate_live_context()
++
++    assert token.cancelled is True
++    assert app._live_refresh_in_flight is False
++    assert app._active_live_request is None
+diff --git a/tests/test_callbacks.py b/tests/test_callbacks.py
+index bb9db51..5cb18ba 100644
+--- a/tests/test_callbacks.py
++++ b/tests/test_callbacks.py
+@@ -145,7 +145,7 @@ def test_data_update_reports_the_original_error_after_deferred_callback(monkeypa
+     monkeypatch.setattr(
+         ausl_stats_app,
+         "update_all_data",
+-        lambda _progress, *, include_enrichment: (_ for _ in ()).throw(
++        lambda _progress, *, include_enrichment, cancel_token=None: (_ for _ in ()).throw(
+             RuntimeError("update fixture failure")
+         ),
+     )
+@@ -164,7 +164,7 @@ def test_data_update_suppresses_duplicate_and_restores_button_on_success(monkeyp
+     updates = []
+     app._finish_load = lambda _data: app.status_var.set("Ready")
+ 
+-    def update_once(_progress, *, include_enrichment):
++    def update_once(_progress, *, include_enrichment, cancel_token=None):
+         assert include_enrichment is False
+         updates.append("update")
+ 
+@@ -195,7 +195,7 @@ def test_live_refresh_reports_the_original_error_after_deferred_callback(monkeyp
+     monkeypatch.setattr(
+         ausl_stats_app,
+         "fetch_live_game",
+-        lambda _game_id: (_ for _ in ()).throw(RuntimeError("live fixture failure")),
++        lambda _game_id, *, cancel_token=None: (_ for _ in ()).throw(RuntimeError("live fixture failure")),
+     )
+ 
+     app.refresh_live()
+@@ -211,7 +211,7 @@ def test_live_refresh_suppresses_duplicate_and_restores_button_on_success(monkey
+     select_official_game(app)
+     fetches = []
+ 
+-    def fetch_once(game_id):
++    def fetch_once(game_id, *, cancel_token=None):
+         fetches.append(game_id)
+         return {"gameId": int(game_id), "recordStatus": "Scheduled"}, {"competitors": []}
+ 
+@@ -240,7 +240,7 @@ def test_live_refresh_rejects_a_response_for_a_different_official_game(monkeypat
+     monkeypatch.setattr(
+         ausl_stats_app,
+         "fetch_live_game",
+-        lambda _game_id: ({"gameId": 9002, "recordStatus": "Scheduled"}, {}),
++        lambda _game_id, *, cancel_token=None: ({"gameId": 9002, "recordStatus": "Scheduled"}, {}),
+     )
+ 
+     app.refresh_live()
+@@ -268,7 +268,7 @@ def test_refresh_lifecycle_emits_structured_events_without_payload_contents(monk
+     monkeypatch.setattr(
+         ausl_stats_app,
+         "fetch_live_game",
+-        lambda _game_id: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
++        lambda _game_id, *, cancel_token=None: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
+     )
+ 
+     app.refresh_live()
+@@ -307,7 +307,7 @@ def test_live_refresh_rejects_late_response_after_selected_game_changes(monkeypa
+     monkeypatch.setattr(
+         ausl_stats_app,
+         "fetch_live_game",
+-        lambda _game_id: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
++        lambda _game_id, *, cancel_token=None: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
+     )
+ 
+     app.refresh_live()
+@@ -366,7 +366,7 @@ def test_live_worker_never_calls_tk_after_directly(monkeypatch):
+     monkeypatch.setattr(
+         ausl_stats_app,
+         "fetch_live_game",
+-        lambda _game_id: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
++        lambda _game_id, *, cancel_token=None: ({"gameId": 9001, "recordStatus": "Scheduled"}, {}),
+     )
+     app._finish_live = lambda *_args: None
+ 
+diff --git a/tests/test_refresh_cancellation.py b/tests/test_refresh_cancellation.py
+new file mode 100644
+index 0000000..d5898a9
+--- /dev/null
++++ b/tests/test_refresh_cancellation.py
+@@ -0,0 +1,318 @@
++from __future__ import annotations
++
++import threading
++from urllib.error import URLError
++
++import pandas as pd
++import pytest
++
++import ausl_data
++
++
++# Captured before any test's autouse network guard replaces ausl_data._get_json
++# wholesale, mirroring the pattern in test_refresh_health.py.
++_REAL_GET_JSON = ausl_data._get_json
++
++
++# ---------------------------------------------------------------------------
++# REFRESH-006: true mid-flight cancellation of a running refresh/live job
++# ---------------------------------------------------------------------------
++
++
++def test_cancel_token_starts_uncancelled():
++    token = ausl_data.CancelToken()
++    assert token.cancelled is False
++    token.raise_if_cancelled()  # must not raise
++
++
++def test_cancel_token_cancel_is_idempotent_across_repeated_calls():
++    token = ausl_data.CancelToken()
++    token.cancel()
++    token.cancel()
++    token.cancel()
++    assert token.cancelled is True
++    with pytest.raises(ausl_data.RefreshCancelled):
++        token.raise_if_cancelled()
++
++
++def test_fetch_with_retry_cancelled_before_it_starts_never_calls_operation():
++    token = ausl_data.CancelToken()
++    token.cancel()
++    calls = []
++
++    with pytest.raises(ausl_data.RefreshCancelled):
++        ausl_data._fetch_with_retry(lambda: calls.append(1), cancel_token=token)
++
++    assert calls == []
++
++
++def test_fetch_with_retry_cancelled_while_blocked_stops_before_retrying():
++    """Cancelling while the operation is blocked (e.g. inside urlopen) must
++    stop the retry loop immediately once the blocked call returns, instead of
++    sleeping out the full exponential backoff budget and trying again."""
++
++    started = threading.Event()
++    release = threading.Event()
++    attempts = []
++
++    def operation():
++        attempts.append(1)
++        started.set()
++        release.wait(5)
++        # Simulate the transient network failure that would normally trigger
++        # a retry after the blocked call finally returns.
++        raise URLError("fixture transient failure while blocked")
++
++    token = ausl_data.CancelToken()
++    outcome = {}
++
++    def run():
++        try:
++            ausl_data._fetch_with_retry(
++                operation, attempts=3, base_delay=5.0, cancel_token=token
++            )
++        except Exception as exc:  # noqa: BLE001 - captured for the assertion below
++            outcome["exc"] = exc
++
++    worker = threading.Thread(target=run)
++    worker.start()
++    assert started.wait(2), "operation did not start in time"
++
++    # Cancel while still blocked inside the operation. This call itself must
++    # return immediately; it does not wait for the operation to unblock.
++    token.cancel()
++    release.set()
++
++    worker.join(2)
++    assert not worker.is_alive(), "cancellation did not stop the retry loop promptly"
++    assert isinstance(outcome.get("exc"), ausl_data.RefreshCancelled)
++    # Only the one attempt that was already in flight ran; no retry followed.
++    assert attempts == [1]
++
++
++def test_fetch_with_retry_success_racing_cancellation_still_returns_the_result():
++    """_fetch_with_retry only manages retries; discarding a result that
++    finished just as cancellation was requested is the caller's job (see the
++    app-layer token-identity checks), not this function's."""
++
++    token = ausl_data.CancelToken()
++
++    def operation():
++        token.cancel()  # cancellation lands after the "network call" already succeeded
++        return "ok"
++
++    assert ausl_data._fetch_with_retry(operation, cancel_token=token) == "ok"
++
++
++def test_get_json_checks_cancellation_before_making_a_request(monkeypatch):
++    monkeypatch.setattr(ausl_data, "_get_json", _REAL_GET_JSON)
++
++    def fail_if_called(*_args, **_kwargs):
++        raise AssertionError("urlopen must not be called once cancelled")
++
++    monkeypatch.setattr(ausl_data, "urlopen", fail_if_called)
++    token = ausl_data.CancelToken()
++    token.cancel()
++
++    with pytest.raises(ausl_data.RefreshCancelled):
++        ausl_data._get_json("/data/fixture.json", cancel_token=token)
++
++
++def test_get_json_without_a_cancel_token_behaves_exactly_as_before(monkeypatch):
++    """Existing callers that never pass cancel_token must be unaffected."""
++
++    monkeypatch.setattr(ausl_data, "_get_json", _REAL_GET_JSON)
++    monkeypatch.setattr(ausl_data.time, "sleep", lambda _s: None)
++
++    import json
++
++    class FakeResponse:
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *_exc_info):
++            return False
++
++        def read(self):
++            return json.dumps({"ok": True}).encode("utf-8")
++
++    monkeypatch.setattr(ausl_data, "urlopen", lambda _request, timeout, context: FakeResponse())
++
++    assert ausl_data._get_json("/data/fixture.json") == {"ok": True}
++
++
++# ---------------------------------------------------------------------------
++# update_all_data: cancellation must not write or promote a partial refresh
++# ---------------------------------------------------------------------------
++
++
++def _configure_valid_core_refresh(monkeypatch, output, *, cancel_token=None):
++    """A minimal stand-in for the fixture in test_refresh_staging.py, extended
++    so the fakes can themselves raise RefreshCancelled at a chosen point."""
++
++    monkeypatch.setattr(ausl_data, "export_dir", lambda: output)
++    monkeypatch.setattr(
++        ausl_data,
++        "roster_frame",
++        lambda _payload, year: pd.DataFrame([{"player_id": year, "player_name": f"Player {year}"}]),
++    )
++    monkeypatch.setattr(
++        ausl_data,
++        "stat_frames",
++        lambda _payload, year: (
++            pd.DataFrame([{"player_id": year, "player_name": f"Player {year}"}]),
++            pd.DataFrame([{"player_id": year, "player_name": f"Player {year}"}]),
++            pd.DataFrame([{"player_id": year, "player_name": f"Player {year}"}]),
++        ),
++    )
++    monkeypatch.setattr(ausl_data, "career_batting", lambda _frames: pd.DataFrame([{"player_id": 1}]))
++    monkeypatch.setattr(ausl_data, "career_pitching", lambda _frames: pd.DataFrame([{"player_id": 1}]))
++    monkeypatch.setattr(ausl_data, "career_fielding", lambda _frames: pd.DataFrame([{"player_id": 1}]))
++    monkeypatch.setattr(
++        ausl_data,
++        "fetch_standings_frame",
++        lambda **_kwargs: pd.DataFrame(
++            [{"team_code": "CHI", "seasonId": 369, "standingsTypeLk": "SEASON", "wins": 1, "losses": 0}]
++        ),
++    )
++    monkeypatch.setattr(
++        ausl_data,
++        "fetch_schedule_frame",
++        lambda **_kwargs: pd.DataFrame(
++            [
++                {
++                    "game_id": 9001,
++                    "game_date": "2026-07-20T19:00:00-04:00",
++                    "away_team_code": "CHI",
++                    "home_team_code": "CAR",
++                    "status": "final",
++                }
++            ]
++        ),
++    )
++
++
++def test_update_all_data_cancelled_before_start_writes_nothing(tmp_path, monkeypatch):
++    _configure_valid_core_refresh(monkeypatch, tmp_path)
++
++    def fail_if_called(*_args, **_kwargs):
++        raise AssertionError("no network call should happen once cancelled")
++
++    monkeypatch.setattr(ausl_data, "_get_json", fail_if_called)
++    token = ausl_data.CancelToken()
++    token.cancel()
++
++    with pytest.raises(ausl_data.RefreshCancelled):
++        ausl_data.update_all_data(cancel_token=token)
++
++    assert list(tmp_path.iterdir()) == []
++
++
++def test_update_all_data_cancelled_mid_loop_writes_nothing(tmp_path, monkeypatch):
++    """Mirrors what the real ``_get_json`` does: check ``cancel_token`` before
++    doing any work. Cancelling partway through the roster/stats loop must
++    stop the remaining downloads rather than fetching everything first."""
++
++    _configure_valid_core_refresh(monkeypatch, tmp_path)
++    token = ausl_data.CancelToken()
++    calls = []
++
++    def fake_get_json(path, *, cancel_token=None):
++        if cancel_token is not None:
++            cancel_token.raise_if_cancelled()
++        calls.append(path)
++        if len(calls) == 2:
++            cancel_token.cancel()
++        return {}
++
++    monkeypatch.setattr(ausl_data, "_get_json", fake_get_json)
++
++    with pytest.raises(ausl_data.RefreshCancelled):
++        ausl_data.update_all_data(cancel_token=token)
++
++    # The third roster/stats download is never attempted once cancelled.
++    assert len(calls) == 2
++    assert list(tmp_path.iterdir()) == []
++
++
++def test_update_all_data_cancelled_just_before_staging_writes_nothing(tmp_path, monkeypatch):
++    """A cancel that lands after the very last network call, but before any
++    file is staged/promoted, must still block promotion."""
++
++    _configure_valid_core_refresh(monkeypatch, tmp_path)
++    token = ausl_data.CancelToken()
++    calls = []
++
++    def fake_get_json(_path, **_kwargs):
++        calls.append(_path)
++        return {}
++
++    def fake_fetch_schedule_frame(**_kwargs):
++        token.cancel()
++        return pd.DataFrame(
++            [
++                {
++                    "game_id": 9001,
++                    "game_date": "2026-07-20T19:00:00-04:00",
++                    "away_team_code": "CHI",
++                    "home_team_code": "CAR",
++                    "status": "final",
++                }
++            ]
++        )
++
++    monkeypatch.setattr(ausl_data, "_get_json", fake_get_json)
++    monkeypatch.setattr(ausl_data, "fetch_schedule_frame", fake_fetch_schedule_frame)
++
++    with pytest.raises(ausl_data.RefreshCancelled):
++        ausl_data.update_all_data(cancel_token=token)
++
++    assert list(tmp_path.iterdir()) == []
++
++
++def test_update_all_data_without_a_cancel_token_still_writes_normally(tmp_path, monkeypatch):
++    """Existing non-cancelling callers (standalone `main()`, existing tests)
++    must be completely unaffected."""
++
++    _configure_valid_core_refresh(monkeypatch, tmp_path)
++    monkeypatch.setattr(ausl_data, "_get_json", lambda _path: {})
++
++    outputs = ausl_data.update_all_data()
++
++    assert outputs["manifest"].exists()
++
++
++# ---------------------------------------------------------------------------
++# fetch_live_game: cancellation must not fetch further and must not return
++# a promotable result once cancelled.
++# ---------------------------------------------------------------------------
++
++
++def test_fetch_live_game_cancelled_before_second_call_never_makes_it(monkeypatch):
++    token = ausl_data.CancelToken()
++    calls = []
++
++    def fake_get_json(path, **_kwargs):
++        calls.append(path)
++        token.cancel()
++        return {"gameId": "9001"}
++
++    monkeypatch.setattr(ausl_data, "_get_json", fake_get_json)
++
++    with pytest.raises(ausl_data.RefreshCancelled):
++        ausl_data.fetch_live_game("9001", cancel_token=token)
++
++    assert len(calls) == 1
++
++
++def test_fetch_live_game_without_a_cancel_token_behaves_exactly_as_before(monkeypatch):
++    monkeypatch.setattr(
++        ausl_data,
++        "_get_json",
++        lambda path: {"gameId": "9001"} if "game-data" in path else {"data": {"boxscore": True}},
++    )
++
++    game, box = ausl_data.fetch_live_game("9001")
++
++    assert game == {"gameId": "9001"}
++    assert box == {"boxscore": True}
+-- 
+2.43.0
+
