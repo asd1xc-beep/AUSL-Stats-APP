@@ -277,6 +277,8 @@ Required identity regressions:
   - The color/marker/text health strip already existed in the UI, but the data layer could only ever emit green or red — yellow was unreachable. The manifest builder now carries forward the previous successful timestamp for each optional/enrichment source and reports yellow ("usable last-known-good, aging") while that data is within a 24-hour freshness target, and red once it ages out or nothing has ever been promoted. This carry-forward is scoped to the three optional/enrichment sources; a core-source failure still fails the whole refresh closed before any manifest is written (`REFRESH-003`), so yellow is not reachable there by design.
 
 - [x] `HEALTH-002` — Display live feed `lastUpdated`, connection state, and staleness. **P0 · COMPLETE**
+- [ ] `REFRESH-007` — Add an explicit Local/Offline Mode toggle. **P2 · PLANNED**
+  - While enabled, guarantees no refresh attempt or network-related UI notification fires, for use during producer-designated live windows (e.g., final two minutes before first pitch, an active half-inning). Complements Phase 5's failure-safe refresh with an explicit guarantee rather than relying on failure behavior alone.
 
 ### L. Producer-speed improvements
 
@@ -291,6 +293,26 @@ Required identity regressions:
   - Roster/status, records, lineups, starters, injuries, milestones, and invalidated facts.
 
 - [ ] `UX-005` — Preserve source/freshness metadata when copying or pinning a fact. **P1 · PLANNED**
+- [ ] `UX-006` — Add read-time budgeting to fact cards and the pinned rundown. **P2 · PLANNED**
+  - Estimate seconds-to-read from word count (~140 wpm); show a running total against a settable break-length target on the pinned queue.
+
+- [ ] `UX-007` — Let a producer mark a suggested fact "used on air" with a timestamp. **P2 · PLANNED**
+  - A used fact is excluded from default Top Storylines/suggestion surfaces for the remainder of the selected game; it remains visible and selectable in the detailed view.
+
+- [ ] `UX-008` — Add session/crash recovery for producer working state. **P1 · PLANNED**
+  - Autosave and restore selected game, pinned/used-fact queue, and scroll position. Distinct from lineup-lock and manual-note storage, which are already atomic-written; this protects in-progress prep, not source data.
+
+- [ ] `UX-009` — Add a "Ready for Air" readiness indicator and pregame checklist. **P2 · PLANNED**
+  - Roll up data health, lineup-lock state, and verification count into one status; checklist covers rosters confirmed, lineups locked, packet generated, live feed connected. Extends `UX-001`.
+
+- [ ] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · PLANNED**
+  - Edit-distance or phonetic tolerance on player-name queries; must not introduce false-positive collisions between distinct players. A tolerance improvement to `SEARCH-004`, not a new search mode.
+
+- [ ] `UX-010` — Add a character-count preview on copy actions against common graphics-template widths. **P2 · PLANNED**
+  - Quiet indicator only (e.g. "42/60 chars — fits one line"); does not imply or require an actual CG/graphics-system integration.
+
+- [ ] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · PLANNED**
+  - Two selected players' stat lines, verified notes, and milestones in parallel columns, each independently source/freshness-labeled. A new screen, not a variant of the existing player card.
 
 ### M. College Résumé tab
 
@@ -428,14 +450,14 @@ Add unreviewed ideas here first. Promote them to the master list only after assi
 - 2026-07-22 — **PROMOTED to `LINEUP-005`**: lineup save/delete transactions are atomic in memory and on disk, with persistent UI failure status.
 - 2026-07-22 — **PROMOTED to `BUILD-002`**: portable ZIPs use POSIX member paths and pass cross-platform extraction tests.
 - 2026-07-22 — **PROMOTED to `DOC-001`**: first-pitch missing-value mojibake and README workflow drift are repaired.
-- 2026-07-24 — Add read-time budgeting to fact cards and the pinned rundown: estimate seconds-to-read from word count (~140 wpm) and show a running total against a settable break-length target, so a producer can tell at a glance whether a fact fits the current window. Extends `UX-002`/`UX-003`.
-- 2026-07-24 — Let a producer mark a suggested fact "used on air" with a timestamp. A used fact drops out of default Top Storylines/suggestion surfaces for the remainder of the selected game but stays visible and selectable in the detailed view. Extends `UX-003`.
-- 2026-07-24 — Add session/crash recovery for producer working state (selected game, pinned/used-fact queue, scroll position) separate from lineup-lock and manual-note storage, which are already atomic-written. This protects in-progress broadcast prep from an unexpected restart; it is distinct from Phase 5's data-refresh resilience, which protects source data, not UI session state.
-- 2026-07-24 — Add a single "Ready for Air" readiness indicator that rolls up data health, lineup-lock state, and outstanding verification count into one glanceable state, plus a short pregame checklist (rosters confirmed, lineups locked, packet generated, live feed connected). Extends `6A`/dashboard work.
-- 2026-07-24 — Add fuzzy/typo-tolerant matching (edit-distance or phonetic) to player-name search so a misspelled or mistyped name under time pressure still returns the right player. A tolerance improvement to `SEARCH-004`, not a new search mode.
-- 2026-07-24 — Add a quiet character-count preview on copy actions against one or two common graphics-template widths, so a producer can see before handoff whether air-ready text fits a lower-third/CG line limit. Extends `UX-002`. Does not imply or require an actual CG/graphics-system integration.
-- 2026-07-24 — Add an explicit Local/Offline Mode toggle that guarantees no refresh attempt or network-related UI notification will fire while enabled, for use during specific live windows (e.g., final two minutes before first pitch, an active half-inning). Complements Phase 5's failure-safe refresh with an explicit producer-controlled guarantee rather than relying on failure behavior alone.
-- 2026-07-24 — Add a side-by-side compare view: two selected players' stat lines, verified notes, and milestones shown in parallel columns, for probable-starter or hitter-vs-pitcher "tale of the tape" segments. A new screen, not a variant of the existing player card.
+- 2026-07-24 — **PROMOTED to `UX-006`**: read-time budgeting on fact cards and pinned rundown against a break-length target.
+- 2026-07-24 — **PROMOTED to `UX-007`**: mark facts "used on air" with a timestamp to suppress repeat suggestions within a game.
+- 2026-07-24 — **PROMOTED to `UX-008`**: session/crash recovery for producer working state, separate from lineup/note storage.
+- 2026-07-24 — **PROMOTED to `UX-009`**: "Ready for Air" readiness indicator and pregame checklist.
+- 2026-07-24 — **PROMOTED to `SEARCH-005`**: fuzzy/typo-tolerant name matching.
+- 2026-07-24 — **PROMOTED to `UX-010`**: character-count preview on copy actions for graphics-template widths.
+- 2026-07-24 — **PROMOTED to `REFRESH-007`**: explicit Local/Offline Mode toggle for producer-designated live windows.
+- 2026-07-24 — **PROMOTED to `UX-011`**: side-by-side player/matchup compare view.
 
 ## Update instructions for Codex
 
