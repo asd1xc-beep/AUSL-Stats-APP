@@ -1,0 +1,371 @@
+From 4c571b3fc63aeaed9dabd367ec217ac47bdf22ed Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 26 Jul 2026 08:58:20 +0000
+Subject: [PATCH] Fix four hardcoded-year issues found by review, add
+ regression guard
+
+Supports Next Season Data Release Checklist item 1 (update the season
+map) by making the remaining places that didn't already derive from
+SEASONS do so:
+
+- Sources/Notes media-guide citation now calls media_guide_source_context()
+  instead of a literal 2026 URL.
+- Both game-note boilerplate-stripping regexes (season-footer line,
+  "SINGLE-GAME HIGHS" trailer) now match any four-digit year instead of
+  a literal 2026.
+- The note-category classifier's "season" match now matches any
+  four-digit year instead of a literal 2026.
+- README.txt prose describing the roster/stat download and career-stat
+  copy output now describes the season range generically instead of
+  naming 2025/2026, so it doesn't go stale when SEASONS is updated.
+
+Added tests/test_hardcoded_season_years.py: failing-first coverage for
+each fix (built from a monkeypatched future season year, not just the
+literal 2026 fixtures), plus a regression guard that scans src/*.py for
+any bare season-year literal outside a documented allowlist (the SEASONS
+definition line, and the AUSL Draft Results URL, which is a specific
+already-published article link that must be updated manually each
+season rather than derived).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011y6TeGFRuAByW9jqigaXwq
+---
+ README.txt                           |  14 +-
+ src/ausl_data.py                     |   6 +-
+ src/ausl_stats_app.py                |   5 +-
+ tests/test_hardcoded_season_years.py | 230 +++++++++++++++++++++++++++
+ 4 files changed, 245 insertions(+), 10 deletions(-)
+ create mode 100644 tests/test_hardcoded_season_years.py
+
+diff --git a/README.txt b/README.txt
+index c663e74..3e668ab 100644
+--- a/README.txt
++++ b/README.txt
+@@ -65,8 +65,8 @@ It does not run PyInstaller and does not create a bundled executable.
+ 
+ DATA
+ Click "Quick Refresh (Core)" in the app. The normal updater downloads official
+-AUSL 2025 and 2026 roster/stat JSON plus standings and schedule context, then
+-builds the validated core workbooks under:
++AUSL roster/stat JSON for every configured season, plus standings and
++schedule context, then builds the validated core workbooks under:
+   data\exports
+ 
+ The normal refresh does not fetch, write, or activate split-stat, media-guide,
+@@ -75,9 +75,10 @@ include_enrichment=True option exists for isolated validation work; it is not a
+ producer-facing refresh mode and its rows still require explicit review approval
+ before any air-ready output may use them.
+ 
+-AUSL Career totals in this version combine the available 2025 and 2026 AUSL
+-regular-season files. They are not full softball career totals, college career
+-totals, Team USA totals, or All-Star Cup totals.
++AUSL Career totals in this version combine the available AUSL regular-season
++files for every season in the configured season map. They are not full
++softball career totals, college career totals, Team USA totals, or All-Star
++Cup totals.
+ 
+ The app displays the latest local data timestamp in the header. Any exported
+ producer packet includes that timestamp plus a reminder to verify lineups,
+@@ -191,7 +192,8 @@ COPY OUTPUTS
+ Player Lookup has four explicit copy actions:
+   Player ID       name, team, roster status, position, and known number
+   Season Stat     current AUSL season only, explicitly labeled
+-  Career Stat     AUSL CAREER 2025-26, explicitly labeled
++  Career Stat     AUSL CAREER totals across the configured season range,
++                  explicitly labeled
+   Announcer Note  narrative plus verification and freshness metadata
+ 
+ Inactive, reserve-pool, and unknown-status output retains a visible VERIFY
+diff --git a/src/ausl_data.py b/src/ausl_data.py
+index 04cc97d..7fd950f 100644
+--- a/src/ausl_data.py
++++ b/src/ausl_data.py
+@@ -1715,7 +1715,7 @@ def _game_note_category(text: str) -> str:
+         or re.search(r"\b(?:won|lost)\b.{0,20}\b(?:straight|in a row)\b", lower)
+     ):
+         return "recent_trend"
+-    if re.search(r"\b(?:this|current|2026|ausl) season\b", lower):
++    if re.search(r"\b(?:this|current|\d{4}|ausl) season\b", lower):
+         return "season_context"
+     if "career" in lower:
+         return "career_summary"
+@@ -1725,7 +1725,7 @@ def _game_note_category(text: str) -> str:
+ def _clean_game_note_text(text: str) -> str:
+     text = str(text or "").replace("\x83", " • ").replace("\uf0b7", " • ").replace("â€¢", " • ")
+     text = _clean_media_guide_text(text)
+-    text = re.sub(r"\b[A-Z ]+\s+•\s+2026 AUSL Season\b", " ", text)
++    text = re.sub(r"\b[A-Z ]+\s+•\s+\d{4} AUSL Season\b", " ", text)
+     text = re.sub(r"\b(?:PITCHER|BATTER) BIOS?\b", " ", text, flags=re.IGNORECASE)
+     text = re.sub(r"\s+", " ", text).strip(" -•")
+     return _clean_text(text)
+@@ -1807,7 +1807,7 @@ def _split_game_note_items(page_text: str, player_lookup: list[dict] | None = No
+         for item in items:
+             note = _clean_game_note_text(item)
+             note = re.split(r"\s+#\d+\s+[-•]\s+[A-Z][A-Za-z .'-]{4,}\s+(?:\d|\.|[A-Z]{2,})", note)[0]
+-            note = re.split(r"\s+2026 AUSL SEASON SINGLE-GAME HIGHS\b", note, flags=re.IGNORECASE)[0]
++            note = re.split(r"\s+\d{4} AUSL SEASON SINGLE-GAME HIGHS\b", note, flags=re.IGNORECASE)[0]
+             note = re.split(r"\s+SINGLE-GAME HIGHS\b", note, flags=re.IGNORECASE)[0]
+             note = re.split(r"\s+CAREER HIGHS\b", note, flags=re.IGNORECASE)[0]
+             if len(note) < 35:
+diff --git a/src/ausl_stats_app.py b/src/ausl_stats_app.py
+index d1d0bde..45c4f27 100644
+--- a/src/ausl_stats_app.py
++++ b/src/ausl_stats_app.py
+@@ -4933,6 +4933,9 @@ class AUSLStatsApp:
+         self.status_var.set(f"Producer packet saved: {path}")
+         messagebox.showinfo("AUSL Broadcast Stats", f"Producer packet created:\n\n{path}")
+ 
++    def _media_guide_citation_line(self):
++        return f"Media guide source: {media_guide_source_context()['source_url']}"
++
+     def render_player(self, roster):
+         self.player_title.set(self.player_title_text(roster))
+         warning = self.availability_warning(roster)
+@@ -4959,7 +4962,7 @@ class AUSLStatsApp:
+             "Official split source: https://theausl.com/stats/",
+             "Official standings source: https://theausl.com/standings/",
+             "Official schedule source: https://theausl.com/schedule/",
+-            "Media guide source: https://theausl.com/wp-content/uploads/2026/06/2026-AUSL-Media-Guide.pdf",
++            self._media_guide_citation_line(),
+             "",
+             "Media guide notes:",
+             *(
+diff --git a/tests/test_hardcoded_season_years.py b/tests/test_hardcoded_season_years.py
+new file mode 100644
+index 0000000..01c8d59
+--- /dev/null
++++ b/tests/test_hardcoded_season_years.py
+@@ -0,0 +1,230 @@
++"""Regression coverage for SEASON-map-derived text that must not hardcode a year.
++
++See Implementation guide/Next_Season_Data_Release_Checklist.md item 1
++("Update the season map"). These tests exist so that updating
++``ausl_data.SEASONS`` for a new season is sufficient on its own -- no
++matching hunt through the source for a stray literal year is required.
++"""
++
++from __future__ import annotations
++
++import re
++from pathlib import Path
++
++import ausl_data
++import ausl_stats_app
++
++
++SRC_DIR = Path(__file__).resolve().parents[1] / "src"
++
++FUTURE_SEASONS = {2025: 270, 2026: 369, 2027: 400}
++
++
++# ---------------------------------------------------------------------------
++# 1. Sources/Notes media-guide citation line
++# ---------------------------------------------------------------------------
++
++
++def test_media_guide_citation_line_follows_the_configured_season_map(monkeypatch):
++    monkeypatch.setattr(ausl_data, "SEASONS", FUTURE_SEASONS)
++
++    line = ausl_stats_app.AUSLStatsApp._media_guide_citation_line(None)
++
++    expected_url = ausl_data.media_guide_source_context()["source_url"]
++    assert expected_url.endswith("2027-AUSL-Media-Guide.pdf")
++    assert line == f"Media guide source: {expected_url}"
++    assert "2026" not in line
++
++
++def test_media_guide_citation_line_matches_current_season_by_default():
++    line = ausl_stats_app.AUSLStatsApp._media_guide_citation_line(None)
++
++    expected_url = ausl_data.media_guide_source_context()["source_url"]
++    assert line == f"Media guide source: {expected_url}"
++
++
++# ---------------------------------------------------------------------------
++# 2. Game-note boilerplate stripping must not assume the current literal year
++# ---------------------------------------------------------------------------
++
++
++def test_clean_game_note_text_strips_season_boilerplate_for_any_configured_year(monkeypatch):
++    monkeypatch.setattr(ausl_data, "SEASONS", FUTURE_SEASONS)
++    future_year = max(ausl_data.SEASONS)
++
++    text = f"CHICAGO BANDITS • {future_year} AUSL Season Notes about Ada Active."
++
++    cleaned = ausl_data._clean_game_note_text(text)
++
++    assert f"{future_year} AUSL Season" not in cleaned
++    assert "Notes about Ada Active." in cleaned
++
++
++def test_clean_game_note_text_still_strips_the_current_season_boilerplate():
++    text = "CHICAGO BANDITS • 2026 AUSL Season Notes about Ada Active."
++
++    cleaned = ausl_data._clean_game_note_text(text)
++
++    assert "2026 AUSL Season" not in cleaned
++    assert "Notes about Ada Active." in cleaned
++
++
++def test_split_game_note_items_strips_single_game_highs_boilerplate_for_any_year(monkeypatch):
++    monkeypatch.setattr(ausl_data, "SEASONS", FUTURE_SEASONS)
++    future_year = max(ausl_data.SEASONS)
++
++    page = (
++        "#12 - ADA ACTIVE P 5-7 Raleigh, N.C. "
++        " • Needs two hits to reach 50 AUSL career hits "
++        f"{future_year} AUSL SEASON SINGLE-GAME HIGHS: 3 RBI"
++    )
++    lookup = [
++        {
++            "name": "Ada Active",
++            "player_id": "101",
++            "team_code": "CHI",
++            "key": "ADAACTIVE",
++            "first_initial": "A",
++            "last_key": "ACTIVE",
++        }
++    ]
++
++    notes = ausl_data._split_game_note_items(page, lookup)
++
++    assert len(notes) == 1
++    assert "SINGLE-GAME HIGHS" not in notes[0]["note_text"]
++    assert f"{future_year} AUSL SEASON" not in notes[0]["note_text"]
++    assert "Needs two hits to reach 50 AUSL career hits" in notes[0]["note_text"]
++
++
++def test_split_game_note_items_still_strips_the_current_season_single_game_highs():
++    page = (
++        "#12 - ADA ACTIVE P 5-7 Raleigh, N.C. "
++        " • Needs two hits to reach 50 AUSL career hits "
++        "2026 AUSL SEASON SINGLE-GAME HIGHS: 3 RBI"
++    )
++    lookup = [
++        {
++            "name": "Ada Active",
++            "player_id": "101",
++            "team_code": "CHI",
++            "key": "ADAACTIVE",
++            "first_initial": "A",
++            "last_key": "ACTIVE",
++        }
++    ]
++
++    notes = ausl_data._split_game_note_items(page, lookup)
++
++    assert len(notes) == 1
++    assert "SINGLE-GAME HIGHS" not in notes[0]["note_text"]
++    assert "2026 AUSL SEASON" not in notes[0]["note_text"]
++
++
++# ---------------------------------------------------------------------------
++# 3. Note-category classifier must recognize "season" references for any year
++# ---------------------------------------------------------------------------
++
++
++def test_game_note_category_recognizes_any_season_year_reference(monkeypatch):
++    monkeypatch.setattr(ausl_data, "SEASONS", FUTURE_SEASONS)
++    future_year = max(ausl_data.SEASONS)
++
++    note = f"Ada Active has 12 home runs this {future_year} season."
++
++    assert ausl_data._game_note_category(note) == "season_context"
++
++
++def test_game_note_category_still_recognizes_the_current_season_year_reference():
++    note = "Ada Active has 12 home runs this 2026 season."
++
++    assert ausl_data._game_note_category(note) == "season_context"
++
++
++def test_game_note_category_still_recognizes_this_current_and_ausl_season_phrasing():
++    # Regression: the fix must not remove coverage for phrasing that never
++    # named a literal year in the first place.
++    assert ausl_data._game_note_category("She is hot this season.") == "season_context"
++    assert ausl_data._game_note_category("Her current season average is climbing.") == "season_context"
++    assert ausl_data._game_note_category("She has a .325 average this AUSL season.") == "season_context"
++
++
++# ---------------------------------------------------------------------------
++# 4. README must not go stale when SEASONS changes
++# ---------------------------------------------------------------------------
++
++
++def test_readme_does_not_hardcode_the_current_specific_season_years():
++    readme = (Path(__file__).resolve().parents[1] / "README.txt").read_text(encoding="utf-8")
++
++    assert "AUSL 2025 and 2026 roster/stat JSON" not in readme
++    assert "combine the available 2025 and 2026 AUSL" not in readme
++    assert "AUSL CAREER 2025-26" not in readme
++
++
++# ---------------------------------------------------------------------------
++# Regression guard: no NEW bare season-year literals in src/*.py
++# ---------------------------------------------------------------------------
++
++# Reviewed, documented exceptions. Each entry is (filename, an exact
++# substring of the offending line) with the reason it is not a bug:
++ALLOWED_SEASON_YEAR_LINES = (
++    (
++        "ausl_data.py",
++        "SEASONS = {2025: 270, 2026: 369}",
++        "the season map definition itself is the single source of truth",
++    ),
++    (
++        "ausl_data.py",
++        '"source_url": "https://theausl.com/news/2026-ausl-college-draft-results/"',
++        "a specific already-published news-article URL, not a derivable "
++        "pattern; update manually each season per the Next Season Data "
++        "Release Checklist (item 2, source endpoints)",
++    ),
++)
++
++_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
++
++
++def _bare_season_year_pattern():
++    years = sorted(str(year) for year in ausl_data.SEASONS)
++    return re.compile(r"\b(?:" + "|".join(re.escape(year) for year in years) + r")\b")
++
++
++def test_no_hardcoded_season_year_literals_outside_the_documented_allowlist():
++    season_year_pattern = _bare_season_year_pattern()
++    violations = []
++
++    for path in sorted(SRC_DIR.glob("*.py")):
++        lines = path.read_text(encoding="utf-8").splitlines()
++        for lineno, line in enumerate(lines, start=1):
++            iso_date_spans = [match.span() for match in _ISO_DATE.finditer(line)]
++            for match in season_year_pattern.finditer(line):
++                if any(start <= match.start() < end for start, end in iso_date_spans):
++                    continue  # a date stamp such as "2026-07-24", not a season year
++                if any(
++                    path.name == allowed_file and allowed_snippet in line
++                    for allowed_file, allowed_snippet, _reason in ALLOWED_SEASON_YEAR_LINES
++                ):
++                    continue
++                violations.append(f"{path.name}:{lineno}: {line.strip()}")
++
++    assert violations == [], (
++        "Found bare season-year literal(s) outside the documented allowlist "
++        "in ALLOWED_SEASON_YEAR_LINES. Derive the year from ausl_data.SEASONS "
++        "instead, or add a reviewed, documented allowlist entry if this one "
++        "is legitimate:\n" + "\n".join(violations)
++    )
++
++
++def test_allowlist_entries_are_still_present_and_not_stale():
++    """If an allowlisted line disappears (e.g. the URL is finally updated),
++    the allowlist entry should be removed too rather than silently rotting."""
++
++    for filename, snippet, _reason in ALLOWED_SEASON_YEAR_LINES:
++        content = (SRC_DIR / filename).read_text(encoding="utf-8")
++        assert snippet in content, (
++            f"Allowlisted snippet no longer found in {filename}; remove the "
++            "stale entry from ALLOWED_SEASON_YEAR_LINES in this test file: "
++            f"{snippet!r}"
++        )
+-- 
+2.43.0
+
