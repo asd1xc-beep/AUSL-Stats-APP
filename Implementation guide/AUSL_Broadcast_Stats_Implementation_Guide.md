@@ -680,6 +680,12 @@ Make the selected game the application's home context. A compact top bar should 
 - live connection/last update;
 - outstanding verification count.
 
+Implementation status (2026-07-27): complete as the first-tab `Game Day`
+command center, together with the pure `GameDayReadiness` policy and explicit
+Local/Offline Mode. The later broadcast-fact boundary is documented in
+`Phase_6_Broadcast_Fact_Interface.md`; fact cards, rundown state, session
+recovery, change comparison, and faster search remain deferred to 6B–6F.
+
 #### 6B. Universal search
 
 Search should support:

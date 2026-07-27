@@ -40,6 +40,7 @@ from ausl_data import (
     write_manual_notes_atomic,
 )
 from ausl_logging import configure_logging, log_event
+from ausl_readiness import GameDayReadiness, aggregate_game_day_readiness
 
 
 CURRENT_YEAR = max(SEASONS)
@@ -76,6 +77,10 @@ COPY_KIND_ALIASES = {
     "full": "career_stat",
     "note": "announcer_note",
 }
+PACKET_FILENAME_RE = re.compile(
+    r"^(?P<stamp>\d{8}T\d{12}Z)_game_(?P<game_id>\d+)"
+    r"(?:_r(?P<revision>\d+))?_producer_packet\.txt$"
+)
 
 
 def value(row, key, default="—"):
@@ -1418,6 +1423,10 @@ class AUSLStatsApp:
         self._live_request_generation = 0
         self._active_live_request = None
         self._live_timer_id = None
+        self._offline_mode = False
+        self._packet_metadata = {}
+        self._verification_count_cache = {}
+        self.game_day_readiness = None
         self._main_thread_results = queue.Queue()
         self._main_thread_poll_id = None
         self.locked_lineups = self.load_locked_lineups()
@@ -1446,6 +1455,11 @@ class AUSLStatsApp:
         style.configure("Player.TLabel", font=("Segoe UI", 22, "bold"))
         style.configure("Sub.TLabel", font=("Segoe UI", 10), foreground="#555555")
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
+        style.configure("ReadinessReady.TLabel", font=("Segoe UI", 20, "bold"), foreground="#146c43")
+        style.configure("ReadinessAttention.TLabel", font=("Segoe UI", 20, "bold"), foreground="#9a6700")
+        style.configure("ReadinessNotReady.TLabel", font=("Segoe UI", 20, "bold"), foreground="#b42318")
+        style.configure("Offline.TCheckbutton", font=("Segoe UI", 10, "bold"))
+        style.configure("OfflineBanner.TLabel", font=("Segoe UI", 11, "bold"), foreground="#b42318")
 
     def _build(self):
         top = ttk.Frame(self.root, padding=10)
@@ -1456,14 +1470,29 @@ class AUSLStatsApp:
         self.update_button.grid(row=0, column=2, padx=4)
         self.cancel_update_button = ttk.Button(top, text="Cancel Refresh", state="disabled", command=self.cancel_data_update)
         self.cancel_update_button.grid(row=0, column=3, padx=4)
+        self.offline_mode_var = tk.BooleanVar(value=False)
+        self.offline_toggle = ttk.Checkbutton(
+            top,
+            text="LOCAL/OFFLINE MODE",
+            variable=self.offline_mode_var,
+            command=lambda: self.set_local_offline_mode(self.offline_mode_var.get()),
+            style="Offline.TCheckbutton",
+        )
+        self.offline_toggle.grid(row=0, column=4, padx=(10, 4))
         self.status_var = tk.StringVar(value="Loading local database...")
-        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=4, sticky="w", padx=10)
+        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=5, sticky="w", padx=10)
         self.data_freshness_var = tk.StringVar(value=self.data_freshness_text)
-        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=4, sticky="w", pady=(4, 0))
+        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=5, sticky="w", pady=(4, 0))
         self.data_health_var = tk.StringVar(value="Data health: loading...")
         self.data_health_label = ttk.Label(top, textvariable=self.data_health_var, style="Sub.TLabel")
-        self.data_health_label.grid(row=2, column=1, columnspan=4, sticky="w", pady=(2, 0))
-        top.columnconfigure(4, weight=1)
+        self.data_health_label.grid(row=2, column=1, columnspan=5, sticky="w", pady=(2, 0))
+        self.offline_banner_var = tk.StringVar(value="")
+        ttk.Label(
+            top,
+            textvariable=self.offline_banner_var,
+            style="OfflineBanner.TLabel",
+        ).grid(row=3, column=1, columnspan=5, sticky="w", pady=(2, 0))
+        top.columnconfigure(5, weight=1)
 
         game = ttk.LabelFrame(self.root, text="Game Setup", padding=8)
         game.pack(fill="x", padx=10, pady=(0, 8))
@@ -1519,18 +1548,21 @@ class AUSLStatsApp:
 
         self.main_tabs = ttk.Notebook(self.root)
         self.main_tabs.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        game_day = ttk.Frame(self.main_tabs, padding=8)
         lookup = ttk.Frame(self.main_tabs, padding=8)
         team_totals = ttk.Frame(self.main_tabs, padding=8)
         producer = ttk.Frame(self.main_tabs, padding=8)
         lineups = ttk.Frame(self.main_tabs, padding=8)
         manual = ttk.Frame(self.main_tabs, padding=8)
         live = ttk.Frame(self.main_tabs, padding=8)
+        self.main_tabs.add(game_day, text="Game Day")
         self.main_tabs.add(lookup, text="Player Lookup")
         self.main_tabs.add(team_totals, text="Team Totals")
         self.main_tabs.add(producer, text="Producer Prep")
         self.main_tabs.add(lineups, text="Lineup Lock")
         self.main_tabs.add(manual, text="Manual Notes")
         self.main_tabs.add(live, text="Live Game")
+        self._build_game_day(game_day)
         self._build_lookup(lookup)
         self._build_team_totals(team_totals)
         self._build_producer_prep(producer)
@@ -1545,6 +1577,145 @@ class AUSLStatsApp:
         logo.create_text(41, 20, text="AUSL", fill="#ffffff", font=("Segoe UI", 17, "bold"))
         logo.create_text(41, 34, text="SOFTBALL", fill="#facc15", font=("Segoe UI", 7, "bold"))
         return logo
+
+    def _build_game_day(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        parent.rowconfigure(2, weight=1)
+
+        status = ttk.Frame(parent)
+        status.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        status.columnconfigure(1, weight=1)
+        self.game_day_overall_var = tk.StringVar(value="NOT READY")
+        self.game_day_overall_label = ttk.Label(
+            status,
+            textvariable=self.game_day_overall_var,
+            style="ReadinessNotReady.TLabel",
+        )
+        self.game_day_overall_label.grid(row=0, column=0, sticky="w")
+        self.game_day_counts_var = tk.StringVar(
+            value="Waiting for authoritative game-day state."
+        )
+        ttk.Label(
+            status,
+            textvariable=self.game_day_counts_var,
+            style="Sub.TLabel",
+        ).grid(row=0, column=1, sticky="w", padx=14)
+        ttk.Button(
+            status,
+            text="Go to Game Setup",
+            command=self._focus_game_setup,
+        ).grid(row=0, column=2, padx=4)
+        ttk.Checkbutton(
+            status,
+            text="LOCAL/OFFLINE MODE",
+            variable=self.offline_mode_var,
+            command=lambda: self.set_local_offline_mode(
+                self.offline_mode_var.get()
+            ),
+            style="Offline.TCheckbutton",
+        ).grid(row=0, column=3, padx=(12, 0))
+
+        self.game_day_selected_var = tk.StringVar(
+            value="No official game selected."
+        )
+        self.game_day_data_var = tk.StringVar(value="Data health is loading.")
+        self.game_day_lineup_var = tk.StringVar(value="Lineup state unavailable.")
+        self.game_day_live_var = tk.StringVar(value="Live-feed state unavailable.")
+        self.game_day_verification_var = tk.StringVar(
+            value="Verification queue unavailable."
+        )
+        self.game_day_packet_var = tk.StringVar(
+            value="Producer packet not generated."
+        )
+        self.game_day_network_var = tk.StringVar(
+            value="Network requests permitted by producer action."
+        )
+
+        sections = (
+            ("Selected game", self.game_day_selected_var, 0, 0),
+            ("Data health", self.game_day_data_var, 0, 1),
+            ("Lineup readiness", self.game_day_lineup_var, 1, 0),
+            ("Live-feed state", self.game_day_live_var, 1, 1),
+            ("Verification queue", self.game_day_verification_var, 2, 0),
+            ("Producer packet", self.game_day_packet_var, 2, 1),
+        )
+        cards = ttk.Frame(parent)
+        cards.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        cards.columnconfigure(0, weight=1)
+        cards.columnconfigure(1, weight=1)
+        for title, variable, row, column in sections:
+            card = ttk.LabelFrame(cards, text=title, padding=7)
+            card.grid(
+                row=row,
+                column=column,
+                sticky="nsew",
+                padx=(0, 4) if column == 0 else (4, 0),
+                pady=3,
+            )
+            ttk.Label(
+                card,
+                textvariable=variable,
+                justify="left",
+                wraplength=500,
+            ).pack(fill="x")
+
+        bottom = ttk.Frame(parent)
+        bottom.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        bottom.columnconfigure(0, weight=3)
+        bottom.columnconfigure(1, weight=2)
+        bottom.rowconfigure(0, weight=1)
+        checklist = ttk.LabelFrame(bottom, text="Ready-for-Air checklist", padding=6)
+        checklist.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        checklist.rowconfigure(0, weight=1)
+        checklist.columnconfigure(0, weight=1)
+        self.game_day_checklist = tk.Text(
+            checklist,
+            wrap="word",
+            height=8,
+            font=("Consolas", 10),
+            padx=8,
+            pady=8,
+            relief="flat",
+        )
+        self.game_day_checklist.grid(row=0, column=0, sticky="nsew")
+        checklist_scroll = ttk.Scrollbar(
+            checklist,
+            orient="vertical",
+            command=self.game_day_checklist.yview,
+        )
+        checklist_scroll.grid(row=0, column=1, sticky="ns")
+        self.game_day_checklist.configure(
+            yscrollcommand=checklist_scroll.set,
+            state="disabled",
+        )
+
+        network = ttk.LabelFrame(bottom, text="Network permission", padding=8)
+        network.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        ttk.Label(
+            network,
+            textvariable=self.game_day_network_var,
+            justify="left",
+            wraplength=350,
+        ).pack(fill="x")
+        ttk.Label(
+            network,
+            text=(
+                "Offline Mode keeps local search, lineups, notes, packets, "
+                "and copy actions available. Turning it off never starts a request."
+            ),
+            style="Sub.TLabel",
+            justify="left",
+            wraplength=350,
+        ).pack(fill="x", pady=(8, 0))
+
+    def _focus_game_setup(self):
+        picker = getattr(self, "game_picker", None)
+        if picker is not None:
+            try:
+                picker.focus_set()
+            except tk.TclError:
+                return
 
     def _build_lookup(self, parent):
         parent.columnconfigure(0, weight=2)
@@ -1859,9 +2030,101 @@ class AUSLStatsApp:
         if button is not None:
             button.configure(state=state)
 
+    def network_requests_permitted(self, action, *, status_var=None):
+        """Central producer-facing network permission decision.
+
+        Future network buttons must call this before creating a token, timer,
+        or worker.  Blocking is quiet and visible rather than modal.
+        """
+
+        if not bool(getattr(self, "_offline_mode", False)):
+            return True
+        message = (
+            f"LOCAL/OFFLINE MODE — {action} blocked; "
+            "last-known-good local data remains available."
+        )
+        target = status_var or getattr(self, "status_var", None)
+        if target is not None:
+            target.set(message)
+        return False
+
+    def set_local_offline_mode(self, enabled=None):
+        desired = (
+            bool(enabled)
+            if enabled is not None
+            else bool(getattr(self, "offline_mode_var", None).get())
+        )
+        already = bool(getattr(self, "_offline_mode", False))
+        self._offline_mode = desired
+        variable = getattr(self, "offline_mode_var", None)
+        if variable is not None and bool(variable.get()) != desired:
+            variable.set(desired)
+
+        if desired:
+            self._suppress_game_day_refresh = True
+            try:
+                self.cancel_data_update()
+                self.cancel_live_refresh()
+                self._cancel_live_timer()
+            finally:
+                self._suppress_game_day_refresh = False
+            auto_var = getattr(self, "auto_var", None)
+            if auto_var is not None:
+                auto_var.set(False)
+            message = (
+                "LOCAL/OFFLINE MODE — network requests and live timers are blocked; "
+                "using installed last-known-good data."
+            )
+            if hasattr(self, "status_var"):
+                self.status_var.set(message)
+            if hasattr(self, "live_status"):
+                self.live_status.set(message)
+            if hasattr(self, "offline_banner_var"):
+                self.offline_banner_var.set(
+                    "◆ LOCAL/OFFLINE MODE — NETWORK REQUESTS BLOCKED"
+                )
+            if not already:
+                self._log_event(
+                    "local_offline_mode_enabled",
+                    source="producer_network_permission",
+                )
+        else:
+            if hasattr(self, "offline_banner_var"):
+                self.offline_banner_var.set("")
+            if hasattr(self, "status_var"):
+                self.status_var.set(
+                    "Local/Offline Mode disabled. No refresh was started; "
+                    "choose when to request new data."
+                )
+            if hasattr(self, "live_status"):
+                self.live_status.set(
+                    "Network requests permitted. No live refresh was started."
+                )
+            if already:
+                self._log_event(
+                    "local_offline_mode_disabled",
+                    source="producer_network_permission",
+                )
+        self._sync_update_button()
+        self._sync_live_refresh_button()
+        refresh = getattr(self, "refresh_game_day_dashboard", None)
+        if callable(refresh):
+            refresh()
+
+    def _refresh_game_day_if_allowed(self):
+        if bool(getattr(self, "_suppress_game_day_refresh", False)):
+            return
+        refresh = getattr(self, "refresh_game_day_dashboard", None)
+        if callable(refresh):
+            refresh()
+
     def _sync_update_button(self):
         in_flight = bool(getattr(self, "_data_update_in_flight", False))
-        disabled = bool(getattr(self, "_initial_load_in_flight", False)) or in_flight
+        disabled = (
+            bool(getattr(self, "_initial_load_in_flight", False))
+            or in_flight
+            or bool(getattr(self, "_offline_mode", False))
+        )
         self._set_button_state(
             getattr(self, "update_button", None),
             "disabled" if disabled else "normal",
@@ -1872,14 +2135,15 @@ class AUSLStatsApp:
         )
 
     def _sync_live_refresh_button(self):
-        disabled = bool(getattr(self, "_live_refresh_in_flight", False))
+        in_flight = bool(getattr(self, "_live_refresh_in_flight", False))
+        disabled = in_flight or bool(getattr(self, "_offline_mode", False))
         self._set_button_state(
             getattr(self, "live_refresh_button", None),
             "disabled" if disabled else "normal",
         )
         self._set_button_state(
             getattr(self, "cancel_live_button", None),
-            "normal" if disabled else "disabled",
+            "normal" if in_flight else "disabled",
         )
 
     def _ensure_main_thread_dispatch(self):
@@ -1972,6 +2236,7 @@ class AUSLStatsApp:
     def _finish_load(self, data):
         previous_selected_id = getattr(self, "selected_player_id", None)
         self.db = data
+        self._verification_count_cache = {}
         self.data_freshness_text = self.format_data_freshness(data.get("manifest", {}))
         if hasattr(self, "data_freshness_var"):
             self.data_freshness_var.set(self.data_freshness_text)
@@ -1988,6 +2253,7 @@ class AUSLStatsApp:
         self.render_team_totals()
         self.render_producer_prep()
         self.render_manual_notes()
+        self.refresh_game_day_dashboard()
 
     def _sync_selected_player_after_load(self, previous_selected_id):
         """Rerender one exact selected identity or clear all stale player copy."""
@@ -2073,6 +2339,8 @@ class AUSLStatsApp:
         self.search()
         self.render_producer_prep()
         self.render_manual_notes()
+        self._verification_count_cache = {}
+        self.refresh_game_day_dashboard()
 
     def _selected_player_in_team_codes(self, team_codes):
         player_id = getattr(self, "selected_player_id", None)
@@ -2116,6 +2384,8 @@ class AUSLStatsApp:
         self.search()
         self.render_producer_prep()
         self.render_manual_notes()
+        self._verification_count_cache = {}
+        self.refresh_game_day_dashboard()
 
     def _clear_selected_player(self):
         self.selected_player_id = None
@@ -2267,7 +2537,7 @@ class AUSLStatsApp:
 
     def _current_lineup_lock(self):
         game_id = self.lineup_key()
-        games = self.locked_lineups.get("games", {})
+        games = getattr(self, "locked_lineups", {}).get("games", {})
         locked = games.get(game_id) if game_id and isinstance(games, dict) else None
         if not isinstance(locked, dict) or str(locked.get("game_id", "")) != game_id:
             return {}
@@ -2611,6 +2881,7 @@ class AUSLStatsApp:
             f"{source_label} lineups saved for official Game {key}; verify before air"
         )
         self.render_producer_prep()
+        self.refresh_game_day_dashboard()
 
     def clear_locked_lineups(self):
         if getattr(self, "_lineup_store_error", ""):
@@ -2640,6 +2911,7 @@ class AUSLStatsApp:
             else "No official game selected; no lineup lock was changed"
         )
         self.render_producer_prep()
+        self.refresh_game_day_dashboard()
 
     def _refresh_manual_note_players(self):
         if not hasattr(self, "note_player_picker"):
@@ -2845,6 +3117,11 @@ class AUSLStatsApp:
         self.render_manual_notes()
 
     def update_data(self):
+        if not self.network_requests_permitted(
+            "Quick Refresh (Core)",
+            status_var=getattr(self, "status_var", None),
+        ):
+            return
         if getattr(self, "_data_update_in_flight", False):
             self.status_var.set("Data update is already in progress.")
             return
@@ -2908,6 +3185,14 @@ class AUSLStatsApp:
         self._data_update_in_flight = False
         self._sync_update_button()
         self.status_var.set("Cancelling data update; last-known-good data retained.")
+        if isinstance(getattr(self, "db", None), dict):
+            self.db["refresh_attempt"] = {
+                "state": "cancelled",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "affected_source": "official_core_sources",
+                "error_summary": None,
+            }
+        self._refresh_game_day_if_allowed()
         self._log_event("data_update_cancel_requested", source="official_ausl_core_data")
 
     def _finish_data_update_success(self, data, token):
@@ -2937,10 +3222,14 @@ class AUSLStatsApp:
         self._sync_update_button()
         self.status_var.set(f"Data update failed: {exc}")
         if hasattr(self, "data_health_var"):
+            attempt = load_refresh_attempt()
+            if isinstance(getattr(self, "db", None), dict):
+                self.db["refresh_attempt"] = attempt
             self._apply_data_health_display(
                 getattr(self, "db", {}).get("manifest", {}),
-                load_refresh_attempt(),
+                attempt,
             )
+        self.refresh_game_day_dashboard()
         self._log_event(
             "data_update_failed",
             source="official_ausl_data",
@@ -2956,6 +3245,9 @@ class AUSLStatsApp:
         self._data_update_cancel_token = None
         self._sync_update_button()
         self.status_var.set("Data update cancelled; last-known-good data retained.")
+        if isinstance(getattr(self, "db", None), dict):
+            self.db["refresh_attempt"] = load_refresh_attempt()
+        self.refresh_game_day_dashboard()
         self._log_event("data_update_cancelled", source="official_ausl_core_data")
 
     @staticmethod
@@ -3117,6 +3409,328 @@ class AUSLStatsApp:
         if attempt_state == "in_progress":
             return f"Refresh in progress; stored snapshot remains active. {snapshot_text}"
         return snapshot_text
+
+    def _scoped_verification_count(self):
+        selected = getattr(self, "selected_game", None)
+        database = getattr(self, "db", {})
+        if not isinstance(selected, SelectedGame) or not isinstance(database, dict):
+            return None
+        if not database.get("enrichment_enabled"):
+            return None
+        frame = database.get("official_game_notes")
+        required = {"game_id", "subject_team_code", "verification_state"}
+        if not isinstance(frame, pd.DataFrame) or not required.issubset(frame.columns):
+            return None
+        if frame.empty:
+            return 0
+        cache_key = (
+            id(frame),
+            len(frame),
+            selected.game_id,
+            selected.away_team_code,
+            selected.home_team_code,
+        )
+        cache = getattr(self, "_verification_count_cache", {})
+        if cache_key in cache:
+            return cache[cache_key]
+        game_ids = frame["game_id"].map(_manual_note_identifier)
+        team_codes = frame["subject_team_code"].astype(str).str.strip().str.upper()
+        states = frame["verification_state"].astype(str).str.strip().str.upper()
+        scoped = game_ids.eq(selected.game_id) & team_codes.isin(
+            {selected.away_team_code, selected.home_team_code}
+        )
+        count = int((scoped & ~states.eq("VERIFIED")).sum())
+        self._verification_count_cache = {cache_key: count}
+        return count
+
+    def _record_packet_generated(
+        self,
+        path,
+        *,
+        generated_at,
+        game_id,
+        lineup_revision=None,
+        lineup_source=None,
+    ):
+        self._packet_metadata = {
+            "path": str(path),
+            "game_id": str(game_id),
+            "generated_at": generated_at.isoformat(),
+            "lineup_revision": lineup_revision,
+            "lineup_source": str(lineup_source or "").strip().lower() or None,
+        }
+        self.refresh_game_day_dashboard()
+
+    def _latest_packet_metadata(self):
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            return None
+        current = getattr(self, "_packet_metadata", {})
+        if (
+            isinstance(current, dict)
+            and str(current.get("game_id", "")) == selected.game_id
+        ):
+            return dict(current)
+        packet_dir = export_dir() / "game_packets"
+        if not packet_dir.exists():
+            return None
+        candidates = []
+        for path in packet_dir.glob(f"*_game_{selected.game_id}*_producer_packet.txt"):
+            match = PACKET_FILENAME_RE.fullmatch(path.name)
+            if match is None or match.group("game_id") != selected.game_id:
+                continue
+            try:
+                generated = datetime.strptime(
+                    match.group("stamp"), "%Y%m%dT%H%M%S%fZ"
+                ).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            candidates.append((generated, path, match.group("revision")))
+        if not candidates:
+            return None
+        generated, path, revision = max(candidates, key=lambda item: item[0])
+        lock = self._current_lineup_lock()
+        metadata = {
+            "path": str(path),
+            "game_id": selected.game_id,
+            "generated_at": generated.isoformat(),
+            "lineup_revision": int(revision) if revision is not None else None,
+            "lineup_source": (
+                str(lock.get("source") or "").strip().lower() or None
+                if lock
+                else None
+            ),
+        }
+        self._packet_metadata = metadata
+        return dict(metadata)
+
+    def _rosters_available_for_game(self):
+        selected = getattr(self, "selected_game", None)
+        roster = getattr(self, "db", {}).get("roster")
+        if not isinstance(selected, SelectedGame):
+            return None
+        if not isinstance(roster, pd.DataFrame) or "team_code" not in roster.columns:
+            return None
+        codes = roster["team_code"].astype(str).str.strip().str.upper()
+        return all(
+            bool(codes.eq(team_code).any())
+            for team_code in (
+                selected.away_team_code,
+                selected.home_team_code,
+            )
+        )
+
+    def _live_readiness_input(self):
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            return None
+        live_game = getattr(self, "live_game", None)
+        health = getattr(self, "live_health", None)
+        game_id = (
+            _manual_note_identifier(live_game.get("gameId"))
+            if isinstance(live_game, dict)
+            else selected.game_id
+        )
+        if bool(getattr(self, "_offline_mode", False)):
+            state = "disabled"
+        elif not isinstance(live_game, dict):
+            state = "disconnected"
+        elif getattr(health, "state", "").upper() == "GREEN":
+            state = "connected"
+        elif getattr(health, "state", "").upper() == "YELLOW":
+            state = "stale"
+        elif getattr(health, "connection_state", "").upper() == "DISCONNECTED":
+            state = "disconnected"
+        else:
+            state = "unavailable"
+        return {
+            "state": state,
+            "game_id": game_id,
+            "last_updated": getattr(health, "last_updated", "") or None,
+            "age_seconds": getattr(health, "age_seconds", None),
+            "game_status": (
+                live_game.get("recordStatus")
+                if isinstance(live_game, dict)
+                else selected.status
+            ),
+            "auto_refresh": bool(
+                getattr(self, "auto_var", None)
+                and self.auto_var.get()
+                and not bool(getattr(self, "_offline_mode", False))
+            ),
+        }
+
+    def _lineup_command_center_detail(self, readiness):
+        check = next(item for item in readiness.checks if item.key == "lineups")
+        provenance = next(
+            item for item in readiness.checks if item.key == "lineup_provenance"
+        )
+        lock = self._current_lineup_lock()
+        if not lock:
+            return f"[{check.state.upper()}] {check.detail}"
+        source = str(lock.get("source") or "unavailable").upper()
+        locked_at = str(lock.get("locked_at") or "time unavailable")
+        age = self._relative_age_text(lock.get("locked_at"))
+        age_text = f" ({age})" if age else ""
+        revision = lock.get("revision", "unavailable")
+        lineups = lock.get("lineups", {})
+        side_parts = []
+        nonactive = 0
+        warnings = []
+        for side in ("away", "home"):
+            team = lineups.get(side, {}) if isinstance(lineups, dict) else {}
+            entries = team.get("lineup", []) if isinstance(team, dict) else []
+            side_parts.append(
+                f"{side.title()}: {'saved' if len(entries) == 9 else 'not usable'}"
+            )
+            for entry in entries:
+                status = normalize_roster_status(entry.get("roster_status"))
+                if status != "Active":
+                    nonactive += 1
+            team_warnings = team.get("warnings", []) if isinstance(team, dict) else []
+            if isinstance(team_warnings, list):
+                warnings.extend(str(item) for item in team_warnings if str(item).strip())
+        warning_text = (
+            f" Nonactive/unresolved warnings: {nonactive + len(warnings)}."
+            if nonactive or warnings
+            else " No nonactive or unresolved-player warnings recorded."
+        )
+        return (
+            f"[{check.state.upper()}] {'; '.join(side_parts)} | Game {lock.get('game_id')} | "
+            f"source {source} | saved {locked_at}{age_text} | revision {revision}. "
+            f"{provenance.detail}{warning_text}"
+        )
+
+    def refresh_game_day_dashboard(self):
+        database = getattr(self, "db", {})
+        manifest = database.get("manifest", {}) if isinstance(database, dict) else {}
+        refresh_attempt = (
+            database.get("refresh_attempt", {})
+            if isinstance(database, dict)
+            else {}
+        )
+        health_state = self._data_health_state(manifest, refresh_attempt)
+        health_detail = self.format_data_health(manifest, refresh_attempt)
+        packet = self._latest_packet_metadata()
+        readiness = aggregate_game_day_readiness(
+            selected_game=getattr(self, "selected_game", None),
+            data_health_state=health_state,
+            data_health_detail=health_detail,
+            refresh_attempt=refresh_attempt,
+            rosters_available=self._rosters_available_for_game(),
+            lineup_lock=self._current_lineup_lock(),
+            live_feed=self._live_readiness_input(),
+            verification_count=self._scoped_verification_count(),
+            packet=packet,
+            offline_mode=bool(getattr(self, "_offline_mode", False)),
+        )
+        self.game_day_readiness = readiness
+
+        overall = {
+            "ready": ("READY FOR AIR", "ReadinessReady.TLabel"),
+            "needs-attention": (
+                "NEEDS ATTENTION",
+                "ReadinessAttention.TLabel",
+            ),
+            "not-ready": ("NOT READY", "ReadinessNotReady.TLabel"),
+        }[readiness.overall_state]
+        if hasattr(self, "game_day_overall_var"):
+            self.game_day_overall_var.set(overall[0])
+        if hasattr(self, "game_day_overall_label"):
+            self.game_day_overall_label.configure(style=overall[1])
+        if hasattr(self, "game_day_counts_var"):
+            self.game_day_counts_var.set(
+                f"{readiness.blocking_issue_count} blocking issue(s) · "
+                f"{readiness.warning_count} warning/unavailable item(s)"
+            )
+
+        checks = {check.key: check for check in readiness.checks}
+        selected = getattr(self, "selected_game", None)
+        if hasattr(self, "game_day_selected_var"):
+            if isinstance(selected, SelectedGame):
+                away_record = official_team_snapshot(
+                    selected.away_team_code, selected.season, database
+                ).record_text
+                home_record = official_team_snapshot(
+                    selected.home_team_code, selected.season, database
+                ).record_text
+                self.game_day_selected_var.set(
+                    f"[PASS] {selected.away_team} ({away_record}) at "
+                    f"{selected.home_team} ({home_record})\n"
+                    f"{selected.first_pitch_label} | {selected.venue} | "
+                    f"{selected.status} | Game ID {selected.game_id}\n"
+                    f"Schedule: {selected.source_name} | Updated "
+                    f"{selected.source_updated_at}"
+                )
+            else:
+                self.game_day_selected_var.set(
+                    "[FAIL] No official game selected. Use Game Setup above."
+                )
+        if hasattr(self, "game_day_data_var"):
+            self.game_day_data_var.set(
+                f"[{checks['core_data'].state.upper()}] {checks['core_data'].detail}\n"
+                f"Snapshot: {(manifest or {}).get('updated_at', 'unavailable')}\n"
+                f"[{checks['latest_refresh'].state.upper()}] "
+                f"{checks['latest_refresh'].detail}"
+            )
+        if hasattr(self, "game_day_lineup_var"):
+            self.game_day_lineup_var.set(
+                self._lineup_command_center_detail(readiness)
+            )
+        if hasattr(self, "game_day_live_var"):
+            live = self._live_readiness_input() or {}
+            age = live.get("age_seconds")
+            age_text = f"{age}s old" if isinstance(age, int) else "age unavailable"
+            self.game_day_live_var.set(
+                f"[{checks['live_feed'].state.upper()}] "
+                f"{checks['live_feed'].detail}\n"
+                f"Game ID {live.get('game_id') or 'unavailable'} | "
+                f"lastUpdated {live.get('last_updated') or 'unavailable'} | "
+                f"{age_text} | auto-refresh "
+                f"{'ON' if live.get('auto_refresh') else 'OFF'}"
+            )
+        if hasattr(self, "game_day_verification_var"):
+            self.game_day_verification_var.set(
+                f"[{checks['verification_queue'].state.upper()}] "
+                f"{checks['verification_queue'].detail}"
+            )
+        if hasattr(self, "game_day_packet_var"):
+            source = (
+                f" | lineup source {packet.get('lineup_source') or 'unavailable'}"
+                if packet
+                else ""
+            )
+            revision = (
+                f" | lineup revision {packet.get('lineup_revision')}"
+                if packet and packet.get("lineup_revision") is not None
+                else ""
+            )
+            self.game_day_packet_var.set(
+                f"[{checks['producer_packet'].state.upper()}] "
+                f"{checks['producer_packet'].detail}\n"
+                f"Generated "
+                f"{packet.get('generated_at') if packet else 'not generated'}"
+                f"{revision}{source}"
+            )
+        if hasattr(self, "game_day_network_var"):
+            self.game_day_network_var.set(
+                f"[{checks['network_permission'].state.upper()}] "
+                f"{checks['network_permission'].detail}"
+            )
+        if hasattr(self, "game_day_checklist"):
+            marker = {
+                "pass": "[PASS]",
+                "warning": "[WARN]",
+                "fail": "[FAIL]",
+                "unavailable": "[N/A]",
+                "not-applicable": "[—]",
+            }
+            lines = [
+                f"{marker[check.state]} {check.label}: {check.detail}"
+                for check in readiness.checks
+            ]
+            self._set_text(self.game_day_checklist, "\n\n".join(lines))
+        return readiness
 
     def game_codes(self):
         selected = getattr(self, "selected_game", None)
@@ -4977,8 +5591,18 @@ class AUSLStatsApp:
                 f"Producer packet was not overwritten because this filename already exists:\n\n{path}",
             )
             return
+        self._record_packet_generated(
+            path,
+            generated_at=generated_at,
+            game_id=selected_game.game_id,
+            lineup_revision=(
+                lineup_lock.get("revision") if lineup_lock else None
+            ),
+            lineup_source=(
+                lineup_lock.get("source") if lineup_lock else "projected"
+            ),
+        )
         self.status_var.set(f"Producer packet saved: {path}")
-        messagebox.showinfo("AUSL Broadcast Stats", f"Producer packet created:\n\n{path}")
 
     def _media_guide_citation_line(self):
         return f"Media guide source: {media_guide_source_context()['source_url']}"
@@ -5224,6 +5848,11 @@ class AUSLStatsApp:
         self.copy_status.set("Copied to clipboard")
 
     def refresh_live(self):
+        if not self.network_requests_permitted(
+            "manual live refresh",
+            status_var=getattr(self, "live_status", None),
+        ):
+            return
         game_id = self.game_id_var.get().strip()
         selected = getattr(self, "selected_game", None)
         if not isinstance(selected, SelectedGame):
@@ -5302,6 +5931,7 @@ class AUSLStatsApp:
         self._live_refresh_in_flight = False
         self._sync_live_refresh_button()
         self.live_status.set("Live refresh cancelled; last-known-good live data retained.")
+        self._refresh_game_day_if_allowed()
         self._log_event(
             "live_refresh_cancel_requested",
             source="official_live_feed",
@@ -5384,6 +6014,7 @@ class AUSLStatsApp:
         )
         self._sync_live_refresh_button()
         self.live_status.set(f"Live feed error: {exc}")
+        self.refresh_game_day_dashboard()
         self._log_event(
             "live_refresh_failed",
             source="official_live_feed",
@@ -5402,6 +6033,7 @@ class AUSLStatsApp:
         self._live_refresh_in_flight = False
         self._sync_live_refresh_button()
         self.live_status.set("Live refresh cancelled; last-known-good live data retained.")
+        self.refresh_game_day_dashboard()
         self._log_event(
             "live_refresh_cancelled",
             source="official_live_feed",
@@ -5418,9 +6050,15 @@ class AUSLStatsApp:
         self._set_text(self.live_summary, self.format_live_comparison())
         self.search_live_player()
         self._schedule_live()
+        self.refresh_game_day_dashboard()
 
     def _schedule_live(self):
         self._cancel_live_timer()
+        if bool(getattr(self, "_offline_mode", False)):
+            auto_var = getattr(self, "auto_var", None)
+            if auto_var is not None:
+                auto_var.set(False)
+            return
         selected = getattr(self, "selected_game", None)
         if (
             self.auto_var.get()
@@ -5431,6 +6069,8 @@ class AUSLStatsApp:
 
     def _auto_refresh(self):
         self._live_timer_id = None
+        if bool(getattr(self, "_offline_mode", False)):
+            return
         if self.auto_var.get():
             self.refresh_live()
 

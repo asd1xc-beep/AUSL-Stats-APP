@@ -5,25 +5,27 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5, including the focused Phase 5 stabilization pass, are complete at
-functional commits 4967f5b31280ed67241a2e20385cbd0d4ae5ae4e and
-b22ea3a067f8584cd174684e611e98e9fcae275f. The complete offline suite
-passes 458 tests with warnings treated as errors; compileall, pip check, and
-checked-in distribution verification also pass. The
-future-season year-generalization patch was applied once and its 12 dedicated
-regressions pass.
+Phases 1-5 and Phase 6A are complete. Phase 6A's functional commits are
+0eeefa3 (pure readiness policy) and 0c994a1 (Game Day command center and
+Local/Offline Mode), based on remote main 19f2702. The complete offline suite
+passes 491 tests with warnings treated as errors; compileall, pip check, and
+checked-in distribution verification also pass. The future-season
+year-generalization patch remains applied once and its dedicated regressions
+pass.
 
 Truck-hardware smoke testing and producer rehearsal are recorded as completed
 based on the project owner's report. No hardware model, display scaling,
 rehearsal date, or additional observed behavior is asserted here because those
 details were not supplied.
 
-Phase 6 producer-UX work has not started. This remains an assisted broadcast
-tool, not a candidate for unattended on-air use: source facts, official
-lineups, availability, and milestones still require producer verification.
-Cancellation is cooperative while a single urllib request is inside its
-bounded timeout, although cancelled/superseded jobs cannot overlap core
-commits or replace a newer coherent snapshot.
+Phase 6B through 6F have not started. Phase 6A does not add fact cards, pinned
+rundowns, read-time budgeting, used-on-air state, session recovery, change
+comparison, fuzzy search, or player comparison. This remains an assisted
+broadcast tool, not a candidate for unattended on-air use: source facts,
+official lineups, availability, and milestones still require producer
+verification. Cancellation is cooperative while a single urllib request is
+inside its bounded timeout, although cancelled/superseded jobs cannot overlap
+core commits or replace a newer coherent snapshot.
 
 FIRST-TIME SETUP
 Double-click:
@@ -116,6 +118,33 @@ the latest refresh outcome atomically without replacing a validated snapshot
 after a failure. The UI distinguishes "stored snapshot valid" from "latest
 refresh failed"; cancellation is not reported as a source failure, and a later
 success clears the failed-attempt state.
+
+GAME DAY COMMAND CENTER
+The first tab is Game Day. It renders one pure readiness result for the exact
+selected official game and shows:
+  - teams, official records, game time, venue, status, ID, and schedule age;
+  - installed snapshot health separately from the latest refresh attempt;
+  - exact-game lineup save, validation, source, time, revision, and warnings;
+  - game-aware live-feed state, timestamp, age, ID, and auto-refresh state;
+  - the exact-game/team verification count, or Unavailable when optional
+    review data is not loaded;
+  - producer-packet game ID, generation time, lineup source, and revision;
+  - one derived READY FOR AIR, NEEDS ATTENTION, or NOT READY state.
+
+There is no manual force-green control. Unknown never counts as pass. Saved
+projected, manual, and imported lineups remain warnings and are never described
+as official. A stale or disconnected exact-game feed blocks readiness once the
+authoritative game or live response says the game is live.
+
+LOCAL/OFFLINE MODE
+The visible Local/Offline Mode control appears beside Quick Refresh and in the
+Game Day tab. While enabled it blocks core and manual live refreshes, cancels
+their existing tokens, stops and prevents live timers, and ignores abandoned
+network callbacks. Local search, notes, lineups, packet generation, and copy
+actions remain available against the installed last-known-good snapshot.
+
+Offline Mode defaults off on every fresh launch. Turning it off does not start
+a refresh or live request; the producer chooses when network activity resumes.
 
 STORYLINE / ENRICHMENT DATA
 Optional development refreshes can import official AUSL split stats, the media
