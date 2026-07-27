@@ -121,6 +121,35 @@ def test_distribution_manifest_generation_is_deterministic_utf8_lf(tmp_path):
     assert scan_distribution(exports) == []
 
 
+def test_portable_source_manifest_exists_only_in_generated_release_output(tmp_path):
+    from tools.generate_portable_source_manifest import (
+        generate_portable_source_manifest,
+    )
+
+    assert not (PROJECT_ROOT / "portable_source_manifest.json").exists()
+    package = tmp_path / "portable-source"
+    (package / "src").mkdir(parents=True)
+    (package / "src" / "app.py").write_text("print('fixture')\n", encoding="utf-8")
+    (package / "README.txt").write_text("fixture\n", encoding="utf-8")
+
+    manifest_path = generate_portable_source_manifest(
+        package, snapshot_updated_at="2026-07-23T18:08:06+00:00"
+    )
+    first = manifest_path.read_bytes()
+    payload = json.loads(first)
+    generate_portable_source_manifest(
+        package, snapshot_updated_at="2026-07-23T18:08:06+00:00"
+    )
+
+    assert manifest_path.parent == package
+    assert manifest_path.read_bytes() == first
+    assert b"\r\n" not in first
+    assert [item["path"] for item in payload["files"]] == [
+        "README.txt",
+        "src/app.py",
+    ]
+
+
 @pytest.mark.parametrize(
     ("entry", "expected_reason"),
     [
@@ -281,6 +310,7 @@ def test_build_scripts_are_clean_by_default_and_fail_closed():
         assert "ausl_batting_splits.xlsx" not in lowered
         assert "ausl_team_context.xlsx" in lowered
         assert "generate_distribution_manifest.py" in lowered
+        assert "generate_portable_source_manifest.py" in lowered
         assert "refresh_attempt.json" in lowered
         assert "param([switch]$noninteractive)" in "".join(lowered.split())
         assert "if(-not$noninteractive)" in "".join(lowered.split())

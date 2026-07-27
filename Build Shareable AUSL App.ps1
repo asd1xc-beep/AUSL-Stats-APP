@@ -146,6 +146,11 @@ for an unknown downloaded file. This version should avoid the higher-risk
 pattern of an unsigned, bundled executable inside a ZIP.
 "@ | Set-Content -Path $sourceReadme -Encoding UTF8
 
+& $python (Join-Path $PSScriptRoot "tools\generate_portable_source_manifest.py") $sourcePackage
+if ($LASTEXITCODE -ne 0) {
+    throw "Portable source manifest generation failed with exit code $LASTEXITCODE."
+}
+
 $sourceZip = Join-Path $PSScriptRoot "dist\AUSL-Broadcast-Stats-Safer-No-EXE.zip"
 if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }
 Confirm-CleanDistribution -Targets @($sourcePackage)

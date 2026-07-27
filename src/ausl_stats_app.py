@@ -2861,7 +2861,9 @@ class AUSLStatsApp:
         self._log_event("data_update_started", source="official_ausl_core_data")
 
         def progress(message):
-            self._post_main_thread(self.status_var.set, message)
+            self._post_main_thread(
+                self._set_data_update_progress, message, cancel_token
+            )
 
         def work():
             try:
@@ -2882,6 +2884,11 @@ class AUSLStatsApp:
 
     def _data_update_token_is_current(self, token):
         return token is not None and token is getattr(self, "_data_update_cancel_token", None)
+
+    def _set_data_update_progress(self, message, token):
+        if not self._data_update_token_is_current(token):
+            return
+        self.status_var.set(message)
 
     def cancel_data_update(self):
         """Cancel an in-flight Quick Refresh immediately.
