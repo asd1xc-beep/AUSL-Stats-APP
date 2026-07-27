@@ -1608,8 +1608,7 @@ class AUSLStatsApp:
     def _build_game_day(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
-        parent.rowconfigure(2, weight=1)
-        parent.rowconfigure(3, weight=2)
+        parent.rowconfigure(1, weight=1)
 
         status = ttk.Frame(parent)
         status.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
@@ -1644,6 +1643,21 @@ class AUSLStatsApp:
             style="Offline.TCheckbutton",
         ).grid(row=0, column=3, padx=(12, 0))
 
+        self.game_day_views = ttk.Notebook(parent)
+        self.game_day_views.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="nsew",
+        )
+        facts_view = ttk.Frame(self.game_day_views, padding=4)
+        readiness_view = ttk.Frame(self.game_day_views, padding=4)
+        self.game_day_views.add(facts_view, text="Air-Ready Facts")
+        self.game_day_views.add(readiness_view, text="Readiness Details")
+        readiness_view.columnconfigure(0, weight=1)
+        readiness_view.rowconfigure(1, weight=1)
+        self._build_fact_panel(facts_view)
+
         self.game_day_selected_var = tk.StringVar(
             value="No official game selected."
         )
@@ -1668,8 +1682,8 @@ class AUSLStatsApp:
             ("Verification queue", self.game_day_verification_var, 2, 0),
             ("Producer packet", self.game_day_packet_var, 2, 1),
         )
-        cards = ttk.Frame(parent)
-        cards.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        cards = ttk.Frame(readiness_view)
+        cards.grid(row=0, column=0, sticky="nsew")
         cards.columnconfigure(0, weight=1)
         cards.columnconfigure(1, weight=1)
         for title, variable, row, column in sections:
@@ -1688,8 +1702,8 @@ class AUSLStatsApp:
                 wraplength=500,
             ).pack(fill="x")
 
-        bottom = ttk.Frame(parent)
-        bottom.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        bottom = ttk.Frame(readiness_view)
+        bottom.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         bottom.columnconfigure(0, weight=3)
         bottom.columnconfigure(1, weight=2)
         bottom.rowconfigure(0, weight=1)
@@ -1737,16 +1751,14 @@ class AUSLStatsApp:
             wraplength=350,
         ).pack(fill="x", pady=(8, 0))
 
-        self._build_fact_panel(parent)
-
     def _build_fact_panel(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
         panel = ttk.LabelFrame(parent, text="Air-Ready Facts", padding=6)
         panel.grid(
-            row=3,
+            row=0,
             column=0,
-            columnspan=2,
             sticky="nsew",
-            pady=(8, 0),
         )
         panel.columnconfigure(0, weight=1)
         panel.rowconfigure(1, weight=1)
