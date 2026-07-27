@@ -1,6 +1,6 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 Project source reviewed: `AUSL_BROADCAST_STATS_project_backup_2026-07-18_223756.zip`  
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -39,16 +39,18 @@ deterministic and recoverable (bounded timeouts, retry/backoff, real
 cancellation, per-source health, deterministic cleanup) before starting
 Phase 6's producer-speed UX work.
 
-Current implementation unit: `REFRESH-006` (mid-flight cancellation). With
-this pass, all of `REFRESH-001` through `REFRESH-006` and `HEALTH-001`/
-`HEALTH-002` are `[x]` COMPLETE — the Phase 5 refresh-resilience slice of
-Milestone 4 is code-complete. Phase 6's producer-speed items (`UX-001`
-through `UX-005`) remain `PLANNED`/`BACKLOG` and have not been started.
+Current implementation unit: Phase 5 stabilization. All of `REFRESH-001`
+through `REFRESH-006` and `HEALTH-001`/`HEALTH-002` are `[x]` COMPLETE and
+now cover the stated production behavior, including adversarial cancellation
+serialization, same-URL PDF revisions, persistent latest-attempt health,
+checked-in distribution integrity, and cross-platform CI. Phase 6's
+producer-speed items (`UX-001` through `UX-005`) remain
+`PLANNED`/`BACKLOG` and have not been started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **CODE-COMPLETE — PHASE 5 REFRESH RESILIENCE (MILESTONE 4 SLICE) — 2026-07-25 — NOT YET PRODUCER-SIGNED-OFF (Gate C pending a human rehearsal)**
+Status: **PHASE 5 STABILIZATION COMPLETE — 2026-07-27 — TRUCK-HARDWARE SMOKE AND PRODUCER REHEARSAL COMPLETION ARE PROJECT-OWNER REPORTED — PHASE 6 NOT STARTED**
 
 ## Master improvement list
 
@@ -260,21 +262,43 @@ Required identity regressions:
 
 - [x] `REFRESH-002` — Stage, validate, and atomically promote each source. **P0 · COMPLETE**
   - Validate schema, row count, unique keys, season, and value ranges.
+  - A process-local commit lock now serializes the complete core
+    workbook-and-manifest stage/promotion transaction. A cancelled worker
+    rechecks its token immediately after acquiring the lock; a worker already
+    inside may finish coherently, and a newer replacement commits afterward.
 
 - [x] `REFRESH-003` — Preserve last-known-good data after optional-source failure. **P0 · COMPLETE**
   - A failed optional source must not replace a valid workbook with an empty one.
+  - Failed core refreshes also retain every validated core byte and the
+    snapshot manifest; their latest-attempt outcome is written separately and
+    atomically to nonprivate `refresh_attempt.json`.
 
 - [x] `REFRESH-004` — Add a per-source health manifest. **P1 · COMPLETE**
   - Track attempt/success time, row count, content hash/ETag, status, error, fallback, and parser version.
 
 - [x] `REFRESH-005` — Cache and incrementally process unchanged PDFs. **P1 · COMPLETE**
-  - Official game-note PDFs are hashed after download; an unchanged hash reuses its cached parsed rows instead of a second `PdfReader` pass.
+  - Every deliberate full enrichment refresh revalidates official game-note
+    PDFs at the same URL. Unchanged bytes reuse cached parsed rows without a
+    second `PdfReader` pass; revised bytes parse from a temporary candidate and
+    replace the PDF/cache only after validation. Download/parse failures retain
+    the last-known-good PDF/cache. The media-guide path follows the same
+    candidate-before-promotion rule.
 
 - [x] `REFRESH-006` — Add bounded timeouts, retry/backoff, cancellation, and deterministic cleanup. **P1 · COMPLETE**
   - Bounded timeouts and deterministic single-flight cleanup were already in place (`SAFE-002`/`LIVE-001`). Bounded retry/backoff on transient network failures was added in the 2026-07-24 pass. This pass closes the remaining gap: real mid-flight cancellation. A `CancelToken`/`RefreshCancelled` pair in `ausl_data.py` is threaded through `_fetch_with_retry`, `_get_json`, `_get_text`, `_download_file`, `fetch_standings_frame`, `fetch_schedule_frame`, `update_all_data`, and `fetch_live_game`; cancellation is checked before every attempt and during the retry backoff wait (`Event.wait` instead of `time.sleep`), so a cancelled job stops retrying immediately instead of working through its full timeout/retry budget, and `update_all_data` re-checks cancellation once more immediately before staging/promotion so a cancelled Quick Refresh can never write or promote a partial result. In `ausl_stats_app.py`, `cancel_data_update()`/`cancel_live_refresh()` (wired to new Cancel buttons, a game change, and app shutdown) give each job a token/token-identity check so a late success/error/cancelled callback from an abandoned background thread is a safe no-op rather than a promotion or a crash. Python/`urllib` offer no safe way to force-abort a call already inside `urlopen`; this is a cooperative design (documented in `CancelToken`'s docstring) rather than a raw socket-level abort — see the change-log entry below for what that means in practice.
+  - The 2026-07-27 stabilization closes the cancellation/promote race left by
+    immediately re-enabling Quick Refresh: deterministic two-worker tests now
+    prove no overlapping stage/promotion, harmless late callbacks, coherent
+    disk/in-memory data, newer-refresh-wins ordering, and cleanup on every exit.
 
 - [x] `HEALTH-001` — Add visible per-source freshness and green/yellow/red health. **P1 · COMPLETE**
-  - The color/marker/text health strip already existed in the UI, but the data layer could only ever emit green or red — yellow was unreachable. The manifest builder now carries forward the previous successful timestamp for each optional/enrichment source and reports yellow ("usable last-known-good, aging") while that data is within a 24-hour freshness target, and red once it ages out or nothing has ever been promoted. This carry-forward is scoped to the three optional/enrichment sources; a core-source failure still fails the whole refresh closed before any manifest is written (`REFRESH-003`), so yellow is not reachable there by design.
+  - The snapshot manifest describes the installed last-known-good data;
+    `refresh_attempt.json` separately persists latest attempt
+    success/failure/cancellation, timestamp, safe error summary, and affected
+    source. The UI can now say "Stored snapshot valid; latest refresh failed,"
+    cancellation is not a source failure, restart preserves the state, and a
+    later success clears it. The checked-in offline manifest contains usable
+    source health instead of UNKNOWN.
 
 - [x] `HEALTH-002` — Display live feed `lastUpdated`, connection state, and staleness. **P0 · COMPLETE**
 - [ ] `REFRESH-007` — Add an explicit Local/Offline Mode toggle. **P2 · PLANNED**
@@ -421,13 +445,37 @@ Fill in one record when a milestone or major item is completed.
 
 ### Milestone 4 — Resilient refresh and producer UX
 
-- Completion date: 2026-07-25 (`REFRESH-006` only; Milestone 4 covers only `REFRESH-004` through `REFRESH-006`, `HEALTH-001`/`HEALTH-002`, and Phase 6's producer-speed items, so this record reflects the Phase 5 refresh-resilience slice of Milestone 4, not the still-`PLANNED`/`BACKLOG` Phase 6 UX items.)
-- Source version/commit: `b30e97472662e2edc751aa8e82a29a5187fd13fc` on branch `claude/refresh-006-mid-flight-cancel-125ykx`, following the 2026-07-24 `REFRESH-004`/`REFRESH-005`/`HEALTH-001` pass.
-- Automated test command and result: focused suites `python -m pytest -q tests/test_refresh_cancellation.py tests/test_app_refresh_cancellation.py` — 28 passed (13 `ausl_data` cancellation-primitive/`update_all_data`/`fetch_live_game` tests, 15 app-layer `cancel_data_update`/`cancel_live_refresh` tests). Full offline suite `python -m pytest -q` (and again with `-W error`) — 415 passed, plus the same 3 pre-existing failures and 14 pre-existing errors caused by Git LFS pointer files (not real `.xlsx` bytes) in this sandbox clone, confirmed unrelated to this change and unchanged before/after (see the change-log entry below). `python -m compileall -q src tests tools` passed. `pip check` reported no broken requirements in this sandbox's environment (see the change-log entry for the camelot-py/pypdf note).
-- Refresh failure/staleness checks: covered by the existing `REFRESH-002`/`REFRESH-003`/`HEALTH-001` tests (unchanged by this pass) plus the new cancellation tests, which specifically assert that a cancelled `update_all_data` call writes nothing to the export directory (checkpoints before the roster/stats loop, mid-loop, and immediately before staging) and that a cancelled/superseded live or Quick Refresh callback never promotes into `app.db`/`app.live_game`.
-- Rehearsal result: a real Tkinter smoke ran under Xvfb on this Linux sandbox (not a Windows machine) — see the change-log entry for exactly what it exercised. No producer rehearsal has occurred; this is code-complete verification only.
-- Known limitations remaining: cancellation is cooperative, not a raw socket abort — an already-in-flight single `urlopen` call cannot be forcibly killed by Python/`urllib`, so if a job is cancelled while genuinely blocked on the network (not merely between retries), the app's UI and in-flight state free up immediately, but the abandoned OS-level request may continue running in its daemon thread until it naturally completes or times out before being discarded; this is documented on `CancelToken`. `REFRESH-004`/`REFRESH-005`/`HEALTH-001` limitations from 2026-07-24 are unchanged. Phase 6 producer-speed items (`UX-001` through `UX-005`) remain `PLANNED`/`BACKLOG` and are not part of this record. No producer acceptance rehearsal has occurred; Gate C is not met.
-- Verified by: Codex failing-first offline tests (`ausl_data`-layer and app-layer), full regression/compile/dependency gates, and a no-network Linux/Xvfb Tkinter smoke; not yet producer-signed-off.
+- Completion date: 2026-07-27 for the Phase 5 stabilization slice. Phase 6
+  producer-speed UX remains outside this record and has not started.
+- Source version/commits: functional stabilization commits
+  `4967f5b31280ed67241a2e20385cbd0d4ae5ae4e` and
+  `b22ea3a067f8584cd174684e611e98e9fcae275f` on
+  `agent/phase5-stabilization`, based on remote `main`
+  `0a52db18cb98e0603e0cc6fd7222a23719e4d5ba`.
+- Automated result: `.venv\Scripts\python.exe -W error -m pytest -q` —
+  **458 passed in 12.19 s**. `python -m compileall -q src tests tools` passed;
+  `python -m pip check` reported no broken requirements;
+  `python tools\verify_distribution.py data\exports` reported
+  `Clean distribution verified`. The checked-in Git LFS workbooks are real
+  XLSX bytes.
+- Failing-first evidence: the future-season file produced 7 intended
+  failures before 12/12 passed; the same-URL PDF, serialized commit,
+  latest-attempt health, portable-manifest, and checked-in-distribution
+  regressions all failed against the prior implementation before passing.
+- Rehearsal result: truck-hardware smoke testing and producer rehearsal are
+  recorded as completed based on the project owner's report. Hardware,
+  scaling, date, and detailed behavior were not supplied and are not invented
+  here. Codex's focused GUI cancellation/queue smoke result is recorded in the
+  2026-07-27 change-log entry.
+- Known limitations remaining: cancellation is cooperative rather than a raw
+  socket abort, so one request already inside `urlopen` may live until its
+  bounded timeout; official source facts remain producer-verified before air;
+  optional enrichment remains developer-only/approval-gated; the checked-in
+  snapshot is dated 2026-07-23; Phase 6 items remain
+  `PLANNED`/`BACKLOG`.
+- Verified by: Codex failing-first offline tests, full
+  regression/compile/dependency/distribution gates, focused GUI smoke, and the
+  project owner's report for truck-hardware smoke/rehearsal completion.
 
 ## Producer-meeting questions to preserve
 
@@ -541,3 +589,55 @@ When working on this tracker:
   - Smoke test: **not a Windows smoke** — this sandbox is Linux. A real Tkinter smoke ran under `xvfb-run` (Xvfb was available in this sandbox), driving the actual `AUSLStatsApp` class, its real `threading.Thread` worker, the real Tk event loop, and the real `cancel_data_update()`/Cancel-Refresh-button code path, with `update_all_data` stubbed to block until released (simulating a stalled network call; no real network request was made). It confirmed: the UI stays responsive (the Tk event loop keeps pumping) while the job is blocked; cancelling frees the in-flight flag and re-enables the button immediately, before the blocked call returns; `app.db`/freshness text are untouched by the cancel; repeated cancel calls are harmless; and the abandoned thread's late `RefreshCancelled`, once released, is a silent no-op that does not promote or crash. Confirmed reliable across 5 repeated runs. This is real-GUI verification on this platform, not a substitute for the Windows/Tkinter rehearsal the project's smoke tests otherwise run on.
   - Commit: `b30e97472662e2edc751aa8e82a29a5187fd13fc` on branch `claude/refresh-006-mid-flight-cancel-125ykx`. **Push to `origin` failed**: `git push -u origin claude/refresh-006-mid-flight-cancel-125ykx` returned a persistent `403` from this session's local git proxy (`http://127.0.0.1:41729/...`) on four attempts with exponential backoff; the commit exists locally but has not reached the remote as of this entry. This needs a human/session-owner to grant push access or push the branch manually.
   - Scope: only `REFRESH-006` was touched. `SPLIT-001/002/003`, `NOTE-004`, `UI-001/002/003`, `UX-001/002/003`, `SEARCH-004`, and Phase 6/7 items were not started and remain exactly `PLANNED`/`BACKLOG` as before. No redesign was performed; the existing one-job-per-source model, `_fetch_with_retry`'s bounded timeout/retry shape, and REFRESH-002's atomic staging/promotion are unchanged in structure.
+
+### 2026-07-27
+
+- Completed the focused Phase 5 stabilization pass from remote `main`
+  `0a52db18cb98e0603e0cc6fd7222a23719e4d5ba` on
+  `agent/phase5-stabilization`.
+  - Applied the attached future-season patch once; failing-first coverage
+    produced 7 expected failures before all 12 year regressions passed. Removed
+    the obsolete root patch artifacts after verifying their source changes.
+  - Closed the P0 cancelled-refresh race with one serialized core commit
+    section and a cancellation check immediately after lock acquisition.
+    Deterministic two-worker tests force both orderings and verify that the
+    newer refresh owns the final workbooks, manifest, and loaded database.
+  - Revalidated game-note PDFs on every deliberate full refresh. Same bytes
+    reuse parsed rows; revised bytes parse as a temporary candidate; download,
+    invalid-PDF, and parse failure retain the last-known-good PDF/cache. The
+    media-guide path now uses the same promote-after-parse rule.
+  - Separated snapshot health from `refresh_attempt.json`, with atomic,
+    stale-worker-safe persistence for success/failure/cancellation. The
+    checked-in snapshot now has usable source health.
+  - Repaired deterministic distribution metadata, verified real Git LFS XLSX
+    bytes, removed the historical root `portable_source_manifest.json`, and
+    generate portable-source manifests only inside release output.
+  - Added Python 3.12 Windows/Linux GitHub Actions validation with Git LFS
+    checkout, pinned dependency install, `pip check`, `compileall`, the
+    warnings-as-errors offline suite, and checked-in distribution verification.
+  - Functional commits:
+    `4967f5b31280ed67241a2e20385cbd0d4ae5ae4e` and
+    `b22ea3a067f8584cd174684e611e98e9fcae275f`.
+- Failing-first evidence also exposed one GUI-only stale progress callback:
+  the cancelled worker could overwrite the queued replacement's waiting
+  message. Two regressions failed before progress callbacks were token-gated.
+- Final automated result:
+  `.venv\Scripts\python.exe -W error -m pytest -q` —
+  **458 passed in 12.19 s**; targeted refresh/PDF/health/build/year suites
+  passed; `compileall`, `pip check`, distribution verification, and
+  `git diff --check` passed.
+- Windows GUI smoke: the self-driving no-network real Tk loop passed on
+  `Windows-10-10.0.19045-SP0`. It started a blocked refresh, remained
+  responsive, cancelled it, immediately started a replacement, displayed the
+  queued/waiting state, resolved both workers, showed no dialog, restored
+  button state, loaded the replacement, and matched the in-memory manifest
+  timestamp to disk. Computer Use located the window, but Windows Graphics
+  Capture failed with `SetIsBorderRequired ... No such interface supported`;
+  the repeatable Tk harness was used rather than guessing coordinates.
+- Truck-hardware smoke testing and producer rehearsal are recorded as completed
+  based on the project owner's report. No unsupplied hardware, scaling, date,
+  or behavioral details are asserted.
+- Remaining limitations: cancellation does not forcibly abort one `urlopen`
+  already inside its bounded timeout; optional enrichment remains
+  developer-only and approval-gated; checked-in facts are dated 2026-07-23 and
+  require verification before air. Phase 6 has not started.

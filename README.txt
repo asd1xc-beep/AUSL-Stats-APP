@@ -5,15 +5,25 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-4 and the independent Phase 4 stability corrections are implemented
-for internal testing and producer rehearsal. Official game selection now owns
-the visible matchup, lineup, packet, notes, and live-feed identity. Lineups are
-validated before saving, media identity is approval-gated, and core refreshes
-promote as one rollback-capable snapshot.
+Phases 1-5, including the focused Phase 5 stabilization pass, are complete at
+functional commits 4967f5b31280ed67241a2e20385cbd0d4ae5ae4e and
+b22ea3a067f8584cd174684e611e98e9fcae275f. The complete offline suite
+passes 458 tests with warnings treated as errors; compileall, pip check, and
+checked-in distribution verification also pass. The
+future-season year-generalization patch was applied once and its 12 dedicated
+regressions pass.
 
-This is not yet a candidate for unattended live-broadcast use. Broader
-per-source health UI, refresh cancellation/retry policy, target-hardware smoke
-testing, and producer sign-off remain Phase 5 release gates.
+Truck-hardware smoke testing and producer rehearsal are recorded as completed
+based on the project owner's report. No hardware model, display scaling,
+rehearsal date, or additional observed behavior is asserted here because those
+details were not supplied.
+
+Phase 6 producer-UX work has not started. This remains an assisted broadcast
+tool, not a candidate for unattended on-air use: source facts, official
+lineups, availability, and milestones still require producer verification.
+Cancellation is cooperative while a single urllib request is inside its
+bounded timeout, although cancelled/superseded jobs cannot overlap core
+commits or replace a newer coherent snapshot.
 
 FIRST-TIME SETUP
 Double-click:
@@ -100,10 +110,17 @@ Packaged official-data workbooks are a dated offline-startup snapshot, not a
 claim that the facts are current. Check the visible source/freshness/VERIFY
 labels and refresh official data before production use.
 
+Snapshot health and latest-attempt health are separate. update_manifest.json
+describes the installed last-known-good snapshot. refresh_attempt.json records
+the latest refresh outcome atomically without replacing a validated snapshot
+after a failure. The UI distinguishes "stored snapshot valid" from "latest
+refresh failed"; cancellation is not reported as a source failure, and a later
+success clears the failed-attempt state.
+
 STORYLINE / ENRICHMENT DATA
-Optional development refreshes can import official AUSL split stats, the 2026
-AUSL Media Guide PDF, official game notes, and a storyline source registry for
-isolated review. These are saved under:
+Optional development refreshes can import official AUSL split stats, the media
+guide for the latest configured season, official game notes, and a storyline
+source registry for isolated review. These are saved under:
   data\exports\ausl_batting_splits.xlsx
   data\exports\ausl_pitching_splits.xlsx
   data\exports\ausl_fielding_splits.xlsx
@@ -117,7 +134,7 @@ isolated review. These are saved under:
   data\exports\official_game_notes.xlsx
 
 The cached media guide PDF is saved to:
-  data\sources\2026-AUSL-Media-Guide.pdf
+  data\sources\<configured-season>-AUSL-Media-Guide.pdf
 
 The default loader ignores these optional workbooks. Even in explicit
 development mode, a row is excluded from air-ready media, split, and game-note
@@ -127,10 +144,10 @@ only for local debugging/search and are excluded from distributable builds.
 Official game notes PDFs listed on the AUSL schedule are cached under:
   data\sources\game_notes
 
-Registered enrichment sources include the 2026 AUSL Media Guide, AUSL news,
-MLB AUSL news, draft/Golden Ticket pages, college/award sources, and manual
-producer notes. Treat those as context layers unless verified against official
-game notes.
+Registered enrichment sources include the configured season's AUSL Media
+Guide, AUSL news, MLB AUSL news, draft/Golden Ticket pages, college/award
+sources, and manual producer notes. Treat those as context layers unless
+verified against official game notes.
 
 LIVE GAME
 Choose an official game from Game Setup. Its authoritative game ID is copied
@@ -209,10 +226,14 @@ allowlist:
   data\exports\ausl_career_stats.xlsx
   data\exports\ausl_team_context.xlsx
   data\exports\update_manifest.json
+  data\exports\refresh_attempt.json
   data\exports\distribution_manifest.json
 
 The generated distribution manifest records source snapshot freshness plus the
-SHA-256 digest, byte count, and validation state for each core workbook.
+SHA-256 digest, byte count, and validation state for each core workbook and
+the nonprivate latest-attempt record. portable_source_manifest.json is not an
+authoritative live-repository file; it is generated only inside portable
+source release output.
 Distributable builds exclude media-guide, official-game-note, split-stat, and
 storyline enrichment until those later validation gates pass. They also exclude
 manual notes, lineup locks, producer game packets, logs, credentials, caches,
@@ -228,11 +249,16 @@ and credential-like fields are deliberately excluded.
 
 OFFLINE TESTING
 After first-time setup, run from the project folder:
-  .venv\Scripts\python.exe -m pytest -q
+  .venv\Scripts\python.exe -W error -m pytest -q
+
+Also verify the checked-in distributable snapshot:
+  .venv\Scripts\python.exe tools\verify_distribution.py data\exports
 
 The pytest suite blocks live network access and uses small checked-in fixtures.
-Run syntax checks with:
-  .venv\Scripts\python.exe -m py_compile src\ausl_data.py src\ausl_logging.py src\ausl_stats_app.py
+GitHub Actions runs the same offline suite on Python 3.12 for Windows and
+Linux, checks Git LFS workbook content, runs pip check and compileall, and
+verifies the checked-in distribution. Run syntax checks locally with:
+  .venv\Scripts\python.exe -m compileall -q src tests tools
 
 Broadcast reminder: imported and live feed values should be verified against
 the official game book before being aired.
