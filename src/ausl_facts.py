@@ -1153,10 +1153,10 @@ def _lineup_facts(
             continue
         player_id = player["_player_id"]
         player_name = _text(player.get("player_name"))
-        if approval_complete and roster_state is VerificationState.VERIFIED:
+        if approval_complete:
             category = FactCategory.CONFIRMED_STARTER
-            state = VerificationState.VERIFIED
-            warning = ""
+            state = roster_state
+            warning = roster_warning
             source_name = _text(approval.get("source_name"))
             source_reference = _text(approval.get("source_id"))
             approval_id = source_reference
@@ -1164,12 +1164,15 @@ def _lineup_facts(
         else:
             category = FactCategory.PROJECTED_STARTER
             state = VerificationState.VERIFY
-            warning = (
-                roster_warning
-                or "Saved projected/manual/imported starter is not official."
-                if not official
-                else "Official starter claim lacks complete approval provenance."
-            )
+            if official:
+                warning = (
+                    "Official starter claim lacks complete approval provenance."
+                )
+            else:
+                warning = (
+                    roster_warning
+                    or "Saved projected/manual/imported starter is not official."
+                )
             source_name = f"{source.title() or 'Saved'} lineup"
             source_reference = (
                 f"local:locked_lineups.json#game={game_id}&side={side}"
@@ -1207,7 +1210,8 @@ def _lineup_facts(
                 verification_state=state,
                 source_health=roster_health,
                 warning_reason=warning,
-                producer_confirmation_required=not approval_complete,
+                producer_confirmation_required=state
+                is not VerificationState.VERIFIED,
                 readiness_blocking=True,
                 evidence=(
                     ("lineup_source", source),

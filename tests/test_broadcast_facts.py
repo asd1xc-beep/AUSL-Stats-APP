@@ -414,6 +414,44 @@ def test_official_lineup_requires_complete_approval_provenance():
     )
 
 
+def test_approved_official_starter_keeps_identity_but_stale_health_blocks_air():
+    official = {
+        "game_id": "1042",
+        "source": "official",
+        "locked_at": SNAPSHOT,
+        "official_provenance": {
+            "verified": True,
+            "source_name": "Official lineup card",
+            "source_id": "lineup-1042-r3",
+            "verified_at": SNAPSHOT,
+            "verified_by": "Producer A",
+        },
+        "lineups": {
+            "away": {"starting_pitcher": "11", "lineup": []},
+            "home": {"starting_pitcher": "22", "lineup": []},
+        },
+    }
+
+    collection = build_selected_game_facts(
+        database(health="yellow"),
+        game(),
+        lineup_lock=official,
+    )
+    starters = [
+        item
+        for item in collection.facts
+        if item.source_record_identity.startswith("lineup:")
+    ]
+    assert len(starters) == 2
+    assert all(
+        item.category is FactCategory.CONFIRMED_STARTER for item in starters
+    )
+    assert all(
+        item.verification_state is VerificationState.STALE for item in starters
+    )
+    assert all(not item.air_ready for item in starters)
+
+
 def test_inactive_reserve_and_unknown_status_keep_warning():
     collection = build_selected_game_facts(database(), game())
     reserve = next(
