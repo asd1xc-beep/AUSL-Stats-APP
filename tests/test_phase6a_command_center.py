@@ -270,4 +270,3 @@ def test_lineup_delete_refreshes_dashboard():
     app.clear_locked_lineups()
 
     assert events == ["dashboard"]
-

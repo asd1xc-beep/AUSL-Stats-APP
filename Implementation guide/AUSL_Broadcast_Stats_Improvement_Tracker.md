@@ -32,25 +32,23 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 4 — Resilient refresh and producer UX (Phase 5 slice)
+### Milestone 4 — Resilient refresh and producer UX (Phase 6A slice)
 
-Target outcome for the current phase: make background refresh/live work
-deterministic and recoverable (bounded timeouts, retry/backoff, real
-cancellation, per-source health, deterministic cleanup) before starting
-Phase 6's producer-speed UX work.
+Target outcome for the current phase: make the selected official game the
+producer's compact operational home, derive one honest Ready-for-Air result,
+and provide an explicit network-request lockout without weakening Phase 5's
+refresh, health, or cancellation protections.
 
-Current implementation unit: Phase 5 stabilization. All of `REFRESH-001`
-through `REFRESH-006` and `HEALTH-001`/`HEALTH-002` are `[x]` COMPLETE and
-now cover the stated production behavior, including adversarial cancellation
-serialization, same-URL PDF revisions, persistent latest-attempt health,
-checked-in distribution integrity, and cross-platform CI. Phase 6's
-producer-speed items (`UX-001` through `UX-005`) remain
-`PLANNED`/`BACKLOG` and have not been started.
+Current implementation unit: Phase 6A. `UX-001`, `UX-009`, and `REFRESH-007`
+are `[x]` COMPLETE with pure readiness policy, exact-game synchronization,
+game-aware live severity, packet/lineup identity checks, honest unavailable
+verification state, and centralized Local/Offline Mode guards. Phase 6B
+through 6F remain `PLANNED`/`BACKLOG` and have not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 5 STABILIZATION COMPLETE — 2026-07-27 — TRUCK-HARDWARE SMOKE AND PRODUCER REHEARSAL COMPLETION ARE PROJECT-OWNER REPORTED — PHASE 6 NOT STARTED**
+Status: **PHASE 6A COMPLETE — 2026-07-27 — PHASE 6B THROUGH 6F NOT STARTED**
 
 ## Master improvement list
 
@@ -301,13 +299,22 @@ Required identity regressions:
     source health instead of UNKNOWN.
 
 - [x] `HEALTH-002` — Display live feed `lastUpdated`, connection state, and staleness. **P0 · COMPLETE**
-- [ ] `REFRESH-007` — Add an explicit Local/Offline Mode toggle. **P2 · PLANNED**
+- [x] `REFRESH-007` — Add an explicit Local/Offline Mode toggle. **P2 · COMPLETE**
   - While enabled, guarantees no refresh attempt or network-related UI notification fires, for use during producer-designated live windows (e.g., final two minutes before first pitch, an active half-inning). Complements Phase 5's failure-safe refresh with an explicit guarantee rather than relying on failure behavior alone.
+  - The shared producer-facing network guard blocks core and manual live
+    refreshes before a token, timer, or worker is created. Enabling the mode
+    cancels existing core/live tokens, cancels the owned live timer, prevents
+    rescheduling, invalidates late callbacks, and leaves local workflows
+    enabled. Disabling it never starts a request.
 
 ### L. Producer-speed improvements
 
-- [ ] `UX-001` — Add a compact selected-game dashboard. **P2 · PLANNED**
+- [x] `UX-001` — Add a compact selected-game dashboard. **P2 · COMPLETE**
   - Teams/records, game time/venue/status, data health, lineup state/age, live state, and verification count.
+  - Implemented as the first `Game Day` tab. It additionally shows exact
+    schedule/lineup/live/packet game IDs, snapshot versus latest-attempt
+    health, packet lineup revision/source, and an honest `Unavailable` scoped
+    verification count when optional review data is not loaded.
 
 - [ ] `UX-002` — Add air-ready fact cards with concise copy, context, source, freshness, and verification state. **P2 · PLANNED**
 
@@ -326,8 +333,13 @@ Required identity regressions:
 - [ ] `UX-008` — Add session/crash recovery for producer working state. **P1 · PLANNED**
   - Autosave and restore selected game, pinned/used-fact queue, and scroll position. Distinct from lineup-lock and manual-note storage, which are already atomic-written; this protects in-progress prep, not source data.
 
-- [ ] `UX-009` — Add a "Ready for Air" readiness indicator and pregame checklist. **P2 · PLANNED**
+- [x] `UX-009` — Add a "Ready for Air" readiness indicator and pregame checklist. **P2 · COMPLETE**
   - Roll up data health, lineup-lock state, and verification count into one status; checklist covers rosters confirmed, lineups locked, packet generated, live feed connected. Extends `UX-001`.
+  - `GameDayReadiness` is derived by one pure aggregator; Tkinter renders it
+    without independently storing or editing readiness. Blocking failures
+    always produce `NOT READY`; warning/unavailable state produces
+    `NEEDS ATTENTION`; only all applicable passes produce `READY FOR AIR`.
+    There is no force-green control.
 
 - [ ] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · PLANNED**
   - Edit-distance or phonetic tolerance on player-name queries; must not introduce false-positive collisions between distinct players. A tolerance improvement to `SEARCH-004`, not a new search mode.
@@ -391,6 +403,67 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 6A — Game-day command center, readiness, and Local/Offline Mode
+
+- Completion date: 2026-07-27.
+- Starting commit: remote `main`
+  `19f2702266883e76bcd439c25044e01b98017daa`, which includes the merged
+  Phase 5 stabilization pass.
+- Branch and final functional commits: `agent/phase6a-command-center`;
+  readiness policy `0eeefa36b579fbf1a89a8222e3ad3585fffb23c2`;
+  command center/Offline Mode
+  `0c994a1a94be5539e226cb641c984b3a4fe58356`. The documentation commit
+  containing this acceptance record is reported in the Phase 6A PR.
+- Automated acceptance:
+  - focused Phase 6A plus selected-game, lineup, refresh, health, staging,
+    cancellation, live, packet, callback, privacy, portable-build, and
+    future-season command — **207 passed in 3.03 s**;
+  - full offline warnings-as-errors command
+    `.venv\Scripts\python.exe -W error -m pytest -q` —
+    **491 passed in 12.19 s**;
+  - `compileall`, `pip check`, checked-in distribution verification, Git LFS
+    verification, whitespace validation, and tracked/history secret scans
+    passed in the final acceptance run.
+- Windows GUI smoke: deterministic source-app/real-Tk smoke passed on
+  `Windows-10-10.0.19045-SP0` at exactly `1120x720`. It began with no selected
+  game, selected exact Game 914, saved a projected lineup without promoting it
+  to ready, generated a revision-matched packet, enabled Offline Mode, proved
+  core/live refresh and timer routes made zero requests, changed to Game 915
+  and cleared old lineup/packet/live state, disabled Offline Mode without a
+  request, closed, and relaunched in a separate process. Relaunch defaulted
+  Offline Mode off and recovered only the exact-game local lineup/packet
+  artifacts in the isolated smoke directory. No production data or private
+  producer files were written.
+- Computer Use inspection: the skill found and activated the exact smoke
+  window. Windows Graphics Capture failed twice with
+  `SetIsBorderRequired ... No such interface supported (0x80004002)`, so no
+  coordinate guesses were made; layout acceptance comes from the asserted
+  real-Tk minimum-size harness.
+- Producer-visible changes: first-tab `Game Day` command center; one prominent
+  `READY FOR AIR`/`NEEDS ATTENTION`/`NOT READY` result; plain-language ordered
+  checklist; exact schedule/lineup/live/packet identity and freshness; snapshot
+  versus latest-attempt health; honest scoped verification state; and a
+  persistent visible Local/Offline Mode control beside refresh and inside the
+  dashboard.
+- Readiness policy: any blocking failure wins; warnings cannot be
+  acknowledged into verified state; unknown never passes; official lineup
+  provenance requires the existing complete canonical evidence; projected,
+  manual, and imported lineups remain warnings; a feed or schedule reporting a
+  live game makes stale/disconnected exact-game live data blocking; pregame
+  disconnection is a warning; packets must match exact game and current lineup
+  revision; there is no stored or editable force-green Boolean.
+- Known limitations: the normal core-only loader intentionally does not load
+  optional verification rows, so its scoped verification count displays
+  `Unavailable` rather than a misleading zero and prevents a green state until
+  reliable reviewed context is available. `urllib` cancellation remains
+  cooperative during one bounded in-flight call. Existing packet and lineup
+  files are used for restart display; broader session/crash recovery is
+  deferred.
+- Intentionally deferred: Phase 6B fact cards; Phase 6C pinned rundown,
+  read-time, and used-on-air flow; Phase 6D session recovery; Phase 6E change
+  comparison; Phase 6F fuzzy search and player comparison. No Phase 6B–6F
+  storage or UI was implemented.
 
 ### Milestone 1 — Broadcast-safety foundation
 
