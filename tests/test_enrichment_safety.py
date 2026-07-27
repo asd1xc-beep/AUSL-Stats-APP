@@ -117,7 +117,14 @@ def test_core_refresh_neither_fetches_nor_writes_optional_enrichment(monkeypatch
         "ausl_career_stats.xlsx",
         "ausl_team_context.xlsx",
     }
-    assert set(outputs) == {"rosters", "season", "career", "team_context", "manifest"}
+    assert set(outputs) == {
+        "rosters",
+        "season",
+        "career",
+        "team_context",
+        "manifest",
+        "refresh_attempt",
+    }
     manifest = json.loads((tmp_path / "update_manifest.json").read_text(encoding="utf-8"))
     assert manifest["enrichment_enabled"] is False
     assert manifest["enrichment_sources"] == []

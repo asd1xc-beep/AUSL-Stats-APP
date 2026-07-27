@@ -65,8 +65,8 @@ It does not run PyInstaller and does not create a bundled executable.
 
 DATA
 Click "Quick Refresh (Core)" in the app. The normal updater downloads official
-AUSL 2025 and 2026 roster/stat JSON plus standings and schedule context, then
-builds the validated core workbooks under:
+AUSL roster/stat JSON for every configured season, plus standings and
+schedule context, then builds the validated core workbooks under:
   data\exports
 
 The normal refresh does not fetch, write, or activate split-stat, media-guide,
@@ -75,9 +75,10 @@ include_enrichment=True option exists for isolated validation work; it is not a
 producer-facing refresh mode and its rows still require explicit review approval
 before any air-ready output may use them.
 
-AUSL Career totals in this version combine the available 2025 and 2026 AUSL
-regular-season files. They are not full softball career totals, college career
-totals, Team USA totals, or All-Star Cup totals.
+AUSL Career totals in this version combine the available AUSL regular-season
+files for every season in the configured season map. They are not full
+softball career totals, college career totals, Team USA totals, or All-Star
+Cup totals.
 
 The app displays the latest local data timestamp in the header. Any exported
 producer packet includes that timestamp plus a reminder to verify lineups,
@@ -191,7 +192,8 @@ COPY OUTPUTS
 Player Lookup has four explicit copy actions:
   Player ID       name, team, roster status, position, and known number
   Season Stat     current AUSL season only, explicitly labeled
-  Career Stat     AUSL CAREER 2025-26, explicitly labeled
+  Career Stat     AUSL CAREER totals across the configured season range,
+                  explicitly labeled
   Announcer Note  narrative plus verification and freshness metadata
 
 Inactive, reserve-pool, and unknown-status output retains a visible VERIFY

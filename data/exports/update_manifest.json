@@ -8,6 +8,73 @@
   "source": "https://theausl.com",
   "enrichment_enabled": false,
   "enrichment_sources": [],
+  "source_health": {
+    "official_rosters": {
+      "source_name": "Official AUSL rosters",
+      "source_type": "core",
+      "status": "green",
+      "last_attempt_at": "2026-07-23T18:08:06.854069+00:00",
+      "last_success_at": "2026-07-23T18:08:06.854069+00:00",
+      "row_count": 118,
+      "content_hash_or_etag": "fa7e390b645bccea2497eca95eebb914e9cff6e5da214e1604f9b3235eb07840",
+      "status_detail": "validated checked-in roster snapshot",
+      "error_summary": null,
+      "used_fallback": false,
+      "parser_version": "2026-07-24"
+    },
+    "official_stats": {
+      "source_name": "Official AUSL season/career stats",
+      "source_type": "core",
+      "status": "green",
+      "last_attempt_at": "2026-07-23T18:08:06.854069+00:00",
+      "last_success_at": "2026-07-23T18:08:06.854069+00:00",
+      "row_count": 241,
+      "content_hash_or_etag": "f4aa966c94802944ceba3bfbeeddc54e135b1d13518867945e7e7419f54d8caa",
+      "status_detail": "validated checked-in stat snapshot",
+      "error_summary": null,
+      "used_fallback": false,
+      "parser_version": "2026-07-24"
+    },
+    "official_standings": {
+      "source_name": "Official AUSL standings",
+      "source_type": "core",
+      "status": "green",
+      "last_attempt_at": "2026-07-23T18:08:06.854069+00:00",
+      "last_success_at": "2026-07-23T18:08:06.854069+00:00",
+      "row_count": 18,
+      "content_hash_or_etag": "45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb",
+      "status_detail": "validated checked-in standings snapshot",
+      "error_summary": null,
+      "used_fallback": false,
+      "parser_version": "2026-07-24"
+    },
+    "official_schedule": {
+      "source_name": "Official AUSL schedule",
+      "source_type": "core",
+      "status": "green",
+      "last_attempt_at": "2026-07-23T18:08:06.854069+00:00",
+      "last_success_at": "2026-07-23T18:08:06.854069+00:00",
+      "row_count": 76,
+      "content_hash_or_etag": "45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb",
+      "status_detail": "validated checked-in schedule snapshot",
+      "error_summary": null,
+      "used_fallback": false,
+      "parser_version": "2026-07-24"
+    },
+    "optional_enrichment": {
+      "source_name": "Optional enrichment",
+      "source_type": "optional_enrichment",
+      "status": "disabled",
+      "last_attempt_at": "2026-07-23T18:08:06.854069+00:00",
+      "last_success_at": null,
+      "row_count": 0,
+      "content_hash_or_etag": null,
+      "status_detail": "core snapshot only; optional enrichment remains disabled",
+      "error_summary": null,
+      "used_fallback": true,
+      "parser_version": "2026-07-24"
+    }
+  },
   "normalizations": {
     "season_pitching_whip": {
       "method": "(hitsAllowed + baseOnBalls) * 3 / innings_outs",

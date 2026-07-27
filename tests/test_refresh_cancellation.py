@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from urllib.error import URLError
 
@@ -205,7 +206,12 @@ def test_update_all_data_cancelled_before_start_writes_nothing(tmp_path, monkeyp
     with pytest.raises(ausl_data.RefreshCancelled):
         ausl_data.update_all_data(cancel_token=token)
 
-    assert list(tmp_path.iterdir()) == []
+    assert [path.name for path in tmp_path.iterdir()] == ["refresh_attempt.json"]
+    attempt = json.loads(
+        (tmp_path / "refresh_attempt.json").read_text(encoding="utf-8")
+    )
+    assert attempt["state"] == "cancelled"
+    assert attempt["error_summary"] is None
 
 
 def test_update_all_data_cancelled_mid_loop_writes_nothing(tmp_path, monkeypatch):
@@ -232,7 +238,8 @@ def test_update_all_data_cancelled_mid_loop_writes_nothing(tmp_path, monkeypatch
 
     # The third roster/stats download is never attempted once cancelled.
     assert len(calls) == 2
-    assert list(tmp_path.iterdir()) == []
+    assert [path.name for path in tmp_path.iterdir()] == ["refresh_attempt.json"]
+    assert ausl_data.load_refresh_attempt(tmp_path)["state"] == "cancelled"
 
 
 def test_update_all_data_cancelled_just_before_staging_writes_nothing(tmp_path, monkeypatch):
@@ -267,7 +274,8 @@ def test_update_all_data_cancelled_just_before_staging_writes_nothing(tmp_path, 
     with pytest.raises(ausl_data.RefreshCancelled):
         ausl_data.update_all_data(cancel_token=token)
 
-    assert list(tmp_path.iterdir()) == []
+    assert [path.name for path in tmp_path.iterdir()] == ["refresh_attempt.json"]
+    assert ausl_data.load_refresh_attempt(tmp_path)["state"] == "cancelled"
 
 
 def test_update_all_data_without_a_cancel_token_still_writes_normally(tmp_path, monkeypatch):

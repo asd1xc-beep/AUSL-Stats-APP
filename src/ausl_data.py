@@ -211,6 +211,75 @@ def export_dir() -> Path:
     return path
 
 
+REFRESH_ATTEMPT_FILENAME = "refresh_attempt.json"
+_CORE_REFRESH_COMMIT_LOCK = threading.Lock()
+_REFRESH_ATTEMPT_LOCK = threading.Lock()
+
+
+def _json_text(payload: object) -> str:
+    """Return deterministic UTF-8 JSON text whose line endings survive Git."""
+
+    return (
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+        + "\n"
+    )
+
+
+def _write_json_atomic(path: Path, payload: object, *, prefix: str = ".json-") -> None:
+    """Write deterministic UTF-8/LF JSON and atomically replace ``path``."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp_name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(_json_text(payload))
+            stream.flush()
+        os.replace(temp_name, path)
+    finally:
+        if os.path.exists(temp_name):
+            os.remove(temp_name)
+
+
+def _refresh_attempt_path(output: Path | None = None) -> Path:
+    return (Path(output) if output is not None else export_dir()) / REFRESH_ATTEMPT_FILENAME
+
+
+def load_refresh_attempt(output: Path | None = None) -> dict:
+    path = _refresh_attempt_path(output)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _persist_refresh_attempt(attempt: dict, *, output: Path | None = None) -> bool:
+    """Persist the newest refresh attempt without letting stale workers win."""
+
+    path = _refresh_attempt_path(output)
+    started_at = str(attempt.get("started_at") or "")
+    with _REFRESH_ATTEMPT_LOCK:
+        current = load_refresh_attempt(path.parent)
+        current_started_at = str(current.get("started_at") or "")
+        if current_started_at and started_at and current_started_at > started_at:
+            return False
+        _write_json_atomic(path, attempt, prefix=".refresh-attempt-")
+    return True
+
+
+def _safe_refresh_error_summary(exc: Exception) -> str:
+    summary = f"{type(exc).__name__}: {exc}"
+    summary = re.sub(
+        r"(?i)\b(password|secret|token|credential)=([^\s&]+)",
+        r"\1=[REDACTED]",
+        summary,
+    )
+    summary = re.sub(r"(https?://[^\s?]+)\?[^\s]+", r"\1?[REDACTED]", summary)
+    return _clean_text(summary)[:500]
+
+
 # Bounded retry/backoff for transient network failures (REFRESH-006). Attempts
 # and the base delay are module-level so tests can shrink the delay to zero
 # instead of sleeping for real.
@@ -1135,8 +1204,8 @@ def _media_guide_audit_frame(media_players: pd.DataFrame) -> pd.DataFrame:
     return audit[columns]
 
 
-def fetch_media_guide_frames(
-    roster: pd.DataFrame, progress=None
+def _parse_media_guide_frames_from_pdf(
+    roster: pd.DataFrame, pdf_path: Path, progress=None
 ) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
@@ -1144,14 +1213,10 @@ def fetch_media_guide_frames(
     pd.DataFrame,
     pd.DataFrame,
 ]:
-    """Download/cache the AUSL media guide and create cleaned enrichment tables."""
+    """Parse one already-downloaded media guide candidate."""
     progress = progress or (lambda _message: None)
     imported_at = datetime.now(timezone.utc).isoformat()
     media_context = media_guide_source_context()
-    pdf_path = app_root() / "data" / "sources" / str(media_context["pdf_filename"])
-    if not pdf_path.exists() or pdf_path.stat().st_size < 100_000:
-        progress(f"Downloading {media_context['source_name']} PDF...")
-        _download_file(str(media_context["source_url"]), pdf_path)
 
     try:
         from pypdf import PdfReader
@@ -1331,6 +1396,54 @@ def fetch_media_guide_frames(
         pd.DataFrame(raw_chunk_rows),
         media_audit,
     )
+
+
+def fetch_media_guide_frames(
+    roster: pd.DataFrame, progress=None
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
+    """Revalidate the media guide and promote revised bytes only after parsing."""
+
+    progress = progress or (lambda _message: None)
+    media_context = media_guide_source_context()
+    pdf_path = app_root() / "data" / "sources" / str(media_context["pdf_filename"])
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    handle, candidate_name = tempfile.mkstemp(
+        prefix=".media-guide-download-", suffix=".pdf", dir=pdf_path.parent
+    )
+    os.close(handle)
+    candidate_path = Path(candidate_name)
+    try:
+        progress(f"Revalidating {media_context['source_name']} PDF...")
+        candidate_hash = _download_file(
+            str(media_context["source_url"]), candidate_path
+        )
+        existing_hash = None
+        if pdf_path.exists():
+            try:
+                existing_hash = _sha256_hex(pdf_path.read_bytes())
+            except OSError:
+                existing_hash = None
+        if existing_hash == candidate_hash:
+            candidate_path.unlink()
+            parse_path = pdf_path
+        else:
+            parse_path = candidate_path
+
+        frames = _parse_media_guide_frames_from_pdf(
+            roster, parse_path, progress
+        )
+        if parse_path == candidate_path:
+            os.replace(candidate_path, pdf_path)
+        return frames
+    finally:
+        if candidate_path.exists():
+            candidate_path.unlink()
 
 
 def source_registry_frame() -> pd.DataFrame:
@@ -1715,7 +1828,7 @@ def _game_note_category(text: str) -> str:
         or re.search(r"\b(?:won|lost)\b.{0,20}\b(?:straight|in a row)\b", lower)
     ):
         return "recent_trend"
-    if re.search(r"\b(?:this|current|2026|ausl) season\b", lower):
+    if re.search(r"\b(?:this|current|\d{4}|ausl) season\b", lower):
         return "season_context"
     if "career" in lower:
         return "career_summary"
@@ -1725,7 +1838,7 @@ def _game_note_category(text: str) -> str:
 def _clean_game_note_text(text: str) -> str:
     text = str(text or "").replace("\x83", " • ").replace("\uf0b7", " • ").replace("â€¢", " • ")
     text = _clean_media_guide_text(text)
-    text = re.sub(r"\b[A-Z ]+\s+•\s+2026 AUSL Season\b", " ", text)
+    text = re.sub(r"\b[A-Z ]+\s+•\s+\d{4} AUSL Season\b", " ", text)
     text = re.sub(r"\b(?:PITCHER|BATTER) BIOS?\b", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" -•")
     return _clean_text(text)
@@ -1807,7 +1920,7 @@ def _split_game_note_items(page_text: str, player_lookup: list[dict] | None = No
         for item in items:
             note = _clean_game_note_text(item)
             note = re.split(r"\s+#\d+\s+[-•]\s+[A-Z][A-Za-z .'-]{4,}\s+(?:\d|\.|[A-Z]{2,})", note)[0]
-            note = re.split(r"\s+2026 AUSL SEASON SINGLE-GAME HIGHS\b", note, flags=re.IGNORECASE)[0]
+            note = re.split(r"\s+\d{4} AUSL SEASON SINGLE-GAME HIGHS\b", note, flags=re.IGNORECASE)[0]
             note = re.split(r"\s+SINGLE-GAME HIGHS\b", note, flags=re.IGNORECASE)[0]
             note = re.split(r"\s+CAREER HIGHS\b", note, flags=re.IGNORECASE)[0]
             if len(note) < 35:
@@ -1971,14 +2084,14 @@ def _load_game_notes_cache() -> dict:
 
 def _save_game_notes_cache(cache: dict) -> None:
     cache_path = _game_notes_cache_path()
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _json_safe(value):
         if hasattr(value, "item"):
             return value.item()
         return str(value)
 
-    cache_path.write_text(json.dumps(cache, indent=2, default=_json_safe), encoding="utf-8")
+    safe_cache = json.loads(json.dumps(cache, default=_json_safe))
+    _write_json_atomic(cache_path, safe_cache, prefix=".notes-cache-")
 
 
 def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame, progress=None, limit: int | None = None) -> pd.DataFrame:
@@ -2023,54 +2136,91 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
         game_id = game.get("game_id", "")
         safe_url_tail = re.sub(r"[^A-Za-z0-9]+", "_", url.split("/")[-1]).strip("_")[:80] or "notes"
         pdf_path = app_root() / "data" / "sources" / "game_notes" / f"game_{game_id}_{safe_url_tail}.pdf"
-        if not pdf_path.exists() or pdf_path.stat().st_size < 10_000:
-            progress(f"Downloading official game notes for game {game_id}...")
-            try:
-                content_hash = _download_file(url, pdf_path)
-            except Exception as exc:
-                progress(f"Skipping game notes {game_id}: {exc}")
-                continue
-        else:
-            try:
-                content_hash = _sha256_hex(pdf_path.read_bytes())
-            except OSError as exc:
-                progress(f"Skipping unreadable game notes {game_id}: {exc}")
-                continue
-
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
         cache_key = pdf_path.name
         cached_entry = notes_cache.get(cache_key)
-        if isinstance(cached_entry, dict) and cached_entry.get("content_hash") == content_hash:
-            progress(f"Reusing cached parse for unchanged game notes {game_id}.")
-            rows.extend(cached_entry.get("rows") or [])
-            continue
-
+        handle, candidate_name = tempfile.mkstemp(
+            prefix=".game-notes-download-", suffix=".pdf", dir=pdf_path.parent
+        )
+        os.close(handle)
+        candidate_path = Path(candidate_name)
         try:
-            reader = PdfReader(str(pdf_path))
-        except Exception as exc:
-            progress(f"Skipping unreadable game notes {game_id}: {exc}")
-            continue
-        file_rows = []
-        for page_number, page in enumerate(reader.pages, 1):
+            progress(f"Revalidating official game notes for game {game_id}...")
             try:
-                page_text = page.extract_text() or ""
-            except Exception:
-                page_text = ""
-            for parsed_note in _split_game_note_items(page_text, player_lookup):
-                note = parsed_note["note_text"]
-                mentioned_ids = [player["player_id"] for player in player_lookup if player["name"].lower() in note.lower()]
-                file_rows.append(
-                    _official_game_note_row(
-                        game,
-                        parsed_note,
-                        source_url=url,
-                        source_page=page_number,
-                        imported_at=imported_at,
-                        mentioned_ids=mentioned_ids,
+                content_hash = _download_file(url, candidate_path)
+            except Exception as exc:
+                progress(f"Skipping game notes {game_id}: {exc}")
+                if (
+                    pdf_path.exists()
+                    and isinstance(cached_entry, dict)
+                    and cached_entry.get("rows")
+                ):
+                    rows.extend(cached_entry.get("rows") or [])
+                continue
+
+            if (
+                isinstance(cached_entry, dict)
+                and cached_entry.get("content_hash") == content_hash
+            ):
+                progress(f"Reusing cached parse for unchanged game notes {game_id}.")
+                rows.extend(cached_entry.get("rows") or [])
+                continue
+
+            try:
+                reader = PdfReader(str(candidate_path))
+            except Exception as exc:
+                progress(f"Skipping unreadable revised game notes {game_id}: {exc}")
+                if (
+                    pdf_path.exists()
+                    and isinstance(cached_entry, dict)
+                    and cached_entry.get("rows")
+                ):
+                    rows.extend(cached_entry.get("rows") or [])
+                continue
+            file_rows = []
+            for page_number, page in enumerate(reader.pages, 1):
+                try:
+                    page_text = page.extract_text() or ""
+                except Exception:
+                    page_text = ""
+                for parsed_note in _split_game_note_items(page_text, player_lookup):
+                    note = parsed_note["note_text"]
+                    mentioned_ids = [
+                        player["player_id"]
+                        for player in player_lookup
+                        if player["name"].lower() in note.lower()
+                    ]
+                    file_rows.append(
+                        _official_game_note_row(
+                            game,
+                            parsed_note,
+                            source_url=url,
+                            source_page=page_number,
+                            imported_at=imported_at,
+                            mentioned_ids=mentioned_ids,
+                        )
                     )
+            if not file_rows:
+                progress(
+                    f"Skipping revised game notes {game_id}: no validated note rows."
                 )
-        rows.extend(file_rows)
-        notes_cache[cache_key] = {"content_hash": content_hash, "rows": file_rows}
-        cache_dirty = True
+                if (
+                    pdf_path.exists()
+                    and isinstance(cached_entry, dict)
+                    and cached_entry.get("rows")
+                ):
+                    rows.extend(cached_entry.get("rows") or [])
+                continue
+            os.replace(candidate_path, pdf_path)
+            rows.extend(file_rows)
+            notes_cache[cache_key] = {
+                "content_hash": content_hash,
+                "rows": file_rows,
+            }
+            cache_dirty = True
+        finally:
+            if candidate_path.exists():
+                candidate_path.unlink()
 
     if cache_dirty:
         _save_game_notes_cache(notes_cache)
@@ -2876,7 +3026,82 @@ def _promote_file_set(staged_to_final: dict[Path, Path]) -> None:
         shutil.rmtree(backup_dir, ignore_errors=True)
 
 
-def update_all_data(
+def _stage_and_promote_core_snapshot(
+    *,
+    output: Path,
+    roster_path: Path,
+    season_path: Path,
+    career_path: Path,
+    team_context_path: Path,
+    manifest_path: Path,
+    rosters: dict,
+    batting: dict,
+    pitching: dict,
+    fielding: dict,
+    standings: pd.DataFrame,
+    schedule: pd.DataFrame,
+    manifest: dict,
+    progress,
+    cancel_token: CancelToken | None,
+) -> None:
+    """Serialize the complete core stage/promotion transaction."""
+
+    output.mkdir(parents=True, exist_ok=True)
+    progress("Waiting for the previous refresh to finish committing, if any...")
+    with _CORE_REFRESH_COMMIT_LOCK:
+        # A worker can be cancelled while blocked on the lock. It must not
+        # create a staging directory or write anything after it finally enters.
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
+        progress("Staging validated core Excel databases...")
+        stage_dir = Path(
+            tempfile.mkdtemp(prefix=".core-refresh-stage-", dir=output)
+        )
+        try:
+            staged_roster = stage_dir / roster_path.name
+            staged_season = stage_dir / season_path.name
+            staged_career = stage_dir / career_path.name
+            staged_team_context = stage_dir / team_context_path.name
+            staged_manifest = stage_dir / manifest_path.name
+            _write_excel_atomic(
+                staged_roster,
+                {f"roster_{year}": frame for year, frame in rosters.items()},
+            )
+            _write_excel_atomic(
+                staged_season,
+                {
+                    **{f"batting_{year}": batting[year] for year in SEASONS},
+                    **{f"pitching_{year}": pitching[year] for year in SEASONS},
+                    **{f"fielding_{year}": fielding[year] for year in SEASONS},
+                },
+            )
+            _write_excel_atomic(
+                staged_career,
+                {
+                    "career_batting": career_batting(list(batting.values())),
+                    "career_pitching": career_pitching(list(pitching.values())),
+                    "career_fielding": career_fielding(list(fielding.values())),
+                },
+            )
+            _write_excel_atomic(
+                staged_team_context,
+                {"standings": standings, "schedule_results": schedule},
+            )
+            _write_json_atomic(staged_manifest, manifest, prefix=".manifest-")
+            _promote_file_set(
+                {
+                    staged_roster: roster_path,
+                    staged_season: season_path,
+                    staged_career: career_path,
+                    staged_team_context: team_context_path,
+                    staged_manifest: manifest_path,
+                }
+            )
+        finally:
+            shutil.rmtree(stage_dir, ignore_errors=True)
+
+
+def _update_all_data_impl(
     progress=None,
     *,
     include_enrichment: bool = False,
@@ -3214,55 +3439,23 @@ def update_all_data(
             }
         },
     }
-    progress("Staging validated core Excel databases...")
-    output.mkdir(parents=True, exist_ok=True)
-    stage_dir = Path(
-        tempfile.mkdtemp(prefix=".core-refresh-stage-", dir=output)
+    _stage_and_promote_core_snapshot(
+        output=output,
+        roster_path=roster_path,
+        season_path=season_path,
+        career_path=career_path,
+        team_context_path=team_context_path,
+        manifest_path=manifest_path,
+        rosters=rosters,
+        batting=batting,
+        pitching=pitching,
+        fielding=fielding,
+        standings=standings,
+        schedule=schedule,
+        manifest=manifest,
+        progress=progress,
+        cancel_token=cancel_token,
     )
-    try:
-        staged_roster = stage_dir / roster_path.name
-        staged_season = stage_dir / season_path.name
-        staged_career = stage_dir / career_path.name
-        staged_team_context = stage_dir / team_context_path.name
-        staged_manifest = stage_dir / manifest_path.name
-        _write_excel_atomic(
-            staged_roster,
-            {f"roster_{year}": frame for year, frame in rosters.items()},
-        )
-        _write_excel_atomic(
-            staged_season,
-            {
-                **{f"batting_{year}": batting[year] for year in SEASONS},
-                **{f"pitching_{year}": pitching[year] for year in SEASONS},
-                **{f"fielding_{year}": fielding[year] for year in SEASONS},
-            },
-        )
-        _write_excel_atomic(
-            staged_career,
-            {
-                "career_batting": career_batting(list(batting.values())),
-                "career_pitching": career_pitching(list(pitching.values())),
-                "career_fielding": career_fielding(list(fielding.values())),
-            },
-        )
-        _write_excel_atomic(
-            staged_team_context,
-            {"standings": standings, "schedule_results": schedule},
-        )
-        staged_manifest.write_text(
-            json.dumps(manifest, indent=2), encoding="utf-8"
-        )
-        _promote_file_set(
-            {
-                staged_roster: roster_path,
-                staged_season: season_path,
-                staged_career: career_path,
-                staged_team_context: team_context_path,
-                staged_manifest: manifest_path,
-            }
-        )
-    finally:
-        shutil.rmtree(stage_dir, ignore_errors=True)
 
     if include_enrichment:
         combined_batting_splits = combined(split_batting)
@@ -3340,6 +3533,55 @@ def update_all_data(
                     "raw_media_chunks": raw_media_chunks_path,
                 }
             )
+    return outputs
+
+
+def update_all_data(
+    progress=None,
+    *,
+    include_enrichment: bool = False,
+    cancel_token: CancelToken | None = None,
+) -> dict[str, Path]:
+    """Run a refresh and persist its outcome separately from the LKG snapshot."""
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    affected_source = (
+        "optional_enrichment_sources"
+        if include_enrichment
+        else "official_core_sources"
+    )
+
+    def attempt(state: str, *, error_summary: str | None = None) -> dict:
+        return {
+            "schema_version": 1,
+            "state": state,
+            "started_at": started_at,
+            "completed_at": (
+                None
+                if state == "in_progress"
+                else datetime.now(timezone.utc).isoformat()
+            ),
+            "affected_source": affected_source,
+            "error_summary": error_summary,
+        }
+
+    _persist_refresh_attempt(attempt("in_progress"))
+    try:
+        outputs = _update_all_data_impl(
+            progress,
+            include_enrichment=include_enrichment,
+            cancel_token=cancel_token,
+        )
+    except RefreshCancelled:
+        _persist_refresh_attempt(attempt("cancelled"))
+        raise
+    except Exception as exc:
+        _persist_refresh_attempt(
+            attempt("failed", error_summary=_safe_refresh_error_summary(exc))
+        )
+        raise
+    _persist_refresh_attempt(attempt("succeeded"))
+    outputs["refresh_attempt"] = _refresh_attempt_path()
     return outputs
 
 
@@ -3434,6 +3676,7 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
         result["manifest"] = json.loads(manifest_path.read_text(encoding="utf-8"))
     else:
         result["manifest"] = {}
+    result["refresh_attempt"] = load_refresh_attempt(output)
     return result
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import pandas as pd
@@ -160,7 +161,10 @@ def test_unchanged_pdf_is_reused_from_cache_without_reparsing(monkeypatch, tmp_p
 
     pdf_bytes = b"%PDF-1.4 fixture" + b"0" * 10_000
 
+    downloads = []
+
     def fake_download(_url, path):
+        downloads.append(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(pdf_bytes)
         return ausl_data._sha256_hex(pdf_bytes)
@@ -172,10 +176,10 @@ def test_unchanged_pdf_is_reused_from_cache_without_reparsing(monkeypatch, tmp_p
     assert len(parse_calls) == 1
     assert len(first) == 1
 
-    # Second run: file already on disk (>=10KB) with unchanged content, so the
-    # download is skipped and the cached parse is reused instead of a second
-    # PdfReader pass.
+    # A deliberate full refresh revalidates the same URL, but unchanged bytes
+    # reuse the cached rows without a second PdfReader pass.
     second = ausl_data.fetch_official_game_notes_frame(schedule, roster)
+    assert len(downloads) == 2
     assert len(parse_calls) == 1
     assert len(second) == 1
     assert second.iloc[0]["note_text"] == first.iloc[0]["note_text"]
@@ -205,17 +209,143 @@ def test_changed_pdf_content_invalidates_the_cache_and_is_reparsed(monkeypatch, 
     first = ausl_data.fetch_official_game_notes_frame(schedule, roster)
     assert len(parse_calls) == 1
 
-    # Force a re-download by deleting the cached PDF, simulating the official
-    # source publishing a revised PDF at the same URL.
     game_notes_dir = tmp_path / "data" / "sources" / "game_notes"
     pdf_paths = [path for path in game_notes_dir.glob("*.pdf")]
     assert len(pdf_paths) == 1
-    pdf_paths[0].unlink()
+    original_path = pdf_paths[0]
 
     second = ausl_data.fetch_official_game_notes_frame(schedule, roster)
 
     assert len(parse_calls) == 2
     assert second.iloc[0]["note_text"] != first.iloc[0]["note_text"]
+    assert original_path.read_bytes() == second_bytes
+
+
+def test_failed_revised_download_preserves_last_known_good_game_notes(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(ausl_data, "app_root", lambda: tmp_path)
+    schedule = _official_game_notes_schedule()
+    roster = pd.DataFrame(columns=["player_name", "player_id", "team_code"])
+    first_bytes = b"%PDF-1.4 fixture-a" + b"0" * 10_000
+    calls = []
+
+    def fake_download(_url, path):
+        calls.append(path)
+        if len(calls) == 2:
+            raise OSError("fixture revised download failed")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(first_bytes)
+        return ausl_data._sha256_hex(first_bytes)
+
+    monkeypatch.setattr(ausl_data, "_download_file", fake_download)
+    parse_calls = _stub_note_parsing(monkeypatch, ["last-known-good text"])
+
+    first = ausl_data.fetch_official_game_notes_frame(schedule, roster)
+    pdf_path = next((tmp_path / "data" / "sources" / "game_notes").glob("*.pdf"))
+    cache_path = ausl_data._game_notes_cache_path()
+    original_pdf = pdf_path.read_bytes()
+    original_cache = cache_path.read_bytes()
+
+    second = ausl_data.fetch_official_game_notes_frame(schedule, roster)
+
+    assert len(calls) == 2
+    assert len(parse_calls) == 1
+    assert second.iloc[0]["note_text"] == first.iloc[0]["note_text"]
+    assert pdf_path.read_bytes() == original_pdf
+    assert cache_path.read_bytes() == original_cache
+    assert not list(pdf_path.parent.glob(".game-notes-download-*"))
+
+
+def test_invalid_revised_pdf_cannot_replace_valid_cached_game_notes(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(ausl_data, "app_root", lambda: tmp_path)
+    schedule = _official_game_notes_schedule()
+    roster = pd.DataFrame(columns=["player_name", "player_id", "team_code"])
+    first_bytes = b"%PDF-1.4 valid" + b"0" * 10_000
+    revised_bytes = b"not a valid PDF" + b"1" * 10_000
+    payloads = [first_bytes, revised_bytes]
+
+    def fake_download(_url, path):
+        payload = payloads.pop(0)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        return ausl_data._sha256_hex(payload)
+
+    parse_calls = []
+
+    class FakePage:
+        def extract_text(self):
+            return "valid parsed text"
+
+    class FakePdfReader:
+        def __init__(self, path):
+            parse_calls.append(path)
+            if Path(path).read_bytes() == revised_bytes:
+                raise ValueError("fixture invalid revised PDF")
+            self.pages = [FakePage()]
+
+    monkeypatch.setattr(ausl_data, "_download_file", fake_download)
+    monkeypatch.setattr("pypdf.PdfReader", FakePdfReader)
+    monkeypatch.setattr(
+        ausl_data,
+        "_split_game_note_items",
+        lambda _text, _lookup: [
+            {
+                "note_text": "Fixture note from valid PDF.",
+                "player_name": "",
+                "player_id": "",
+                "team_code": "",
+            }
+        ],
+    )
+
+    first = ausl_data.fetch_official_game_notes_frame(schedule, roster)
+    pdf_path = next((tmp_path / "data" / "sources" / "game_notes").glob("*.pdf"))
+    cache_path = ausl_data._game_notes_cache_path()
+    original_cache = cache_path.read_bytes()
+
+    second = ausl_data.fetch_official_game_notes_frame(schedule, roster)
+
+    assert len(parse_calls) == 2
+    assert second.iloc[0]["note_text"] == first.iloc[0]["note_text"]
+    assert pdf_path.read_bytes() == first_bytes
+    assert cache_path.read_bytes() == original_cache
+    assert not list(pdf_path.parent.glob(".game-notes-download-*"))
+
+
+def test_media_guide_same_url_revalidation_preserves_valid_cached_pdf_on_bad_revision(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(ausl_data, "app_root", lambda: tmp_path)
+    media_context = ausl_data.media_guide_source_context()
+    pdf_path = (
+        tmp_path / "data" / "sources" / str(media_context["pdf_filename"])
+    )
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    original = b"%PDF-1.4 cached media guide" + b"0" * 100_000
+    pdf_path.write_bytes(original)
+    downloads = []
+
+    def fake_download(_url, destination):
+        downloads.append(destination)
+        destination.write_bytes(b"invalid revised media guide")
+        return ausl_data._sha256_hex(destination.read_bytes())
+
+    class InvalidReader:
+        def __init__(self, _path):
+            raise ValueError("fixture invalid media-guide revision")
+
+    monkeypatch.setattr(ausl_data, "_download_file", fake_download)
+    monkeypatch.setattr("pypdf.PdfReader", InvalidReader)
+
+    with pytest.raises(ValueError, match="invalid media-guide revision"):
+        ausl_data.fetch_media_guide_frames(pd.DataFrame())
+
+    assert len(downloads) == 1
+    assert pdf_path.read_bytes() == original
+    assert not list(pdf_path.parent.glob(".media-guide-download-*"))
 
 
 # ---------------------------------------------------------------------------
