@@ -32,23 +32,23 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 4 — Resilient refresh and producer UX (Phase 6A slice)
+### Milestone 5 — Air-ready facts (Phase 6B)
 
-Target outcome for the current phase: make the selected official game the
-producer's compact operational home, derive one honest Ready-for-Air result,
-and provide an explicit network-request lockout without weakening Phase 5's
-refresh, health, or cancellation protections.
+Target outcome for the current phase: turn trusted selected-game outputs into
+compact, deterministic, source-labeled facts that can be copied without
+losing exact identity, evidence version, provenance, or warning state.
 
-Current implementation unit: Phase 6A. `UX-001`, `UX-009`, and `REFRESH-007`
-are `[x]` COMPLETE with pure readiness policy, exact-game synchronization,
-game-aware live severity, packet/lineup identity checks, honest unavailable
-verification state, and centralized Local/Offline Mode guards. Phase 6B
-through 6F remain `PLANNED`/`BACKLOG` and have not started.
+Current implementation unit: Phase 6B. `UX-002`, `UX-005`, and `UX-010` are
+`[x]` COMPLETE with one canonical fact model, separate stable/version
+identities, exact-game local adapters and evidence gates, provenance-preserving
+copy, centralized 60/120-character guidance, bounded worker synchronization,
+and a usable minimum-size Game Day card view. Phase 6C through 6F remain
+`PLANNED`/`BACKLOG` and have not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6A COMPLETE — 2026-07-27 — PHASE 6B THROUGH 6F NOT STARTED**
+Status: **PHASE 6B COMPLETE — 2026-07-27 — PHASE 6C THROUGH 6F NOT STARTED**
 
 ## Master improvement list
 
@@ -316,14 +316,24 @@ Required identity regressions:
     health, packet lineup revision/source, and an honest `Unavailable` scoped
     verification count when optional review data is not loaded.
 
-- [ ] `UX-002` — Add air-ready fact cards with concise copy, context, source, freshness, and verification state. **P2 · PLANNED**
+- [x] `UX-002` — Add air-ready fact cards with concise copy, context, source, freshness, and verification state. **P2 · COMPLETE**
+  - Game Day opens on a scrollable card view backed by one immutable
+    `BroadcastFact`. Stable fact identity is separate from evidence/version
+    identity; exact-game adapters wrap trusted core stats, canonical roster
+    status, exact-game lineup provenance, approved optional official/media
+    rows, scoped producer notes, and official team snapshots. VERIFIED,
+    VERIFY, STALE, and UNAVAILABLE are derived from evidence and health.
 
 - [ ] `UX-003` — Add a local pinned-facts/rundown queue with plain-text export. **P2 · BACKLOG**
 
 - [ ] `UX-004` — Add a post-refresh `What changed?` panel. **P2 · BACKLOG**
   - Roster/status, records, lineups, starters, injuries, milestones, and invalidated facts.
 
-- [ ] `UX-005` — Preserve source/freshness metadata when copying or pinning a fact. **P1 · PLANNED**
+- [x] `UX-005` — Preserve source/freshness metadata when copying or pinning a fact. **P1 · COMPLETE**
+  - Phase 6B copy events retain exact fact ID, evidence hash, full provenance,
+    snapshot timestamp, copy timestamp, and selected width profile. Copy With
+    Source renders source/status/freshness explicitly. No pin queue exists yet;
+    Phase 6C can consume the canonical fact without reparsing display text.
 - [ ] `UX-006` — Add read-time budgeting to fact cards and the pinned rundown. **P2 · PLANNED**
   - Estimate seconds-to-read from word count (~140 wpm); show a running total against a settable break-length target on the pinned queue.
 
@@ -344,8 +354,11 @@ Required identity regressions:
 - [ ] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · PLANNED**
   - Edit-distance or phonetic tolerance on player-name queries; must not introduce false-positive collisions between distinct players. A tolerance improvement to `SEARCH-004`, not a new search mode.
 
-- [ ] `UX-010` — Add a character-count preview on copy actions against common graphics-template widths. **P2 · PLANNED**
-  - Quiet indicator only (e.g. "42/60 chars — fits one line"); does not imply or require an actual CG/graphics-system integration.
+- [x] `UX-010` — Add a character-count preview on copy actions against common graphics-template widths. **P2 · COMPLETE**
+  - Central profiles provide 60-character one-line and 120-character extended
+    guidance. Counts use the exact Unicode air-copy string, never truncate or
+    rewrite it, and are explicitly labeled guidance rather than graphics-system
+    validation.
 
 - [ ] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · PLANNED**
   - Two selected players' stat lines, verified notes, and milestones in parallel columns, each independently source/freshness-labeled. A new screen, not a variant of the existing player card.
@@ -403,6 +416,124 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 6B — Air-ready fact cards
+
+- Completion date: 2026-07-27.
+- Starting commit and branch basis:
+  `e87b4d7efabb9795bcbd5521aadedb742b5eb921`, the completed Phase 6A
+  acceptance head on `agent/phase6a-command-center`. That head is directly
+  based on latest remote `main`
+  `19f2702266883e76bcd439c25044e01b98017daa`; Phase 6A remained open as
+  draft PR #4, so Phase 6B was intentionally developed as a stacked branch
+  rather than omitting its required dependency.
+- Branch and final functional commit: `agent/phase6b-air-ready-facts`;
+  `f65823e` after canonical model `b2a8f30`, Game Day cards/synchronization
+  `d7994ad`, canonical roster-state reuse `eda0bfd`, copy/width guidance
+  `5febe19`, and minimum-size GUI correction/smoke `919254e`. The
+  documentation-only acceptance commit is reported in the Phase 6B PR.
+- Fact identity/version design: one frozen `BroadcastFact` owns category,
+  exact player/team/game/season identity, stable source-record/concept key,
+  headline, exact air copy, context, provenance, and trust state. `fact_id`
+  hashes stable conceptual identity; `evidence_hash` separately hashes
+  wording, supporting values, source evidence/history, approval, and trust.
+  Numeric/evidence changes retain the conceptual ID when appropriate while
+  invalidating the copied version. Later phases can pin this canonical value
+  without parsing visible text.
+- Supported adapters/categories: roster availability/injury/transaction
+  warnings; official or projected selected-game starters; milestone watches;
+  current-season form/context; official-note milestone reached, recent trend,
+  season context, matchup/career/background categories when approved rows are
+  explicitly loaded; approved media-guide background; exactly scoped
+  air-safe producer notes; and official team-record context through the
+  existing canonical team snapshot helper. No new data source or generative
+  wording was added.
+- Verification/air-ready policy: `air_ready` is derived and cannot be supplied
+  or edited independently. VERIFIED requires exact subject/team/game/season
+  identity, complete provenance, green source health, valid snapshot, no
+  warning, no producer-confirmation requirement, and source-specific approval.
+  Yellow becomes STALE; red/unknown is UNAVAILABLE; a failed latest refresh
+  downgrades affected stored-snapshot facts to VERIFY while retaining the
+  installed snapshot timestamp. Probable/projected starters never become
+  confirmed starters, nonactive/unknown roster status stays review-blocking,
+  wrong-game notes are excluded, `not_in_guide` produces no biography, and
+  missing/malformed numeric values never become zero or `nan`.
+- Selection/deduplication/readiness: facts are exact-game and selected-team
+  scoped, deterministically ordered by safety/category with team balancing,
+  and deduplicated while retaining the strongest authoritative evidence plus
+  useful source history. Only unresolved safety-blocking facts contribute to
+  the Phase 6A verification count; optional background review does not block
+  readiness. Missing/in-flight fact state remains unavailable rather than
+  zero.
+- Copy/provenance behavior: Copy Air Line is disabled unless the visible fact
+  is air-ready and records an in-memory canonical event with fact ID, evidence
+  hash, full provenance, snapshot, copy time, exact string, and selected width
+  profile. Copy With Source includes status, source, date, freshness, IDs, and
+  warnings for research/handoff. Copy never changes verification; game or
+  database changes clear stale copy state, and an evidence-hash change
+  invalidates a previously copied version. No copy history is persisted.
+- Character profiles: centralized 60-character `one_line` and 120-character
+  `extended` guidance. Python Unicode string length is applied to the exact
+  copied air line; punctuation, curly apostrophes, em/en dashes, jersey
+  numbers, and accented names are covered. The UI reports fits/near
+  limit/likely wraps and never truncates or rewrites factual copy.
+- Worker/main-thread behavior: local fact aggregation uses one daemon worker
+  with one coalesced latest pending request. All Tk mutations remain on the
+  established main-thread queue. A late result must still match build
+  generation, exact official game ID, and database object identity. Game
+  changes clear old cards immediately; database replacement, lineup change,
+  and manual-note change rebuild facts. Local/Offline Mode continues to permit
+  local fact generation and performs no network request.
+- Failing-first evidence: the initial Phase 6B tests failed during collection
+  twice because `ausl_facts` did not exist. After the model was implemented,
+  46 behavioral tests passed and one hand-counted Unicode expectation exposed
+  an incorrect test expectation (the exact string contains 28 code points,
+  not 27); correcting that test produced 47 passing model tests. Subsequent
+  UI integration first failed one Phase 6A close test because its minimal app
+  fixture lacked the new worker-generation field; the lifecycle guard fixed
+  it without weakening shutdown. The first real-Tk smoke then exposed a
+  22-pixel fact viewport at minimum size; the internal Game Day Facts/Readiness
+  views increased the asserted scrollable viewport to 254 pixels.
+- Automated acceptance:
+  - required Phase 6B plus readiness, selected-game, official-note, media,
+    enrichment, team/stat formatting, roster/copy, callback/refresh,
+    privacy/build, and future-season matrix — **356 passed in 3.59 s**;
+  - complete offline warnings-as-errors suite — **556 passed in 11.93 s**;
+  - final `compileall`, `pip check`, checked-in distribution verification,
+    Git LFS validation, whitespace validation, and tracked/history secret scans
+    are recorded in the Phase 6B PR completion report.
+- Windows GUI smoke: deterministic real-Tk source harness on
+  `Windows-10-10.0.19045-SP0`, Python 3.12.10, exactly `1120x720`. It began
+  with no selected game; loaded checked-in local data without refresh; selected
+  an official game; found verified facts for both teams; switched Air Ready
+  and Needs Verification; copied an exact verified line and the sourced form;
+  rejected ordinary copy for a review fact without changing the clipboard;
+  matched character count to clipboard text; changed between repeat-opponent
+  Games 916/917 and proved all old fact IDs disappeared; replaced a local
+  database value/snapshot and proved evidence changed and copied state cleared;
+  enabled Local/Offline Mode and rebuilt local facts; opened all seven existing
+  tabs; asserted a 254-pixel scrollable fact viewport; and closed normally.
+  Final Game 917 held 58 facts: 56 air-ready and two blocking review items.
+  No network refresh, factual workbook, lineup, private note, or packet was
+  written.
+- Computer Use inspection: the skill found and activated exactly one
+  `AUSL Phase 6B Smoke` window. Tk exposed no useful accessibility text;
+  Windows Graphics Capture returned
+  `SetIsBorderRequired ... No such interface supported (0x80004002)`. The
+  harness completed and closed normally before the recovery capture, so no
+  coordinates were guessed and visual acceptance rests on the deterministic
+  real-Tk widget/clipboard/geometry assertions.
+- Known limitations: normal producer startup intentionally loads only core
+  data, so approved optional official-note/media facts appear only when an
+  explicit enrichment database is supplied and all existing gates pass.
+  Character thresholds are guidance, not an XPression/template contract.
+  Copy events are memory-only. No Linux/Xvfb GUI smoke was performed locally.
+  Phase 6A still must merge before the stacked Phase 6B PR can target a
+  main-only diff.
+- Intentionally deferred: Phase 6C pinned rundown, drag/order, read-time, and
+  used-on-air workflow; Phase 6D session/crash recovery; Phase 6E What
+  Changed; Phase 6F fuzzy search/quick filters/player comparison; College
+  Résumé; graphics integration; persistence; and generative rewriting.
 
 ### Phase 6A — Game-day command center, readiness, and Local/Offline Mode
 

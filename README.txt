@@ -5,27 +5,36 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5 and Phase 6A are complete. Phase 6A's functional commits are
-0eeefa3 (pure readiness policy) and 0c994a1 (Game Day command center and
-Local/Offline Mode), based on remote main 19f2702. The complete offline suite
-passes 491 tests with warnings treated as errors; compileall, pip check, and
-checked-in distribution verification also pass. The future-season
-year-generalization patch remains applied once and its dedicated regressions
-pass.
+Phases 1-5, Phase 6A, and Phase 6B are complete. Phase 6B's reviewed
+functional commits are b2a8f30 (canonical fact model and source adapters),
+d7994ad (Game Day cards and synchronization), eda0bfd (canonical roster-status
+reuse), 5febe19 (copy provenance and 60/120-character guidance), and 919254e
+(minimum-size fact-card layout and deterministic GUI smoke). Phase 6B started
+from the completed Phase 6A head e87b4d7; at that time Phase 6A remained open
+as draft PR #4 and remote main remained 19f2702, so Phase 6B is a stacked
+branch rather than a claim that unmerged work is on main.
+
+The complete offline suite passes 556 tests with warnings treated as errors;
+the 356-test Phase 6B/adjacent safety matrix also passes. The deterministic
+Windows source-app smoke passes at 1120x720 with a usable scrollable fact
+viewport. Compileall, pip check, and checked-in distribution verification pass.
+The future-season year-generalization patch remains applied once and its
+dedicated regressions pass.
 
 Truck-hardware smoke testing and producer rehearsal are recorded as completed
 based on the project owner's report. No hardware model, display scaling,
 rehearsal date, or additional observed behavior is asserted here because those
 details were not supplied.
 
-Phase 6B through 6F have not started. Phase 6A does not add fact cards, pinned
-rundowns, read-time budgeting, used-on-air state, session recovery, change
-comparison, fuzzy search, or player comparison. This remains an assisted
-broadcast tool, not a candidate for unattended on-air use: source facts,
-official lineups, availability, and milestones still require producer
-verification. Cancellation is cooperative while a single urllib request is
-inside its bounded timeout, although cancelled/superseded jobs cannot overlap
-core commits or replace a newer coherent snapshot.
+Phase 6C through 6F have not started. Phase 6B does not add a pinned rundown,
+read-time budgeting, used-on-air state, restart persistence, crash recovery,
+change comparison, fuzzy search, or player comparison. This remains an
+assisted broadcast tool, not a candidate for unattended on-air use: cards that
+do not pass exact identity, provenance, freshness, source-health, and approval
+gates stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line
+copy. Cancellation is cooperative while a single urllib request is inside its
+bounded timeout, although cancelled/superseded jobs cannot overlap core
+commits or replace a newer coherent snapshot.
 
 FIRST-TIME SETUP
 Double-click:
@@ -135,6 +144,40 @@ There is no manual force-green control. Unknown never counts as pass. Saved
 projected, manual, and imported lineups remain warnings and are never described
 as official. A stale or disconnected exact-game feed blocks readiness once the
 authoritative game or live response says the game is live.
+
+AIR-READY FACTS
+Game Day now opens on an Air-Ready Facts view, with Phase 6A's complete
+readiness detail retained in the adjacent Readiness Details view. Every card is
+an immutable canonical Broadcast Fact with:
+  - stable conceptual fact ID;
+  - separate evidence hash that changes with wording, value, provenance,
+    approval, or trust state;
+  - exact player/team/game/season identity;
+  - concise air copy and optional context;
+  - source, page/game identity, snapshot freshness, parser, and approval
+    provenance where applicable;
+  - one derived VERIFIED, VERIFY, STALE, or UNAVAILABLE state.
+
+The selected-game builder is local and deterministic. It wraps installed
+official statistics, canonical roster status, exact-game lineup provenance,
+approved official game notes and media-guide rows when explicitly loaded,
+exactly scoped producer notes, and official team snapshots. It does not access
+the network or generate prose with AI. One worker performs fact aggregation;
+one pending replacement is coalesced, and late results are discarded unless
+their generation, official game ID, and database identity still match.
+
+Copy Air Line is enabled only for an air-ready VERIFIED fact and copies the
+exact displayed string. Its in-memory copy event retains the fact ID, evidence
+hash, full provenance, snapshot, copy time, and selected character-width
+profile. Copy With Source remains available for research/handoff and prints
+the trust state and warning explicitly. Copying never promotes verification,
+and Phase 6B does not persist copy history.
+
+Character guidance is centrally configured for 60-character one-line and
+120-character extended profiles. It counts the exact Unicode string that Copy
+Air Line uses, labels likely wrapping without truncating or rewriting facts,
+and is guidance only—not validation against an XPression or other graphics
+template.
 
 LOCAL/OFFLINE MODE
 The visible Local/Offline Mode control appears beside Quick Refresh and in the
