@@ -14,8 +14,8 @@ from the completed Phase 6A head e87b4d7; at that time Phase 6A remained open
 as draft PR #4 and remote main remained 19f2702, so Phase 6B is a stacked
 branch rather than a claim that unmerged work is on main.
 
-The complete offline suite passes 556 tests with warnings treated as errors;
-the 356-test Phase 6B/adjacent safety matrix also passes. The deterministic
+The complete offline suite passes 557 tests with warnings treated as errors;
+the 357-test Phase 6B/adjacent safety matrix also passes. The deterministic
 Windows source-app smoke passes at 1120x720 with a usable scrollable fact
 viewport. Compileall, pip check, and checked-in distribution verification pass.
 The future-season year-generalization patch remains applied once and its

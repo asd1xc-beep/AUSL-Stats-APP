@@ -428,9 +428,10 @@ Fill in one record when a milestone or major item is completed.
   draft PR #4, so Phase 6B was intentionally developed as a stacked branch
   rather than omitting its required dependency.
 - Branch and final functional commit: `agent/phase6b-air-ready-facts`;
-  `f65823e` after canonical model `b2a8f30`, Game Day cards/synchronization
+  `e64d53d` after canonical model `b2a8f30`, Game Day cards/synchronization
   `d7994ad`, canonical roster-state reuse `eda0bfd`, copy/width guidance
-  `5febe19`, and minimum-size GUI correction/smoke `919254e`. The
+  `5febe19`, minimum-size GUI correction/smoke `919254e`, detailed smoke
+  platform `f65823e`, and reviewed stale-starter gate `e64d53d`. The
   documentation-only acceptance commit is reported in the Phase 6B PR.
 - Fact identity/version design: one frozen `BroadcastFact` owns category,
   exact player/team/game/season identity, stable source-record/concept key,
@@ -493,12 +494,15 @@ Fill in one record when a milestone or major item is completed.
   fixture lacked the new worker-generation field; the lifecycle guard fixed
   it without weakening shutdown. The first real-Tk smoke then exposed a
   22-pixel fact viewport at minimum size; the internal Game Day Facts/Readiness
-  views increased the asserted scrollable viewport to 254 pixels.
+  views increased the asserted scrollable viewport to 254 pixels. Final diff
+  review added one failing regression proving that a fully approved official
+  starter with yellow roster health was mislabeled projected; the corrected
+  adapter retains CONFIRMED STARTER identity but makes it STALE and non-air-ready.
 - Automated acceptance:
   - required Phase 6B plus readiness, selected-game, official-note, media,
     enrichment, team/stat formatting, roster/copy, callback/refresh,
-    privacy/build, and future-season matrix — **356 passed in 3.59 s**;
-  - complete offline warnings-as-errors suite — **556 passed in 11.93 s**;
+    privacy/build, and future-season matrix — **357 passed in 3.41 s**;
+  - complete offline warnings-as-errors suite — **557 passed in 11.93 s**;
   - final `compileall`, `pip check`, checked-in distribution verification,
     Git LFS validation, whitespace validation, and tracked/history secret scans
     are recorded in the Phase 6B PR completion report.
