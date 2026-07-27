@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -327,3 +328,55 @@ def test_fact_filters_keep_both_team_and_review_views_local():
 
 def test_fact_panel_contract_is_scrollable():
     assert ausl_stats_app.AUSLStatsApp.FACT_PANEL_SCROLLABLE is True
+
+
+def test_fact_panel_mousewheel_scrolls_in_platform_directions():
+    app = prepare_app()
+
+    class FakeCanvas:
+        def __init__(self):
+            self.calls = []
+
+        def yview_scroll(self, amount, units):
+            self.calls.append((amount, units))
+
+    app.fact_cards_canvas = FakeCanvas()
+
+    assert app._on_fact_cards_mousewheel(SimpleNamespace(delta=120, num=None)) == "break"
+    assert app._on_fact_cards_mousewheel(SimpleNamespace(delta=-240, num=None)) == "break"
+    assert app._on_fact_cards_mousewheel(SimpleNamespace(delta=1, num=None)) == "break"
+    assert app._on_fact_cards_mousewheel(SimpleNamespace(delta=0, num=4)) == "break"
+    assert app._on_fact_cards_mousewheel(SimpleNamespace(delta=0, num=5)) == "break"
+    assert app.fact_cards_canvas.calls == [
+        (-1, "units"),
+        (2, "units"),
+        (-1, "units"),
+        (-1, "units"),
+        (1, "units"),
+    ]
+
+
+def test_fact_panel_mousewheel_binding_reaches_card_descendants_idempotently():
+    app = prepare_app()
+
+    class FakeWidget:
+        def __init__(self, *children):
+            self.children = list(children)
+            self.bindings = {}
+
+        def bind(self, sequence, callback):
+            self.bindings[sequence] = callback
+
+        def winfo_children(self):
+            return self.children
+
+    button = FakeWidget()
+    label = FakeWidget()
+    card = FakeWidget(label, button)
+    container = FakeWidget(card)
+
+    app._bind_fact_cards_mousewheel(container)
+    app._bind_fact_cards_mousewheel(container)
+
+    for widget in (container, card, label, button):
+        assert set(widget.bindings) == {"<MouseWheel>", "<Button-4>", "<Button-5>"}

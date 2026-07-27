@@ -1849,6 +1849,8 @@ class AUSLStatsApp:
                 self._fact_canvas_window, width=event.width
             ),
         )
+        self._bind_fact_cards_mousewheel(self.fact_cards_canvas)
+        self._bind_fact_cards_mousewheel(self.fact_cards_container)
         self._render_fact_cards()
 
     def _focus_game_setup(self):
@@ -3860,6 +3862,7 @@ class AUSLStatsApp:
                 wraplength=1180,
                 padding=10,
             ).grid(row=0, column=0, sticky="ew")
+            self._bind_fact_cards_mousewheel(container)
             return
         container.columnconfigure(0, weight=1)
         for row_index, item in enumerate(facts):
@@ -3968,6 +3971,46 @@ class AUSLStatsApp:
                 column=0,
                 sticky="ew",
             )
+        self._bind_fact_cards_mousewheel(container)
+
+    @staticmethod
+    def _fact_cards_scroll_units(event):
+        button_number = getattr(event, "num", None)
+        if button_number == 4:
+            return -1
+        if button_number == 5:
+            return 1
+        try:
+            delta = int(getattr(event, "delta", 0))
+        except (TypeError, ValueError):
+            return 0
+        if not delta:
+            return 0
+        units = int(-delta / 120)
+        if units == 0:
+            # macOS and some high-resolution Windows devices report deltas
+            # smaller than the traditional Windows WHEEL_DELTA of 120.
+            return -1 if delta > 0 else 1
+        return units
+
+    def _on_fact_cards_mousewheel(self, event):
+        units = self._fact_cards_scroll_units(event)
+        canvas = getattr(self, "fact_cards_canvas", None)
+        if not units or canvas is None:
+            return None
+        try:
+            canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            return None
+        return "break"
+
+    def _bind_fact_cards_mousewheel(self, widget):
+        """Bind wheel scrolling to the canvas and every rendered card widget."""
+
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_fact_cards_mousewheel)
+        for child in widget.winfo_children():
+            self._bind_fact_cards_mousewheel(child)
 
     def _fact_by_id(self, fact_id):
         collection = getattr(self, "_fact_collection", None)
