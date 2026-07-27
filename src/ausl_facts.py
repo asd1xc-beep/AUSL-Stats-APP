@@ -19,6 +19,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import pandas as pd
 
+from ausl_data import normalize_roster_status
+
 
 class FactCategory(str, Enum):
     AVAILABILITY = "availability"
@@ -641,14 +643,7 @@ def _single_player_stat(frame: Any, player_id: str) -> pd.Series | None:
 
 
 def _roster_status(value: Any) -> str:
-    text = _text(value).casefold()
-    if text == "active":
-        return "Active"
-    if "reserve" in text:
-        return "Reserve Pool"
-    if text in {"inactive", "injured", "suspended"}:
-        return text.title()
-    return "Unknown"
+    return normalize_roster_status(value)
 
 
 def _official_stats_facts(
@@ -855,6 +850,17 @@ def _official_stats_facts(
                 candidates.append((gap / interval, priority, key, current, target, gap, label))
         if candidates:
             _, _, key, current, target, gap, label = min(candidates)
+            singular_label = {
+                "strikeouts": "strikeout",
+                "wins": "win",
+                "appearances": "appearance",
+                "hits": "hit",
+                "home runs": "home run",
+                "RBI": "RBI",
+                "stolen bases": "stolen base",
+                "games": "game",
+            }[label]
+            gap_label = singular_label if gap == 1 else label
             facts.append(
                 _fact(
                     category=FactCategory.MILESTONE_WATCH,
@@ -866,7 +872,7 @@ def _official_stats_facts(
                     concept_key=f"career-milestone:{key}:{target}",
                     headline=f"{name.upper()} — MILESTONE WATCH",
                     air_copy=(
-                        f"{name} needs {gap} more {label} to reach "
+                        f"{name} needs {gap} more {gap_label} to reach "
                         f"{target} career AUSL {label}."
                     ),
                     supporting_context=(
@@ -1592,4 +1598,3 @@ def build_selected_game_facts(
         available=True,
         empty_reason=reason,
     )
-

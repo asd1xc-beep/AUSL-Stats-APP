@@ -425,6 +425,33 @@ def test_inactive_reserve_and_unknown_status_keep_warning():
     assert "reserve" in reserve.warning_reason.casefold()
 
 
+def test_canonical_roster_status_preserves_specific_injury_warning():
+    data = database()
+    data["roster"].loc[
+        data["roster"]["player_id"].eq(33), "roster_status"
+    ] = "Injured - Temporary"
+
+    collection = build_selected_game_facts(data, game())
+    injured = next(item for item in collection.facts if item.subject_id == "33")
+    assert "Injured - Temporary" in injured.air_copy
+    assert injured.verification_state is VerificationState.VERIFY
+
+
+def test_one_away_milestone_uses_a_singular_unit():
+    data = database()
+    data["career_batting"].loc[0, "hits"] = 49
+
+    collection = build_selected_game_facts(data, game())
+    milestone = next(
+        item
+        for item in collection.facts
+        if item.subject_id == "11"
+        and item.category is FactCategory.MILESTONE_WATCH
+    )
+    assert "needs 1 more hit to reach 50 career AUSL hits" in milestone.air_copy
+    assert "1 more hits" not in milestone.air_copy
+
+
 def manual_note(**overrides):
     values = {
         "note_id": "manual-1",
