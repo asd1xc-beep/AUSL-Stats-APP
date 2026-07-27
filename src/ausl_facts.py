@@ -362,7 +362,10 @@ def character_count_preview(
 
 
 def build_copy_event(
-    fact: BroadcastFact, *, copied_at: datetime | None = None
+    fact: BroadcastFact,
+    *,
+    copied_at: datetime | None = None,
+    template_profile: str | None = None,
 ) -> FactCopyEvent:
     if not fact.air_ready:
         reason = _text(fact.warning_reason) or fact.verification_state.value
@@ -375,6 +378,9 @@ def build_copy_event(
         for item in fact.provenance
         if _text(item.snapshot_timestamp)
     ]
+    selected_profile = template_profile or fact.template_profile
+    if selected_profile not in CHARACTER_COUNT_PROFILES:
+        raise ValueError(f"Unknown character-count profile: {selected_profile}")
     return FactCopyEvent(
         fact_id=fact.fact_id,
         evidence_hash=fact.evidence_hash,
@@ -382,7 +388,7 @@ def build_copy_event(
         provenance=fact.provenance,
         snapshot_timestamp=snapshots[0] if snapshots else "",
         copied_at=timestamp,
-        template_profile=fact.template_profile,
+        template_profile=selected_profile,
     )
 
 

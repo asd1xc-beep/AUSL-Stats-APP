@@ -680,6 +680,16 @@ def test_verified_copy_uses_exact_visible_text_and_records_provenance():
     assert event.copied_at == NOW
 
 
+def test_copy_event_records_the_selected_character_profile():
+    event = build_copy_event(
+        fact(),
+        copied_at=NOW,
+        template_profile="extended",
+    )
+    assert event.template_profile == "extended"
+    assert event.copied_text == fact().air_copy
+
+
 @pytest.mark.parametrize(
     "state",
     [

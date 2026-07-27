@@ -47,6 +47,7 @@ from ausl_facts import (
     VerificationState,
     build_copy_event,
     build_selected_game_facts,
+    character_count_preview,
     copy_with_source_text,
 )
 
@@ -1755,6 +1756,7 @@ class AUSLStatsApp:
         self.fact_status_filter_var = tk.StringVar(value="Air Ready")
         self.fact_team_filter_var = tk.StringVar(value="Both teams")
         self.fact_category_filter_var = tk.StringVar(value="All categories")
+        self.fact_template_profile_var = tk.StringVar(value="60 — one line")
         self.fact_panel_status_var = tk.StringVar(
             value="Select an official game to build local fact cards."
         )
@@ -1776,6 +1778,12 @@ class AUSLStatsApp:
                 self.fact_category_filter_var,
                 ("All categories",),
                 23,
+            ),
+            (
+                "Width guide",
+                self.fact_template_profile_var,
+                ("60 — one line", "120 — extended"),
+                17,
             ),
         ):
             ttk.Label(controls, text=f"{label}:").pack(side="left", padx=(0, 4))
@@ -3780,6 +3788,14 @@ class AUSLStatsApp:
             ]
         return facts
 
+    def _selected_fact_template_profile(self):
+        label = (
+            self.fact_template_profile_var.get()
+            if hasattr(self, "fact_template_profile_var")
+            else "60 — one line"
+        )
+        return "extended" if str(label).startswith("120") else "one_line"
+
     def _fact_empty_message(self):
         selected = getattr(self, "selected_game", None)
         collection = getattr(self, "_fact_collection", None)
@@ -3900,7 +3916,10 @@ class AUSLStatsApp:
                 style="Sub.TLabel",
                 wraplength=1080,
             ).grid(row=3, column=0, sticky="w", pady=(2, 0))
-            preview = item.character_preview
+            preview = character_count_preview(
+                item.air_copy,
+                self._selected_fact_template_profile(),
+            )
             guidance = f"{preview.label} · guidance only"
             if item.warning_reason:
                 guidance += f" · {item.warning_reason}"
@@ -3956,7 +3975,10 @@ class AUSLStatsApp:
                 )
             return False
         try:
-            event = build_copy_event(item)
+            event = build_copy_event(
+                item,
+                template_profile=self._selected_fact_template_profile(),
+            )
         except FactCopyBlocked as exc:
             if hasattr(self, "fact_panel_status_var"):
                 self.fact_panel_status_var.set(f"Not copied — {exc}")
@@ -3987,7 +4009,10 @@ class AUSLStatsApp:
         self.root.update()
         if item.air_ready:
             self.current_broadcast_note = item.air_copy
-            self._last_fact_copy_event = build_copy_event(item)
+            self._last_fact_copy_event = build_copy_event(
+                item,
+                template_profile=self._selected_fact_template_profile(),
+            )
         self._last_fact_source_copy = {
             "fact_id": item.fact_id,
             "evidence_hash": item.evidence_hash,
@@ -3998,6 +4023,7 @@ class AUSLStatsApp:
                 else ""
             ),
             "copied_at": datetime.now(timezone.utc).isoformat(),
+            "template_profile": self._selected_fact_template_profile(),
         }
         if hasattr(self, "fact_panel_status_var"):
             self.fact_panel_status_var.set(
@@ -4009,6 +4035,10 @@ class AUSLStatsApp:
         item = self._fact_by_id(fact_id)
         if item is None:
             return
+        preview = character_count_preview(
+            item.air_copy,
+            self._selected_fact_template_profile(),
+        )
         details = [
             item.air_copy,
             "",
@@ -4018,7 +4048,7 @@ class AUSLStatsApp:
             f"Air-ready: {'YES' if item.air_ready else 'NO'}",
             f"Fact ID: {item.fact_id}",
             f"Evidence hash: {item.evidence_hash}",
-            f"Character guidance: {item.character_preview.label}",
+            f"Character guidance: {preview.label}",
         ]
         if item.warning_reason:
             details.append(f"Warning: {item.warning_reason}")

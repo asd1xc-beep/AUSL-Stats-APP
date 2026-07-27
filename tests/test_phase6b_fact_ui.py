@@ -185,6 +185,19 @@ def test_copy_air_line_syncs_visible_version_and_event():
     assert app._last_fact_copy_event.evidence_hash == item.evidence_hash
 
 
+def test_copy_air_line_records_the_visible_width_profile():
+    app = prepare_app()
+    app.fact_template_profile_var = FakeVar("120 — extended")
+    item = fact(selected_game_id="9001")
+    app._fact_collection = collection("9001", [item])
+    app.root.clipboard_clear = lambda: None
+    app.root.clipboard_append = lambda _text: None
+    app.root.update = lambda: None
+
+    assert app.copy_fact_air_line(item.fact_id) is True
+    assert app._last_fact_copy_event.template_profile == "extended"
+
+
 def test_stale_fact_cannot_silently_use_copy_air_line():
     app = prepare_app()
     item = replace(
