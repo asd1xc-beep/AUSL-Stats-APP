@@ -1,5 +1,5 @@
 ﻿{
-    "schema_version":  1,
+    "schema_version": 1,
     "snapshot_updated_at":  "2026-07-23T18:08:06.854069+00:00",
     "files":  [
                   {
@@ -28,10 +28,16 @@
                   },
                   {
                       "name":  "update_manifest.json",
-                      "sha256":  "d2d6fe1445dd81d1e4e077154737745b0d93b3091dd858ba2ea5a73a679beab2",
-                      "bytes":  502,
+                      "sha256":  "aa3810d82fdbdfd8029edadf54d9a92ab22822e72a4553e495af55584b19a4f1",
+                      "bytes":  3151,
+                      "validation":  "validated_phase_1_core"
+                  },
+                  {
+                      "name":  "refresh_attempt.json",
+                      "sha256":  "c3c782f4c9080749b01eece7df6ee7bf1c4ff56777901875c0201c32153a17e2",
+                      "bytes":  227,
                       "validation":  "validated_phase_1_core"
                   }
               ],
-    "purpose":  "Validated distributable core snapshot; unverified enrichment is intentionally omitted."
+    "purpose":  "Validated distributable core snapshot and nonprivate refresh attempt health; unverified enrichment is intentionally omitted."
 }

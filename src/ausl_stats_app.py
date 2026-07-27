@@ -29,6 +29,7 @@ from ausl_data import (
     fetch_live_game,
     innings_to_outs,
     load_database,
+    load_refresh_attempt,
     media_approval_record_id,
     migrate_locked_lineups_file,
     migrate_manual_notes_file,
@@ -1975,7 +1976,9 @@ class AUSLStatsApp:
         if hasattr(self, "data_freshness_var"):
             self.data_freshness_var.set(self.data_freshness_text)
         if hasattr(self, "data_health_var"):
-            self._apply_data_health_display(data.get("manifest", {}))
+            self._apply_data_health_display(
+                data.get("manifest", {}), data.get("refresh_attempt", {})
+            )
         if hasattr(self, "status_var"):
             self.status_var.set(f"Ready — {len(data['roster'])} current players loaded")
         self._refresh_manual_note_players()
@@ -2858,7 +2861,9 @@ class AUSLStatsApp:
         self._log_event("data_update_started", source="official_ausl_core_data")
 
         def progress(message):
-            self._post_main_thread(self.status_var.set, message)
+            self._post_main_thread(
+                self._set_data_update_progress, message, cancel_token
+            )
 
         def work():
             try:
@@ -2879,6 +2884,11 @@ class AUSLStatsApp:
 
     def _data_update_token_is_current(self, token):
         return token is not None and token is getattr(self, "_data_update_cancel_token", None)
+
+    def _set_data_update_progress(self, message, token):
+        if not self._data_update_token_is_current(token):
+            return
+        self.status_var.set(message)
 
     def cancel_data_update(self):
         """Cancel an in-flight Quick Refresh immediately.
@@ -2926,6 +2936,11 @@ class AUSLStatsApp:
         self._data_update_cancel_token = None
         self._sync_update_button()
         self.status_var.set(f"Data update failed: {exc}")
+        if hasattr(self, "data_health_var"):
+            self._apply_data_health_display(
+                getattr(self, "db", {}).get("manifest", {}),
+                load_refresh_attempt(),
+            )
         self._log_event(
             "data_update_failed",
             source="official_ausl_data",
@@ -2961,33 +2976,49 @@ class AUSLStatsApp:
             "unknown": "○",
         }.get(state, "○")
 
-    def _data_health_state(self, manifest):
-        entries = (manifest or {}).get("source_health") if isinstance(manifest, dict) else {}
+    def _data_health_state(self, manifest, refresh_attempt=None):
+        entries = (
+            (manifest or {}).get("source_health")
+            if isinstance(manifest, dict)
+            else {}
+        )
         if not isinstance(entries, dict) or not entries:
-            return "unknown"
-        statuses = []
-        for info in entries.values():
-            if not isinstance(info, dict):
-                continue
-            status = str(info.get("status", "unknown")).lower()
-            if status == "disabled":
-                status = "green"
-            if status not in {"green", "yellow", "red"}:
-                status = "yellow"
-            statuses.append(status)
-        if "red" in statuses:
+            snapshot_state = "unknown"
+        else:
+            statuses = []
+            for info in entries.values():
+                if not isinstance(info, dict):
+                    continue
+                status = str(info.get("status", "unknown")).lower()
+                if status == "disabled":
+                    status = "green"
+                if status not in {"green", "yellow", "red"}:
+                    status = "yellow"
+                statuses.append(status)
+            if "red" in statuses:
+                snapshot_state = "red"
+            elif "yellow" in statuses:
+                snapshot_state = "yellow"
+            elif statuses:
+                snapshot_state = "green"
+            else:
+                snapshot_state = "unknown"
+        attempt_state = (
+            str((refresh_attempt or {}).get("state") or "").strip().lower()
+            if isinstance(refresh_attempt, dict)
+            else ""
+        )
+        if attempt_state == "failed":
+            if snapshot_state in {"green", "yellow"}:
+                return "yellow"
             return "red"
-        if "yellow" in statuses:
-            return "yellow"
-        if statuses:
-            return "green"
-        return "unknown"
+        return snapshot_state
 
-    def _apply_data_health_display(self, manifest):
+    def _apply_data_health_display(self, manifest, refresh_attempt=None):
         if not hasattr(self, "data_health_var"):
             return
-        state = self._data_health_state(manifest)
-        text = self.format_data_health(manifest)
+        state = self._data_health_state(manifest, refresh_attempt)
+        text = self.format_data_health(manifest, refresh_attempt)
         if hasattr(self, "data_health_label"):
             self.data_health_label.configure(foreground=self._data_health_color(state))
         if hasattr(self, "data_health_var"):
@@ -3034,7 +3065,7 @@ class AUSLStatsApp:
         return f"{days}d ago"
 
     @classmethod
-    def format_data_health(cls, manifest):
+    def format_data_health(cls, manifest, refresh_attempt=None):
         entries = (manifest or {}).get("source_health") if isinstance(manifest, dict) else {}
         if not isinstance(entries, dict) or not entries:
             return "Data health: UNKNOWN — no source health manifest available"
@@ -3069,7 +3100,23 @@ class AUSLStatsApp:
             summary_items.append(f"{display_name}: {status.upper()} — {detail}")
         if len(normalized) > 4:
             summary_items.append(f"+{len(normalized) - 4} more")
-        return f"Data health: {overall} — " + "; ".join(summary_items)
+        snapshot_text = f"Data health: {overall} — " + "; ".join(summary_items)
+        attempt = refresh_attempt if isinstance(refresh_attempt, dict) else {}
+        attempt_state = str(attempt.get("state") or "").strip().lower()
+        if attempt_state == "failed":
+            source = str(attempt.get("affected_source") or "refresh source")
+            detail = str(attempt.get("error_summary") or "refresh failed")
+            return (
+                f"Stored snapshot valid; latest refresh failed ({source}): "
+                f"{detail}. {snapshot_text}"
+            )
+        if attempt_state == "cancelled":
+            return (
+                f"Latest refresh cancelled; stored snapshot unchanged. {snapshot_text}"
+            )
+        if attempt_state == "in_progress":
+            return f"Refresh in progress; stored snapshot remains active. {snapshot_text}"
+        return snapshot_text
 
     def game_codes(self):
         selected = getattr(self, "selected_game", None)
@@ -4933,6 +4980,9 @@ class AUSLStatsApp:
         self.status_var.set(f"Producer packet saved: {path}")
         messagebox.showinfo("AUSL Broadcast Stats", f"Producer packet created:\n\n{path}")
 
+    def _media_guide_citation_line(self):
+        return f"Media guide source: {media_guide_source_context()['source_url']}"
+
     def render_player(self, roster):
         self.player_title.set(self.player_title_text(roster))
         warning = self.availability_warning(roster)
@@ -4959,7 +5009,7 @@ class AUSLStatsApp:
             "Official split source: https://theausl.com/stats/",
             "Official standings source: https://theausl.com/standings/",
             "Official schedule source: https://theausl.com/schedule/",
-            "Media guide source: https://theausl.com/wp-content/uploads/2026/06/2026-AUSL-Media-Guide.pdf",
+            self._media_guide_citation_line(),
             "",
             "Media guide notes:",
             *(

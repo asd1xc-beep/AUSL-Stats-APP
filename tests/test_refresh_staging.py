@@ -125,6 +125,41 @@ def test_standings_failure_preserves_entire_last_known_good_core_snapshot(
         filename: (tmp_path / filename).read_bytes()
         for filename in CORE_FILENAMES
     } == originals
+    attempt = json.loads(
+        (tmp_path / "refresh_attempt.json").read_text(encoding="utf-8")
+    )
+    assert attempt["state"] == "failed"
+    assert attempt["affected_source"] == "official_core_sources"
+    assert "standings" in attempt["error_summary"].lower()
+
+
+def test_successful_refresh_replaces_a_prior_failed_attempt_state(
+    monkeypatch, tmp_path
+):
+    originals = seed_last_known_good(tmp_path)
+    configure_valid_core_refresh(monkeypatch, tmp_path)
+    valid_standings = ausl_data.fetch_standings_frame
+    monkeypatch.setattr(
+        ausl_data,
+        "fetch_standings_frame",
+        lambda: (_ for _ in ()).throw(RuntimeError("fixture standings outage")),
+    )
+
+    with pytest.raises(ausl_data.CoreRefreshValidationError):
+        ausl_data.update_all_data()
+
+    assert {
+        filename: (tmp_path / filename).read_bytes()
+        for filename in CORE_FILENAMES
+    } == originals
+    monkeypatch.setattr(ausl_data, "fetch_standings_frame", valid_standings)
+
+    ausl_data.update_all_data()
+
+    attempt = ausl_data.load_refresh_attempt(tmp_path)
+    assert attempt["state"] == "succeeded"
+    assert attempt["error_summary"] is None
+    assert attempt["affected_source"] == "official_core_sources"
 
 
 def test_core_promotion_failure_rolls_back_every_already_promoted_file(

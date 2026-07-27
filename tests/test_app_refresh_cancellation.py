@@ -119,6 +119,30 @@ def test_stale_data_update_error_after_cancel_does_not_show_dialog(monkeypatch):
     assert shown == []
 
 
+def test_stale_data_update_progress_after_cancel_does_not_clobber_replacement_status():
+    app = bare_app()
+    stale_token = ausl_data.CancelToken()
+    replacement_token = ausl_data.CancelToken()
+    app._data_update_cancel_token = replacement_token
+    app.status_var.set("Replacement refresh queued; waiting.")
+
+    app._set_data_update_progress(
+        "Cancelled worker is still resolving.", stale_token
+    )
+
+    assert app.status_var.get() == "Replacement refresh queued; waiting."
+
+
+def test_current_data_update_progress_updates_status():
+    app = bare_app()
+    token = ausl_data.CancelToken()
+    app._data_update_cancel_token = token
+
+    app._set_data_update_progress("Current refresh progress.", token)
+
+    assert app.status_var.get() == "Current refresh progress."
+
+
 def test_finish_data_update_success_promotes_when_token_is_current():
     app = bare_app()
     token = ausl_data.CancelToken()

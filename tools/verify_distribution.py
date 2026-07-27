@@ -57,7 +57,10 @@ _CORE_WORKBOOKS = {
     "ausl_season_stats.xlsx",
     "ausl_team_context.xlsx",
 }
-_CORE_EXPORTS = _CORE_WORKBOOKS | {"update_manifest.json"}
+_CORE_EXPORTS = _CORE_WORKBOOKS | {
+    "refresh_attempt.json",
+    "update_manifest.json",
+}
 _DISTRIBUTION_MANIFEST = "distribution_manifest.json"
 _CORE_VALIDATION_STATE = "validated_phase_1_core"
 _ALLOWED_DISTRIBUTION_EXPORT_NAMES = _CORE_EXPORTS | {_DISTRIBUTION_MANIFEST}
@@ -262,6 +265,17 @@ def _manifest_violations(
             except OSError as exc:
                 violations.append(Violation(target, file_entry, f"core export is unreadable: {exc}"))
                 continue
+            if name in _CORE_WORKBOOKS and (
+                payload.startswith(b"version https://git-lfs.github.com/spec/")
+                or not payload.startswith(b"PK\x03\x04")
+            ):
+                violations.append(
+                    Violation(
+                        target,
+                        file_entry,
+                        "core workbook is not a real XLSX payload (Git LFS content missing)",
+                    )
+                )
             actual_hash = hashlib.sha256(payload).hexdigest()
             declared_hash = record.get("sha256")
             if not isinstance(declared_hash, str) or declared_hash.casefold() != actual_hash:

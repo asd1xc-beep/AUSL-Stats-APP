@@ -13,40 +13,16 @@ $requiredExports = @(
     "data\exports\ausl_season_stats.xlsx",
     "data\exports\ausl_career_stats.xlsx",
     "data\exports\ausl_team_context.xlsx",
-    "data\exports\update_manifest.json"
+    "data\exports\update_manifest.json",
+    "data\exports\refresh_attempt.json"
 )
 
 function Write-DistributionManifest {
     param([string]$Destination)
-    $updateManifestPath = Join-Path $Destination "update_manifest.json"
-    try {
-        $updateManifest = Get-Content -LiteralPath $updateManifestPath -Raw | ConvertFrom-Json
+    & $python (Join-Path $PSScriptRoot "tools\generate_distribution_manifest.py") $Destination
+    if ($LASTEXITCODE -ne 0) {
+        throw "Distribution manifest generation failed with exit code $LASTEXITCODE."
     }
-    catch {
-        throw "Required update manifest could not be read: $($_.Exception.Message)"
-    }
-    $snapshotUpdatedAt = [string]$updateManifest.updated_at
-    if ([string]::IsNullOrWhiteSpace($snapshotUpdatedAt)) {
-        throw "Required update manifest has no updated_at timestamp."
-    }
-
-    $manifestFiles = @()
-    foreach ($relativePath in $requiredExports) {
-        $name = Split-Path -Leaf $relativePath
-        $path = Join-Path $Destination $name
-        $manifestFiles += [ordered]@{
-            name = $name
-            sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
-            bytes = (Get-Item -LiteralPath $path).Length
-            validation = "validated_phase_1_core"
-        }
-    }
-    [ordered]@{
-        schema_version = 1
-        snapshot_updated_at = $snapshotUpdatedAt
-        files = $manifestFiles
-        purpose = "Phase 1 distributable core snapshot; unverified enrichment is intentionally omitted."
-    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $Destination "distribution_manifest.json") -Encoding UTF8
 }
 
 function Copy-ShareableExports {
@@ -169,6 +145,11 @@ If Windows warns about running a batch file from the internet, that is expected
 for an unknown downloaded file. This version should avoid the higher-risk
 pattern of an unsigned, bundled executable inside a ZIP.
 "@ | Set-Content -Path $sourceReadme -Encoding UTF8
+
+& $python (Join-Path $PSScriptRoot "tools\generate_portable_source_manifest.py") $sourcePackage
+if ($LASTEXITCODE -ne 0) {
+    throw "Portable source manifest generation failed with exit code $LASTEXITCODE."
+}
 
 $sourceZip = Join-Path $PSScriptRoot "dist\AUSL-Broadcast-Stats-Safer-No-EXE.zip"
 if (Test-Path $sourceZip) { Remove-Item $sourceZip -Force }

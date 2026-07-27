@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
 import pytest
 
 from tools.verify_distribution import main, scan_distribution
+from tools.generate_distribution_manifest import generate_distribution_manifest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -23,12 +25,21 @@ def _write_manifested_core_package(root: Path) -> Path:
     exports = root / "data" / "exports"
     exports.mkdir(parents=True, exist_ok=True)
     payloads = {
-        "ausl_rosters.xlsx": b"validated roster fixture",
-        "ausl_season_stats.xlsx": b"validated season fixture",
-        "ausl_career_stats.xlsx": b"validated career fixture",
-        "ausl_team_context.xlsx": b"validated team context fixture",
+        "ausl_rosters.xlsx": b"PK\x03\x04validated roster fixture",
+        "ausl_season_stats.xlsx": b"PK\x03\x04validated season fixture",
+        "ausl_career_stats.xlsx": b"PK\x03\x04validated career fixture",
+        "ausl_team_context.xlsx": b"PK\x03\x04validated team context fixture",
         "update_manifest.json": json.dumps(
             {"updated_at": "2026-07-09T14:56:07.992182+00:00"}
+        ).encode("utf-8"),
+        "refresh_attempt.json": json.dumps(
+            {
+                "state": "succeeded",
+                "started_at": "2026-07-09T14:56:00+00:00",
+                "completed_at": "2026-07-09T14:56:07.992182+00:00",
+                "affected_source": "official_core_sources",
+                "error_summary": None,
+            }
         ).encode("utf-8"),
     }
     for name, payload in payloads.items():
@@ -69,6 +80,74 @@ def test_manifested_core_snapshot_passes_and_tampering_fails(tmp_path):
     violations = scan_distribution(tmp_path)
 
     assert any("manifest hash" in violation.reason for violation in violations)
+
+
+def test_checked_in_core_snapshot_passes_distribution_verification():
+    exports = PROJECT_ROOT / "data" / "exports"
+
+    assert scan_distribution(exports) == []
+    for workbook in (
+        "ausl_rosters.xlsx",
+        "ausl_season_stats.xlsx",
+        "ausl_career_stats.xlsx",
+        "ausl_team_context.xlsx",
+    ):
+        payload = (exports / workbook).read_bytes()
+        assert payload.startswith(b"PK\x03\x04"), f"{workbook} is not a real XLSX payload"
+        assert not payload.startswith(b"version https://git-lfs.github.com/spec/")
+
+
+def test_distribution_manifest_generation_is_deterministic_utf8_lf(tmp_path):
+    source = PROJECT_ROOT / "data" / "exports"
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    for name in (
+        "ausl_rosters.xlsx",
+        "ausl_season_stats.xlsx",
+        "ausl_career_stats.xlsx",
+        "ausl_team_context.xlsx",
+        "update_manifest.json",
+        "refresh_attempt.json",
+    ):
+        shutil.copyfile(source / name, exports / name)
+
+    manifest_path = generate_distribution_manifest(exports)
+    first = manifest_path.read_bytes()
+    generate_distribution_manifest(exports)
+
+    assert manifest_path.read_bytes() == first
+    assert b"\r\n" not in first
+    assert first.endswith(b"\n")
+    assert scan_distribution(exports) == []
+
+
+def test_portable_source_manifest_exists_only_in_generated_release_output(tmp_path):
+    from tools.generate_portable_source_manifest import (
+        generate_portable_source_manifest,
+    )
+
+    assert not (PROJECT_ROOT / "portable_source_manifest.json").exists()
+    package = tmp_path / "portable-source"
+    (package / "src").mkdir(parents=True)
+    (package / "src" / "app.py").write_text("print('fixture')\n", encoding="utf-8")
+    (package / "README.txt").write_text("fixture\n", encoding="utf-8")
+
+    manifest_path = generate_portable_source_manifest(
+        package, snapshot_updated_at="2026-07-23T18:08:06+00:00"
+    )
+    first = manifest_path.read_bytes()
+    payload = json.loads(first)
+    generate_portable_source_manifest(
+        package, snapshot_updated_at="2026-07-23T18:08:06+00:00"
+    )
+
+    assert manifest_path.parent == package
+    assert manifest_path.read_bytes() == first
+    assert b"\r\n" not in first
+    assert [item["path"] for item in payload["files"]] == [
+        "README.txt",
+        "src/app.py",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -230,7 +309,9 @@ def test_build_scripts_are_clean_by_default_and_fail_closed():
         assert "official_game_notes.xlsx" not in lowered
         assert "ausl_batting_splits.xlsx" not in lowered
         assert "ausl_team_context.xlsx" in lowered
-        assert "distribution_manifest.json" in lowered
+        assert "generate_distribution_manifest.py" in lowered
+        assert "generate_portable_source_manifest.py" in lowered
+        assert "refresh_attempt.json" in lowered
         assert "param([switch]$noninteractive)" in "".join(lowered.split())
         assert "if(-not$noninteractive)" in "".join(lowered.split())
 
