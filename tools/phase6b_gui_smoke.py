@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import platform
 import sys
 import time
 from collections import defaultdict
@@ -206,7 +207,8 @@ def main():
                 time.sleep(0.02)
 
         result = {
-            "platform": sys.platform,
+            "platform": platform.platform(),
+            "python": platform.python_version(),
             "window": root.title(),
             "geometry": f"{root.winfo_width()}x{root.winfo_height()}",
             "tabs_opened": len(app.main_tabs.tabs()),
