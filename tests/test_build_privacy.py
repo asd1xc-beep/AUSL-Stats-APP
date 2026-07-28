@@ -157,6 +157,11 @@ def test_portable_source_manifest_exists_only_in_generated_release_output(tmp_pa
         ("data/manual/locked_lineups.json", "lineup locks"),
         ("data/exports/game_packets/game_969.txt", "game packets"),
         (
+            "data/exports/game_packets/rundowns/"
+            "20260728T010203456789Z_game_1042_r7_rundown.txt",
+            "game packets",
+        ),
+        (
             "data/exports/ausl_media_guide_raw_chunks.xlsx",
             "debug-only raw export",
         ),

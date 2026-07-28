@@ -1,39 +1,49 @@
 # Phase 6 broadcast-fact interface
 
-Phase 6A does not create fact cards, a rundown, read-time estimates, used-on-air
-state, or session persistence. It establishes only the boundary that later
-Phase 6B–6D work must use.
+Phase 6A established this boundary. Phase 6B implements it in
+`src/ausl_facts.py` and renders the resulting immutable values in Game Day.
+Phase 6C consumes the same immutable values in `src/ausl_rundown.py` for a
+session-only pinned rundown, read-time estimate, and used-on-air state. It
+still does not persist or recover that session across application restarts.
 
 ## Required fact input
 
-A future broadcast fact should be supplied to presentation and readiness code
-as an immutable value with these fields:
+A broadcast fact is supplied to presentation, copying, and readiness code as
+one frozen `BroadcastFact` value. Its contract includes:
 
 ```text
-fact_id                 stable identity for this source fact
+fact_id                 stable conceptual/source-record identity
+evidence_hash           version of wording, values, provenance, and trust
+category                typed supported fact category
 selected_game_id        exact official game ID, when game-scoped
 subject_type            player | team | game | global
 subject_id              exact player/team/game identifier
-concise_copy            short producer-facing air copy
-expanded_context        optional supporting explanation
-source_name             human-readable authoritative source
-source_id_or_url        stable source identifier or URL
-source_timestamp        effective/publication time
-retrieved_at            local retrieval time
-verification_state      verified | needs-review | stale | unavailable
-verification_detail     concise reason for the state
-review_record_id        canonical approval record, when required
+season/team/opponent    explicit selected-game display context
+headline/air_copy       deterministic producer-facing display strings
+supporting_context      optional supporting explanation
+provenance[]            source/ref/date/page/game/snapshot/parser/approval
+verification_state      VERIFIED | VERIFY | STALE | UNAVAILABLE
+source_health           green | yellow | red | unknown
+warning_reason          concise invalidation/review reason
+air_ready               derived property; never independently editable
+readiness_blocking      safety relevance, separate from optional context
 ```
 
 An unavailable, stale, mismatched, or unreviewed fact must remain in that state.
 Acknowledgement, pinning, copying, or marking a later item used on air cannot
 promote it to verified.
 
+`fact_id` does not depend solely on the rendered sentence. The same conceptual
+fact can retain its ID when a numeric value changes, while its `evidence_hash`
+changes. Different player/team/game/season/category/source-record identities
+cannot collide. Later phases must pin the canonical value and hashes rather
+than reparsing visible text.
+
 ## Readiness contribution
 
-Phase 6B may translate applicable facts into `ReadinessCheck` values, but it
-must not mutate `GameDayReadiness` or store an independent Ready-for-Air
-Boolean. A fact may contribute:
+Phase 6B translates applicable blocking facts into the existing selected-game
+verification count. It does not mutate `GameDayReadiness` or store an
+independent Ready-for-Air Boolean. A fact may contribute:
 
 - `pass` only with exact identity and authoritative current verification;
 - `warning` for usable but stale or explicitly review-required context;
@@ -46,8 +56,18 @@ They must be regenerated after a game or database change. Phase 6A's pure
 aggregator remains the single owner of overall `READY FOR AIR`,
 `NEEDS ATTENTION`, and `NOT READY`.
 
-## Deferred storage
+## Rundown consumption and deferred storage
 
-Pinned order, read-time budget, used-on-air timestamp, acknowledgement state,
-and crash/session recovery belong to Phase 6C/6D. No Phase 6A file schema
-silently reserves or persists those fields.
+Phase 6C pins the complete canonical fact value, stable fact ID, evidence hash,
+provenance, and trust state; it never reconstructs a fact from a label. The
+in-memory exact-game state additionally owns dense order, break target, pin
+timestamp, reconciliation state, used timestamp/history, and an explicit
+schema version for later serialization. Stable fact ID suppresses ordinary
+rerenders within the same game while the used evidence hash preserves the
+version actually aired.
+
+Phase 6C intentionally writes no session state. Atomic persistence, autosave,
+crash recovery, restart restoration, and persisted scroll position belong to
+Phase 6D. The only Phase 6C disk output is an explicit producer-requested
+plain-text rundown export under the private, Git-ignored,
+distribution-forbidden game-packet directory.

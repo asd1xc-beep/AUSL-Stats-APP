@@ -683,36 +683,69 @@ Make the selected game the application's home context. A compact top bar should 
 Implementation status (2026-07-27): complete as the first-tab `Game Day`
 command center, together with the pure `GameDayReadiness` policy and explicit
 Local/Offline Mode. The later broadcast-fact boundary is documented in
-`Phase_6_Broadcast_Fact_Interface.md`; fact cards, rundown state, session
-recovery, change comparison, and faster search remain deferred to 6B–6F.
+`Phase_6_Broadcast_Fact_Interface.md`. Phase 6B now implements that boundary;
+Phase 6C now implements the session-only rundown and used-on-air workflow;
+session recovery, change comparison, and faster search remain deferred to
+6D–6F.
 
-#### 6B. Universal search
+#### 6B. Air-ready fact cards
 
-Search should support:
+Every displayed/copied fact uses one immutable canonical representation with a
+stable conceptual `fact_id` and a separate `evidence_hash`. The evidence hash
+changes when wording, supporting values, source evidence, approval, or trust
+state changes; the stable ID remains usable by later rundown/change workflows.
 
-- player name and aliases;
-- team;
-- number with or without `#`;
-- position;
-- active/inactive/reserve status;
-- quick tokens such as `team:CHI`, `pos:P`, `status:inactive`, and `#22`.
+For every selected-game fact, display:
 
-Keyboard behavior matters in a truck: focus search with a shortcut, move through results with arrow keys, open with Enter, return to the prior game view with Escape.
-
-#### 6C. Air-ready fact cards and copy queue
-
-For every suggested fact, display:
-
-- concise air copy;
+- deterministic concise air copy;
 - expanded context;
-- source and freshness;
-- verification state;
-- one-click copy;
-- `Add to rundown` or `Pin`.
+- exact source, page/game, approval, parser, and snapshot provenance where
+  applicable;
+- VERIFIED, VERIFY, STALE, or UNAVAILABLE state derived from evidence;
+- one-click qualified air copy and explicit copy-with-source;
+- 60- and 120-character guidance without truncation.
 
-Create a small ordered copy/rundown queue for the selected game. Keep it local and exportable to plain text. Do not imply direct integration with a broadcast graphics system unless one is explicitly implemented.
+Implementation status (2026-07-27): complete. The Game Day tab opens on a
+scrollable Air-Ready Facts view and retains Phase 6A readiness in an adjacent
+Readiness Details view. Fact generation is local/network-free and coalesced
+behind one worker plus one latest pending request. Late results require the
+same build generation, exact official game ID, and database identity.
+Ordinary air-line copy is unavailable unless every identity, source-health,
+freshness, and approval gate passes. Copy history is in memory only.
 
-#### 6D. “What changed?” panel
+#### 6C. Pinned rundown, read-time, and used-on-air workflow
+
+Create a small ordered copy/rundown queue for the selected game. Keep it local
+and exportable to plain text. Pin canonical facts without reparsing visible
+text, retain their evidence hashes and provenance, add read-time budgeting,
+and support a used-on-air timestamp. Do not imply direct integration with a
+broadcast graphics system unless one is explicitly implemented.
+
+Implementation status (2026-07-28): complete. `src/ausl_rundown.py` owns one
+session-only state per exact official game ID, with canonical fact snapshots,
+dense ordering, timezone-aware pin/use timestamps, a configurable 140-WPM
+estimate, game-local break targets, stable-ID repeat suppression, Undo Used,
+and safe refresh reconciliation. The Game Day Rundown view separates active
+air-ready pins, Needs Verification pins, and used history. It offers reliable
+move buttons, safe copy actions, deliberate latest-version replacement,
+clipboard rundown copy, and exclusive producer-private text export.
+
+Changed, downgraded, or missing current evidence never silently rewrites or
+deletes a pinned snapshot and is excluded from air-ready timing. Read-time
+overage is a workflow warning only. Export files live under the already
+ignored/distribution-forbidden game-packet area. No rundown mutation accesses
+the network, and Local/Offline Mode permits the complete local workflow.
+Phase 6C writes no session state to disk; Phase 6D remains responsible for
+atomic persistence, autosave, crash recovery, and restart restoration.
+
+#### 6D. Session persistence and crash recovery
+
+Persist and recover selected game, pinned/used facts, and safe view state
+without weakening existing atomic-write or privacy rules.
+
+Implementation status: not started.
+
+#### 6E. “What changed?” panel
 
 After refresh, summarize material changes since the previous validated version:
 
@@ -726,7 +759,17 @@ After refresh, summarize material changes since the previous validated version:
 
 This is often more valuable before air than rereading every panel.
 
-#### 6E. Readability and accessibility
+Implementation status: not started.
+
+#### 6F. Faster search and player comparison
+
+Search should support player name/aliases, team, number, position, roster
+status, typo tolerance, and lightweight quick filters. Add side-by-side player
+comparison only after collision-safe identity behavior is tested.
+
+Implementation status: not started.
+
+#### Cross-cutting readability and accessibility
 
 - add visible scrollbars to long panels;
 - preserve scroll position when safe;
