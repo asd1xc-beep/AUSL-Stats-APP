@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -396,3 +397,8 @@ def test_model_is_explicitly_session_only_and_serialization_ready():
     assert payload["schema_version"] == 1
     assert payload["game_id"] == "1042"
     assert payload["created_at"].endswith("+00:00")
+
+
+def test_private_rundown_output_directory_is_git_ignored():
+    ignore_rules = Path(".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "data/exports/game_packets/" in ignore_rules

@@ -50,6 +50,17 @@ from ausl_facts import (
     character_count_preview,
     copy_with_source_text,
 )
+from ausl_rundown import (
+    BREAK_TARGET_PRESETS,
+    ReconciliationState,
+    RundownExportContext,
+    RundownMutationError,
+    RundownSession,
+    budget_for_state,
+    estimate_read_time_seconds,
+    render_rundown_export,
+    write_rundown_export_exclusive,
+)
 
 
 CURRENT_YEAR = max(SEASONS)
@@ -1444,6 +1455,7 @@ class AUSLStatsApp:
         self._fact_build_running = False
         self._fact_build_lock = threading.Lock()
         self._last_fact_copy_event = None
+        self._rundown_session = RundownSession()
         self._main_thread_results = queue.Queue()
         self._main_thread_poll_id = None
         self.locked_lineups = self.load_locked_lineups()
@@ -1651,12 +1663,15 @@ class AUSLStatsApp:
             sticky="nsew",
         )
         facts_view = ttk.Frame(self.game_day_views, padding=4)
+        rundown_view = ttk.Frame(self.game_day_views, padding=4)
         readiness_view = ttk.Frame(self.game_day_views, padding=4)
         self.game_day_views.add(facts_view, text="Air-Ready Facts")
+        self.game_day_views.add(rundown_view, text="Rundown")
         self.game_day_views.add(readiness_view, text="Readiness Details")
         readiness_view.columnconfigure(0, weight=1)
         readiness_view.rowconfigure(1, weight=1)
         self._build_fact_panel(facts_view)
+        self._build_rundown_panel(rundown_view)
 
         self.game_day_selected_var = tk.StringVar(
             value="No official game selected."
@@ -1769,6 +1784,7 @@ class AUSLStatsApp:
         self.fact_team_filter_var = tk.StringVar(value="Both teams")
         self.fact_category_filter_var = tk.StringVar(value="All categories")
         self.fact_template_profile_var = tk.StringVar(value="60 — one line")
+        self.fact_show_used_var = tk.BooleanVar(value=False)
         self.fact_panel_status_var = tk.StringVar(
             value="Select an official game to build local fact cards."
         )
@@ -1812,6 +1828,12 @@ class AUSLStatsApp:
                 self.fact_team_filter = picker
             elif label == "Category":
                 self.fact_category_filter = picker
+        ttk.Checkbutton(
+            controls,
+            text="Show Used",
+            variable=self.fact_show_used_var,
+            command=self._render_fact_cards,
+        ).pack(side="left", padx=(0, 10))
         ttk.Label(
             controls,
             textvariable=self.fact_panel_status_var,
@@ -1852,6 +1874,105 @@ class AUSLStatsApp:
         self._bind_fact_cards_mousewheel(self.fact_cards_canvas)
         self._bind_fact_cards_mousewheel(self.fact_cards_container)
         self._render_fact_cards()
+
+    def _build_rundown_panel(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
+
+        controls = ttk.LabelFrame(parent, text="Pinned Rundown", padding=6)
+        controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        controls.columnconfigure(8, weight=1)
+        self.rundown_break_target_var = tk.StringVar(value="30")
+        self.rundown_budget_var = tk.StringVar(
+            value="0 sec / 30 sec target — 30 sec available"
+        )
+        self.rundown_status_var = tk.StringVar(
+            value="Select an official game to start a session rundown."
+        )
+        self.rundown_session_var = tk.StringVar(
+            value="SESSION ONLY — not saved after the app closes (Phase 6D)."
+        )
+        ttk.Label(controls, text="Break target:").grid(
+            row=0, column=0, sticky="w"
+        )
+        target = ttk.Combobox(
+            controls,
+            textvariable=self.rundown_break_target_var,
+            values=tuple(str(value) for value in BREAK_TARGET_PRESETS),
+            width=8,
+        )
+        target.grid(row=0, column=1, padx=(4, 4))
+        target.bind("<Return>", lambda _event: self.apply_rundown_break_target())
+        ttk.Label(controls, text="seconds").grid(row=0, column=2, sticky="w")
+        ttk.Button(
+            controls,
+            text="Set Target",
+            command=self.apply_rundown_break_target,
+        ).grid(row=0, column=3, padx=(8, 4))
+        ttk.Button(
+            controls,
+            text="Copy Rundown",
+            command=self.copy_rundown,
+        ).grid(row=0, column=4, padx=4)
+        ttk.Button(
+            controls,
+            text="Export Text",
+            command=self.export_rundown,
+        ).grid(row=0, column=5, padx=4)
+        ttk.Label(
+            controls,
+            textvariable=self.rundown_budget_var,
+            style="Sub.TLabel",
+        ).grid(row=0, column=6, sticky="w", padx=(12, 4))
+        ttk.Label(
+            controls,
+            textvariable=self.rundown_session_var,
+            style="FactVerify.TLabel",
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(5, 0))
+        ttk.Label(
+            controls,
+            textvariable=self.rundown_status_var,
+            style="Sub.TLabel",
+        ).grid(row=1, column=4, columnspan=5, sticky="w", padx=(12, 0), pady=(5, 0))
+
+        panel = ttk.Frame(parent)
+        panel.grid(row=1, column=0, sticky="nsew")
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(0, weight=1)
+        self.rundown_canvas = tk.Canvas(
+            panel,
+            highlightthickness=0,
+            height=235,
+        )
+        self.rundown_canvas.grid(row=0, column=0, sticky="nsew")
+        rundown_scroll = ttk.Scrollbar(
+            panel,
+            orient="vertical",
+            command=self.rundown_canvas.yview,
+        )
+        rundown_scroll.grid(row=0, column=1, sticky="ns")
+        self.rundown_canvas.configure(yscrollcommand=rundown_scroll.set)
+        self.rundown_container = ttk.Frame(self.rundown_canvas)
+        self._rundown_canvas_window = self.rundown_canvas.create_window(
+            (0, 0),
+            window=self.rundown_container,
+            anchor="nw",
+        )
+        self.rundown_container.bind(
+            "<Configure>",
+            lambda _event: self.rundown_canvas.configure(
+                scrollregion=self.rundown_canvas.bbox("all")
+            ),
+        )
+        self.rundown_canvas.bind(
+            "<Configure>",
+            lambda event: self.rundown_canvas.itemconfigure(
+                self._rundown_canvas_window, width=event.width
+            ),
+        )
+        self._bind_rundown_mousewheel(self.rundown_canvas)
+        self._bind_rundown_mousewheel(self.rundown_container)
+        self._render_rundown()
 
     def _focus_game_setup(self):
         picker = getattr(self, "game_picker", None)
@@ -2500,6 +2621,8 @@ class AUSLStatsApp:
             self._invalidate_fact_state(
                 "Official schedule unavailable — fact collection is unavailable."
             )
+        if hasattr(self, "_rundown_session"):
+            self._render_rundown()
         self.refresh_game_day_dashboard()
 
     def _selected_player_in_team_codes(self, team_codes):
@@ -2554,6 +2677,8 @@ class AUSLStatsApp:
         self._verification_count_cache = {}
         if hasattr(self, "_fact_build_generation"):
             self.request_fact_rebuild()
+        if hasattr(self, "_rundown_session"):
+            self._render_rundown()
         self.refresh_game_day_dashboard()
 
     def _clear_selected_player(self):
@@ -3731,6 +3856,12 @@ class AUSLStatsApp:
                 self._last_fact_copy_event = None
                 self.current_broadcast_note = ""
         self._fact_collection = collection
+        rundown_state = self._current_rundown_state(create=False)
+        if rundown_state is not None:
+            self._ensure_rundown_session().reconcile(
+                selected.game_id,
+                collection.facts,
+            )
         if hasattr(self, "fact_team_filter"):
             teams = (
                 "Both teams",
@@ -3764,6 +3895,7 @@ class AUSLStatsApp:
             else:
                 self.fact_panel_status_var.set(collection.empty_reason)
         self._render_fact_cards()
+        self._render_rundown()
         self.refresh_game_day_dashboard()
         return True
 
@@ -3772,6 +3904,19 @@ class AUSLStatsApp:
         if not isinstance(collection, FactCollection) or not collection.available:
             return []
         facts = list(collection.facts)
+        selected = getattr(self, "selected_game", None)
+        show_used = (
+            bool(self.fact_show_used_var.get())
+            if hasattr(self, "fact_show_used_var")
+            else False
+        )
+        if isinstance(selected, SelectedGame) and not show_used:
+            session = self._ensure_rundown_session()
+            facts = [
+                item
+                for item in facts
+                if not session.is_fact_used(selected.game_id, item.fact_id)
+            ]
         status_filter = (
             self.fact_status_filter_var.get()
             if hasattr(self, "fact_status_filter_var")
@@ -3935,7 +4080,10 @@ class AUSLStatsApp:
                 item.air_copy,
                 self._selected_fact_template_profile(),
             )
-            guidance = f"{preview.label} · guidance only"
+            guidance = (
+                f"{preview.label} · guidance only · estimated "
+                f"{estimate_read_time_seconds(item.air_copy)} sec read"
+            )
             if item.warning_reason:
                 guidance += f" · {item.warning_reason}"
             ttk.Label(
@@ -3944,8 +4092,29 @@ class AUSLStatsApp:
                 style="Sub.TLabel",
                 wraplength=1080,
             ).grid(row=4, column=0, sticky="w", pady=(2, 0))
+            selected = getattr(self, "selected_game", None)
+            rundown_state = self._current_rundown_state(create=False)
+            used = bool(
+                isinstance(selected, SelectedGame)
+                and self._ensure_rundown_session().is_fact_used(
+                    selected.game_id, item.fact_id
+                )
+            )
+            already_pinned = bool(
+                rundown_state
+                and any(
+                    entry.fact_id == item.fact_id
+                    for entry in rundown_state.active_entries
+                )
+            )
             actions = ttk.Frame(card)
             actions.grid(row=5, column=0, sticky="w", pady=(5, 0))
+            if used:
+                ttk.Label(
+                    actions,
+                    text="USED ON AIR",
+                    style="FactVerify.TLabel",
+                ).pack(side="left", padx=(0, 8))
             ttk.Button(
                 actions,
                 text="Copy Air Line",
@@ -3964,6 +4133,47 @@ class AUSLStatsApp:
                 text="Details",
                 command=lambda fact_id=item.fact_id: self.show_fact_details(
                     fact_id
+                ),
+            ).pack(side="left", padx=(6, 0))
+            pin_text = "Pin to Rundown" if item.air_ready else "Pin for Review"
+            if item.verification_state is VerificationState.UNAVAILABLE:
+                pin_text = "Unavailable — Not Pinnable"
+            elif already_pinned:
+                pin_text = "Pinned"
+            elif used:
+                pin_text = "Used — Undo to Pin"
+            ttk.Button(
+                actions,
+                text=pin_text,
+                state=(
+                    "normal"
+                    if (
+                        item.verification_state is not VerificationState.UNAVAILABLE
+                        and not already_pinned
+                        and not used
+                    )
+                    else "disabled"
+                ),
+                command=lambda fact_id=item.fact_id: self.pin_fact_to_rundown(
+                    fact_id
+                ),
+            ).pack(side="left", padx=(10, 0))
+            ttk.Button(
+                actions,
+                text="Undo Used" if used else "Mark Used on Air",
+                state=(
+                    "disabled"
+                    if item.verification_state is VerificationState.UNAVAILABLE
+                    else "normal"
+                ),
+                command=(
+                    (lambda fact_id=item.fact_id: self.undo_rundown_used(fact_id))
+                    if used
+                    else (
+                        lambda fact_id=item.fact_id: self.mark_fact_used_from_card(
+                            fact_id
+                        )
+                    )
                 ),
             ).pack(side="left", padx=(6, 0))
             ttk.Separator(container, orient="horizontal").grid(
@@ -4011,6 +4221,642 @@ class AUSLStatsApp:
             widget.bind(sequence, self._on_fact_cards_mousewheel)
         for child in widget.winfo_children():
             self._bind_fact_cards_mousewheel(child)
+
+    def _on_rundown_mousewheel(self, event):
+        units = self._fact_cards_scroll_units(event)
+        canvas = getattr(self, "rundown_canvas", None)
+        if not units or canvas is None:
+            return None
+        try:
+            canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            return None
+        return "break"
+
+    def _bind_rundown_mousewheel(self, widget):
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_rundown_mousewheel)
+        for child in widget.winfo_children():
+            self._bind_rundown_mousewheel(child)
+
+    def _ensure_rundown_session(self):
+        session = getattr(self, "_rundown_session", None)
+        if not isinstance(session, RundownSession):
+            session = RundownSession()
+            self._rundown_session = session
+        return session
+
+    def _current_rundown_state(self, *, create=True, now=None):
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            return None
+        try:
+            return self._ensure_rundown_session().get_state(
+                selected.game_id,
+                create=create,
+                now=now,
+            )
+        except RundownMutationError:
+            return None
+
+    def _refresh_rundown_views(self):
+        render_rundown = getattr(self, "_render_rundown", None)
+        if callable(render_rundown):
+            render_rundown()
+        render_facts = getattr(self, "_render_fact_cards", None)
+        if callable(render_facts):
+            render_facts()
+        refresh_dashboard = getattr(self, "refresh_game_day_dashboard", None)
+        if callable(refresh_dashboard):
+            refresh_dashboard()
+
+    def pin_fact_to_rundown(self, fact_id, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        item = self._fact_by_id(fact_id)
+        if not isinstance(selected, SelectedGame) or item is None:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    "Not pinned — select an exact official game and current fact."
+                )
+            return False
+        try:
+            state = self._ensure_rundown_session().pin_fact(
+                selected.game_id,
+                item,
+                now=now,
+            )
+        except RundownMutationError as exc:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(f"Not pinned — {exc}")
+            return False
+        action = "Pinned to rundown" if item.air_ready else "Pinned for review"
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"{action} · Game {state.game_id} · revision {state.revision}"
+            )
+        self._log_event(
+            "rundown_fact_pinned",
+            game_id=state.game_id,
+            fact_id=item.fact_id,
+            evidence_hash=item.evidence_hash,
+            verification_state=item.verification_state.value,
+        )
+        self._refresh_rundown_views()
+        return True
+
+    def mark_fact_used_from_card(self, fact_id, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        item = self._fact_by_id(fact_id)
+        if (
+            not isinstance(selected, SelectedGame)
+            or item is None
+            or item.verification_state is VerificationState.UNAVAILABLE
+        ):
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    "Not marked used — exact usable fact identity is unavailable."
+                )
+            return False
+        try:
+            state = self._ensure_rundown_session().mark_fact_used(
+                selected.game_id,
+                item,
+                now=now,
+            )
+        except RundownMutationError as exc:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(f"Not marked used — {exc}")
+            return False
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Marked used on air · Game {state.game_id} · revision {state.revision}"
+            )
+        self._log_event(
+            "rundown_fact_used",
+            game_id=state.game_id,
+            fact_id=item.fact_id,
+            evidence_hash=item.evidence_hash,
+            from_queue=False,
+        )
+        self._refresh_rundown_views()
+        return True
+
+    def mark_rundown_entry_used(self, entry_id, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        state = self._current_rundown_state(create=False)
+        if not isinstance(selected, SelectedGame) or state is None:
+            return False
+        entry = next(
+            (item for item in state.active_entries if item.entry_id == entry_id),
+            None,
+        )
+        if entry is None:
+            return False
+        updated = self._ensure_rundown_session().mark_entry_used(
+            selected.game_id,
+            entry_id,
+            now=now,
+        )
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Marked used on air · Game {updated.game_id} · revision {updated.revision}"
+            )
+        self._log_event(
+            "rundown_fact_used",
+            game_id=updated.game_id,
+            fact_id=entry.fact_id,
+            evidence_hash=entry.evidence_hash,
+            from_queue=True,
+        )
+        self._refresh_rundown_views()
+        return True
+
+    def undo_rundown_used(self, fact_id, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        state = self._current_rundown_state(create=False)
+        if not isinstance(selected, SelectedGame) or state is None:
+            return False
+        if not any(record.fact_id == fact_id for record in state.used_history):
+            return False
+        updated = self._ensure_rundown_session().undo_used(
+            selected.game_id,
+            fact_id,
+            now=now,
+        )
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Used marker undone · Game {updated.game_id} · revision {updated.revision}"
+            )
+        self._log_event(
+            "rundown_fact_use_undone",
+            game_id=updated.game_id,
+            fact_id=fact_id,
+        )
+        self._refresh_rundown_views()
+        return True
+
+    def move_rundown_entry(self, entry_id, direction, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            return False
+        try:
+            before = self._current_rundown_state(create=False)
+            after = self._ensure_rundown_session().move_entry(
+                selected.game_id,
+                entry_id,
+                direction,
+                now=now,
+            )
+        except RundownMutationError as exc:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(f"Not moved — {exc}")
+            return False
+        if after is before:
+            return False
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Rundown reordered · revision {after.revision}"
+            )
+        self._refresh_rundown_views()
+        return True
+
+    def remove_rundown_entry(self, entry_id, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        state = self._current_rundown_state(create=False)
+        if not isinstance(selected, SelectedGame) or state is None:
+            return False
+        entry = next(
+            (item for item in state.active_entries if item.entry_id == entry_id),
+            None,
+        )
+        if entry is None:
+            return False
+        updated = self._ensure_rundown_session().remove_entry(
+            selected.game_id,
+            entry_id,
+            now=now,
+        )
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Removed pinned item · revision {updated.revision}"
+            )
+        self._log_event(
+            "rundown_fact_removed",
+            game_id=updated.game_id,
+            fact_id=entry.fact_id,
+            evidence_hash=entry.evidence_hash,
+        )
+        self._refresh_rundown_views()
+        return True
+
+    def apply_rundown_break_target(self, *, now=None):
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    "Target not changed — select an exact official game."
+                )
+            return False
+        value = (
+            self.rundown_break_target_var.get()
+            if hasattr(self, "rundown_break_target_var")
+            else ""
+        )
+        try:
+            state = self._ensure_rundown_session().set_break_target(
+                selected.game_id,
+                value,
+                now=now,
+            )
+        except RundownMutationError as exc:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(f"Target not changed — {exc}")
+            return False
+        if hasattr(self, "rundown_break_target_var"):
+            self.rundown_break_target_var.set(str(state.break_target_seconds))
+        if hasattr(self, "rundown_budget_var"):
+            self.rundown_budget_var.set(budget_for_state(state).label)
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Break target set for Game {state.game_id} · revision {state.revision}"
+            )
+        self._refresh_rundown_views()
+        return True
+
+    def _rundown_export_context(self):
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            return None
+        manifest = self.db.get("manifest", {}) if isinstance(self.db, dict) else {}
+        snapshot = manifest.get("updated_at", "") if isinstance(manifest, dict) else ""
+        return RundownExportContext(
+            game_id=selected.game_id,
+            away_team=selected.away_team,
+            home_team=selected.home_team,
+            scheduled_time=selected.first_pitch_label,
+            venue=selected.venue,
+            snapshot_timestamp=str(snapshot or ""),
+        )
+
+    def copy_rundown(self, *, now=None):
+        state = self._current_rundown_state(create=False)
+        context = self._rundown_export_context()
+        if state is None or context is None:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    "Rundown not copied — select an exact official game."
+                )
+            return False
+        text = render_rundown_export(state, context, exported_at=now)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Copied rundown · Game {state.game_id} · revision {state.revision}"
+            )
+        self._log_event(
+            "rundown_copied",
+            game_id=state.game_id,
+            revision=state.revision,
+            active_count=len(state.active_air_ready_entries),
+            review_count=len(state.review_entries),
+            used_count=len(state.used_history),
+        )
+        return True
+
+    def export_rundown(self, *, now=None):
+        state = self._current_rundown_state(create=False)
+        context = self._rundown_export_context()
+        if state is None or context is None:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    "Rundown not exported — select an exact official game."
+                )
+            return False
+        try:
+            destination = write_rundown_export_exclusive(
+                export_dir() / "game_packets" / "rundowns",
+                state,
+                context,
+                exported_at=now,
+            )
+        except (OSError, RundownMutationError) as exc:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    f"Rundown export failed safely — {type(exc).__name__}"
+                )
+            return False
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(f"Rundown exported: {destination}")
+        self._log_event(
+            "rundown_exported",
+            game_id=state.game_id,
+            revision=state.revision,
+            filename=destination.name,
+        )
+        return True
+
+    def _rundown_entry_by_id(self, entry_id):
+        state = self._current_rundown_state(create=False)
+        if state is None:
+            return None
+        return next(
+            (item for item in state.active_entries if item.entry_id == entry_id),
+            None,
+        )
+
+    def copy_rundown_entry_air_line(self, entry_id):
+        entry = self._rundown_entry_by_id(entry_id)
+        if entry is None or not entry.is_air_ready_for_timing:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(
+                    "Not copied — pinned fact requires review or is invalidated."
+                )
+            return False
+        item = entry.fact_snapshot
+        event = build_copy_event(
+            item,
+            template_profile=self._selected_fact_template_profile(),
+        )
+        self.root.clipboard_clear()
+        self.root.clipboard_append(item.air_copy)
+        self.root.update()
+        self.current_broadcast_note = item.air_copy
+        self._last_fact_copy_event = event
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set("Copied exact pinned air line.")
+        return True
+
+    def copy_rundown_entry_with_source(self, entry_id):
+        entry = self._rundown_entry_by_id(entry_id)
+        if entry is None:
+            return False
+        text = copy_with_source_text(entry.fact_snapshot)
+        if entry.warning_reason:
+            text += f"\nPinned warning: {entry.warning_reason}"
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set("Copied pinned fact with source and warning state.")
+        return True
+
+    def replace_rundown_with_latest(self, entry_id, *, confirmed=None, now=None):
+        selected = getattr(self, "selected_game", None)
+        entry = self._rundown_entry_by_id(entry_id)
+        if not isinstance(selected, SelectedGame) or entry is None or entry.latest_fact is None:
+            return False
+        if confirmed is None:
+            confirmed = messagebox.askyesno(
+                "Replace Pinned Fact",
+                (
+                    "Replace the pinned wording and provenance with the latest "
+                    "fact version? The queue position will be preserved."
+                ),
+            )
+        if not confirmed:
+            return False
+        try:
+            state = self._ensure_rundown_session().replace_with_latest(
+                selected.game_id,
+                entry_id,
+                confirmed=True,
+                now=now,
+            )
+        except RundownMutationError as exc:
+            if hasattr(self, "rundown_status_var"):
+                self.rundown_status_var.set(f"Not replaced — {exc}")
+            return False
+        if hasattr(self, "rundown_status_var"):
+            self.rundown_status_var.set(
+                f"Pinned fact replaced with reviewed latest version · revision {state.revision}"
+            )
+        self._refresh_rundown_views()
+        return True
+
+    @staticmethod
+    def _rundown_source_line(fact):
+        if not fact.provenance:
+            return "Source unavailable · snapshot unavailable"
+        source = fact.provenance[0]
+        bits = [
+            source.source_name,
+            f"Game {source.source_game_id}" if source.source_game_id else "",
+            f"page {source.source_page}" if source.source_page else "",
+            source.source_date or "",
+            f"snapshot {source.snapshot_timestamp}" if source.snapshot_timestamp else "",
+        ]
+        return " · ".join(bit for bit in bits if bit)
+
+    def _render_rundown_entry(self, parent, entry, row_index):
+        card = ttk.Frame(parent, padding=(7, 5))
+        card.grid(row=row_index, column=0, sticky="ew")
+        card.columnconfigure(0, weight=1)
+        fact = entry.fact_snapshot
+        status = (
+            fact.verification_state.value
+            if entry.reconciliation_state is ReconciliationState.CURRENT
+            else entry.reconciliation_state.value
+        )
+        ttk.Label(
+            card,
+            text=(
+                f"#{entry.position} · [{status}] · "
+                f"{fact.category.value.replace('_', ' ').upper()} · "
+                f"{fact.team_code or 'GLOBAL'} · {fact.subject_display_name}"
+            ),
+            style=(
+                "FactVerified.TLabel"
+                if entry.is_air_ready_for_timing
+                else "FactVerify.TLabel"
+            ),
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            card,
+            text=fact.air_copy,
+            justify="left",
+            wraplength=1040,
+        ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        preview = character_count_preview(
+            fact.air_copy,
+            self._selected_fact_template_profile(),
+        )
+        ttk.Label(
+            card,
+            text=(
+                f"{self._rundown_source_line(fact)} · "
+                f"{preview.label} · estimated {entry.read_time_seconds} sec"
+            ),
+            style="Sub.TLabel",
+            wraplength=1040,
+        ).grid(row=2, column=0, sticky="w", pady=(2, 0))
+        if entry.warning_reason:
+            ttk.Label(
+                card,
+                text=f"WARNING: {entry.warning_reason}",
+                style="FactVerify.TLabel",
+                wraplength=1040,
+            ).grid(row=3, column=0, sticky="w", pady=(2, 0))
+        actions = ttk.Frame(card)
+        actions.grid(row=4, column=0, sticky="w", pady=(4, 0))
+        ttk.Button(
+            actions,
+            text="Move Up",
+            command=lambda entry_id=entry.entry_id: self.move_rundown_entry(
+                entry_id, -1
+            ),
+        ).pack(side="left")
+        ttk.Button(
+            actions,
+            text="Move Down",
+            command=lambda entry_id=entry.entry_id: self.move_rundown_entry(
+                entry_id, 1
+            ),
+        ).pack(side="left", padx=(4, 0))
+        ttk.Button(
+            actions,
+            text="Remove",
+            command=lambda entry_id=entry.entry_id: self.remove_rundown_entry(
+                entry_id
+            ),
+        ).pack(side="left", padx=(4, 0))
+        ttk.Button(
+            actions,
+            text="Copy Air Line",
+            state="normal" if entry.is_air_ready_for_timing else "disabled",
+            command=lambda entry_id=entry.entry_id: self.copy_rundown_entry_air_line(
+                entry_id
+            ),
+        ).pack(side="left", padx=(8, 0))
+        ttk.Button(
+            actions,
+            text="Copy With Source",
+            command=lambda entry_id=entry.entry_id: self.copy_rundown_entry_with_source(
+                entry_id
+            ),
+        ).pack(side="left", padx=(4, 0))
+        ttk.Button(
+            actions,
+            text="Details",
+            command=lambda entry_id=entry.entry_id: self.show_rundown_entry_details(
+                entry_id
+            ),
+        ).pack(side="left", padx=(4, 0))
+        ttk.Button(
+            actions,
+            text="Mark Used on Air",
+            command=lambda entry_id=entry.entry_id: self.mark_rundown_entry_used(
+                entry_id
+            ),
+        ).pack(side="left", padx=(4, 0))
+        if entry.latest_fact is not None:
+            ttk.Button(
+                actions,
+                text="Review / Replace Latest",
+                command=lambda entry_id=entry.entry_id: self.replace_rundown_with_latest(
+                    entry_id
+                ),
+            ).pack(side="left", padx=(4, 0))
+
+    def _render_used_record(self, parent, record, row_index):
+        card = ttk.Frame(parent, padding=(7, 5))
+        card.grid(row=row_index, column=0, sticky="ew")
+        card.columnconfigure(0, weight=1)
+        fact = record.fact_snapshot
+        changed = self._ensure_rundown_session().used_version_changed(
+            record.game_id,
+            self._fact_by_id(record.fact_id) or fact,
+        )
+        changed_text = " · CURRENT VERSION DIFFERS" if changed else ""
+        ttk.Label(
+            card,
+            text=(
+                f"[USED] {fact.category.value.replace('_', ' ').upper()} · "
+                f"{fact.team_code or 'GLOBAL'} · {fact.subject_display_name}"
+                f"{changed_text}"
+            ),
+            style="Sub.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            card,
+            text=fact.air_copy,
+            justify="left",
+            wraplength=1040,
+        ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ttk.Label(
+            card,
+            text=(
+                f"Used {record.used_at.isoformat()} · "
+                f"estimated {record.read_time_seconds} sec · "
+                f"{self._rundown_source_line(fact)}"
+            ),
+            style="Sub.TLabel",
+            wraplength=1040,
+        ).grid(row=2, column=0, sticky="w", pady=(2, 0))
+        ttk.Button(
+            card,
+            text="Undo Used",
+            command=lambda fact_id=record.fact_id: self.undo_rundown_used(fact_id),
+        ).grid(row=3, column=0, sticky="w", pady=(4, 0))
+
+    def _render_rundown(self):
+        container = getattr(self, "rundown_container", None)
+        if container is None:
+            state = self._current_rundown_state(create=False)
+            if state is not None and hasattr(self, "rundown_budget_var"):
+                self.rundown_budget_var.set(budget_for_state(state).label)
+            return
+        for child in container.winfo_children():
+            child.destroy()
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            ttk.Label(
+                container,
+                text="No official game selected. Rundown state is unavailable.",
+                style="Sub.TLabel",
+                padding=10,
+            ).grid(row=0, column=0, sticky="ew")
+            self._bind_rundown_mousewheel(container)
+            return
+        state = self._current_rundown_state(create=True)
+        if state is None:
+            return
+        if hasattr(self, "rundown_break_target_var"):
+            self.rundown_break_target_var.set(str(state.break_target_seconds or ""))
+        if hasattr(self, "rundown_budget_var"):
+            self.rundown_budget_var.set(budget_for_state(state).label)
+        if hasattr(self, "rundown_session_var"):
+            self.rundown_session_var.set(
+                f"SESSION ONLY · Game {state.game_id} · revision {state.revision} · "
+                "not saved after close (Phase 6D)."
+            )
+        container.columnconfigure(0, weight=1)
+        sections = (
+            ("Active Air-Ready Rundown", state.active_air_ready_entries),
+            ("Pinned — Needs Verification", state.review_entries),
+            ("Used-on-Air History", state.used_history),
+        )
+        row = 0
+        for title, entries in sections:
+            frame = ttk.LabelFrame(container, text=title, padding=4)
+            frame.grid(row=row, column=0, sticky="ew", pady=(0, 6))
+            frame.columnconfigure(0, weight=1)
+            if not entries:
+                ttk.Label(
+                    frame,
+                    text="None.",
+                    style="Sub.TLabel",
+                    padding=6,
+                ).grid(row=0, column=0, sticky="w")
+            elif title == "Used-on-Air History":
+                for index, record in enumerate(entries):
+                    self._render_used_record(frame, record, index)
+            else:
+                for index, entry in enumerate(entries):
+                    self._render_rundown_entry(frame, entry, index)
+            row += 1
+        self._bind_rundown_mousewheel(container)
 
     def _fact_by_id(self, fact_id):
         collection = getattr(self, "_fact_collection", None)
@@ -4090,6 +4936,9 @@ class AUSLStatsApp:
         item = self._fact_by_id(fact_id)
         if item is None:
             return
+        self._show_fact_value_details(item, title="Broadcast Fact Details")
+
+    def _show_fact_value_details(self, item, *, title, pinned_warning=""):
         preview = character_count_preview(
             item.air_copy,
             self._selected_fact_template_profile(),
@@ -4107,6 +4956,8 @@ class AUSLStatsApp:
         ]
         if item.warning_reason:
             details.append(f"Warning: {item.warning_reason}")
+        if pinned_warning and pinned_warning != item.warning_reason:
+            details.append(f"Pinned warning: {pinned_warning}")
         for index, source in enumerate(item.provenance, 1):
             details.extend(
                 [
@@ -4119,7 +4970,17 @@ class AUSLStatsApp:
                     f"Snapshot: {source.snapshot_timestamp or 'unavailable'}",
                 ]
             )
-        messagebox.showinfo("Broadcast Fact Details", "\n".join(details))
+        messagebox.showinfo(title, "\n".join(details))
+
+    def show_rundown_entry_details(self, entry_id):
+        entry = self._rundown_entry_by_id(entry_id)
+        if entry is None:
+            return
+        self._show_fact_value_details(
+            entry.fact_snapshot,
+            title="Pinned Rundown Fact Details",
+            pinned_warning=entry.warning_reason,
+        )
 
     def _scoped_verification_count(self):
         selected = getattr(self, "selected_game", None)
@@ -4133,7 +4994,20 @@ class AUSLStatsApp:
                 or collection.game_id != selected.game_id
             ):
                 return None
-            return collection.blocking_verification_count
+            session = self._ensure_rundown_session()
+            unresolved = {
+                item.fact_id
+                for item in collection.facts
+                if (
+                    item.readiness_blocking
+                    and not item.air_ready
+                    and not session.is_fact_used(selected.game_id, item.fact_id)
+                )
+            }
+            rundown_state = self._current_rundown_state(create=False)
+            if rundown_state is not None:
+                unresolved.update(rundown_state.blocking_issue_fact_ids)
+            return len(unresolved)
         if not database.get("enrichment_enabled"):
             return None
         frame = database.get("official_game_notes")
