@@ -41,6 +41,15 @@ from ausl_data import (
 )
 from ausl_logging import configure_logging, log_event
 from ausl_readiness import GameDayReadiness, aggregate_game_day_readiness
+from ausl_facts import (
+    FactCollection,
+    FactCopyBlocked,
+    VerificationState,
+    build_copy_event,
+    build_selected_game_facts,
+    character_count_preview,
+    copy_with_source_text,
+)
 
 
 CURRENT_YEAR = max(SEASONS)
@@ -1388,6 +1397,8 @@ def official_team_snapshot(team_code, season, database):
 
 
 class AUSLStatsApp:
+    FACT_PANEL_SCROLLABLE = True
+
     def __init__(self, root: tk.Tk, logger=None):
         self.root = root
         self.logger = logger
@@ -1427,6 +1438,12 @@ class AUSLStatsApp:
         self._packet_metadata = {}
         self._verification_count_cache = {}
         self.game_day_readiness = None
+        self._fact_collection = None
+        self._fact_build_generation = 0
+        self._fact_build_pending = None
+        self._fact_build_running = False
+        self._fact_build_lock = threading.Lock()
+        self._last_fact_copy_event = None
         self._main_thread_results = queue.Queue()
         self._main_thread_poll_id = None
         self.locked_lineups = self.load_locked_lineups()
@@ -1445,6 +1462,12 @@ class AUSLStatsApp:
         self.cancel_data_update()
         self.cancel_live_refresh()
         self._cancel_live_timer()
+        if hasattr(self, "_fact_build_generation"):
+            self._fact_build_generation += 1
+        fact_lock = getattr(self, "_fact_build_lock", None)
+        if fact_lock is not None:
+            with fact_lock:
+                self._fact_build_pending = None
         self.root.destroy()
 
     def _style(self):
@@ -1460,6 +1483,10 @@ class AUSLStatsApp:
         style.configure("ReadinessNotReady.TLabel", font=("Segoe UI", 20, "bold"), foreground="#b42318")
         style.configure("Offline.TCheckbutton", font=("Segoe UI", 10, "bold"))
         style.configure("OfflineBanner.TLabel", font=("Segoe UI", 11, "bold"), foreground="#b42318")
+        style.configure("FactHeadline.TLabel", font=("Segoe UI", 11, "bold"))
+        style.configure("FactVerified.TLabel", font=("Segoe UI", 9, "bold"), foreground="#146c43")
+        style.configure("FactVerify.TLabel", font=("Segoe UI", 9, "bold"), foreground="#9a6700")
+        style.configure("FactUnavailable.TLabel", font=("Segoe UI", 9, "bold"), foreground="#b42318")
 
     def _build(self):
         top = ttk.Frame(self.root, padding=10)
@@ -1581,7 +1608,7 @@ class AUSLStatsApp:
     def _build_game_day(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
-        parent.rowconfigure(2, weight=1)
+        parent.rowconfigure(1, weight=1)
 
         status = ttk.Frame(parent)
         status.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
@@ -1616,6 +1643,21 @@ class AUSLStatsApp:
             style="Offline.TCheckbutton",
         ).grid(row=0, column=3, padx=(12, 0))
 
+        self.game_day_views = ttk.Notebook(parent)
+        self.game_day_views.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="nsew",
+        )
+        facts_view = ttk.Frame(self.game_day_views, padding=4)
+        readiness_view = ttk.Frame(self.game_day_views, padding=4)
+        self.game_day_views.add(facts_view, text="Air-Ready Facts")
+        self.game_day_views.add(readiness_view, text="Readiness Details")
+        readiness_view.columnconfigure(0, weight=1)
+        readiness_view.rowconfigure(1, weight=1)
+        self._build_fact_panel(facts_view)
+
         self.game_day_selected_var = tk.StringVar(
             value="No official game selected."
         )
@@ -1640,8 +1682,8 @@ class AUSLStatsApp:
             ("Verification queue", self.game_day_verification_var, 2, 0),
             ("Producer packet", self.game_day_packet_var, 2, 1),
         )
-        cards = ttk.Frame(parent)
-        cards.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        cards = ttk.Frame(readiness_view)
+        cards.grid(row=0, column=0, sticky="nsew")
         cards.columnconfigure(0, weight=1)
         cards.columnconfigure(1, weight=1)
         for title, variable, row, column in sections:
@@ -1660,8 +1702,8 @@ class AUSLStatsApp:
                 wraplength=500,
             ).pack(fill="x")
 
-        bottom = ttk.Frame(parent)
-        bottom.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        bottom = ttk.Frame(readiness_view)
+        bottom.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         bottom.columnconfigure(0, weight=3)
         bottom.columnconfigure(1, weight=2)
         bottom.rowconfigure(0, weight=1)
@@ -1708,6 +1750,108 @@ class AUSLStatsApp:
             justify="left",
             wraplength=350,
         ).pack(fill="x", pady=(8, 0))
+
+    def _build_fact_panel(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        panel = ttk.LabelFrame(parent, text="Air-Ready Facts", padding=6)
+        panel.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(1, weight=1)
+
+        controls = ttk.Frame(panel)
+        controls.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
+        self.fact_status_filter_var = tk.StringVar(value="Air Ready")
+        self.fact_team_filter_var = tk.StringVar(value="Both teams")
+        self.fact_category_filter_var = tk.StringVar(value="All categories")
+        self.fact_template_profile_var = tk.StringVar(value="60 — one line")
+        self.fact_panel_status_var = tk.StringVar(
+            value="Select an official game to build local fact cards."
+        )
+        for label, variable, values, width in (
+            (
+                "View",
+                self.fact_status_filter_var,
+                ("Air Ready", "Needs Verification", "All facts"),
+                20,
+            ),
+            (
+                "Team",
+                self.fact_team_filter_var,
+                ("Both teams",),
+                18,
+            ),
+            (
+                "Category",
+                self.fact_category_filter_var,
+                ("All categories",),
+                23,
+            ),
+            (
+                "Width guide",
+                self.fact_template_profile_var,
+                ("60 — one line", "120 — extended"),
+                17,
+            ),
+        ):
+            ttk.Label(controls, text=f"{label}:").pack(side="left", padx=(0, 4))
+            picker = ttk.Combobox(
+                controls,
+                textvariable=variable,
+                values=values,
+                state="readonly",
+                width=width,
+            )
+            picker.pack(side="left", padx=(0, 10))
+            picker.bind("<<ComboboxSelected>>", lambda _event: self._render_fact_cards())
+            if label == "Team":
+                self.fact_team_filter = picker
+            elif label == "Category":
+                self.fact_category_filter = picker
+        ttk.Label(
+            controls,
+            textvariable=self.fact_panel_status_var,
+            style="Sub.TLabel",
+        ).pack(side="left", fill="x", expand=True)
+
+        self.fact_cards_canvas = tk.Canvas(
+            panel,
+            highlightthickness=0,
+            height=235,
+        )
+        self.fact_cards_canvas.grid(row=1, column=0, sticky="nsew")
+        fact_scroll = ttk.Scrollbar(
+            panel,
+            orient="vertical",
+            command=self.fact_cards_canvas.yview,
+        )
+        fact_scroll.grid(row=1, column=1, sticky="ns")
+        self.fact_cards_canvas.configure(yscrollcommand=fact_scroll.set)
+        self.fact_cards_container = ttk.Frame(self.fact_cards_canvas)
+        self._fact_canvas_window = self.fact_cards_canvas.create_window(
+            (0, 0),
+            window=self.fact_cards_container,
+            anchor="nw",
+        )
+        self.fact_cards_container.bind(
+            "<Configure>",
+            lambda _event: self.fact_cards_canvas.configure(
+                scrollregion=self.fact_cards_canvas.bbox("all")
+            ),
+        )
+        self.fact_cards_canvas.bind(
+            "<Configure>",
+            lambda event: self.fact_cards_canvas.itemconfigure(
+                self._fact_canvas_window, width=event.width
+            ),
+        )
+        self._bind_fact_cards_mousewheel(self.fact_cards_canvas)
+        self._bind_fact_cards_mousewheel(self.fact_cards_container)
+        self._render_fact_cards()
 
     def _focus_game_setup(self):
         picker = getattr(self, "game_picker", None)
@@ -2170,6 +2314,7 @@ class AUSLStatsApp:
             or getattr(self, "_initial_load_in_flight", False)
             or getattr(self, "_data_update_in_flight", False)
             or getattr(self, "_live_refresh_in_flight", False)
+            or getattr(self, "_fact_build_running", False)
         ):
             self._ensure_main_thread_dispatch()
 
@@ -2237,6 +2382,12 @@ class AUSLStatsApp:
         previous_selected_id = getattr(self, "selected_player_id", None)
         self.db = data
         self._verification_count_cache = {}
+        fact_generation_after_invalidate = None
+        if hasattr(self, "_fact_build_generation"):
+            self._invalidate_fact_state(
+                "Installed database changed — rebuilding exact-game facts."
+            )
+            fact_generation_after_invalidate = self._fact_build_generation
         self.data_freshness_text = self.format_data_freshness(data.get("manifest", {}))
         if hasattr(self, "data_freshness_var"):
             self.data_freshness_var.set(self.data_freshness_text)
@@ -2253,6 +2404,11 @@ class AUSLStatsApp:
         self.render_team_totals()
         self.render_producer_prep()
         self.render_manual_notes()
+        if (
+            fact_generation_after_invalidate is not None
+            and self._fact_build_generation == fact_generation_after_invalidate
+        ):
+            self.request_fact_rebuild()
         self.refresh_game_day_dashboard()
 
     def _sync_selected_player_after_load(self, previous_selected_id):
@@ -2340,6 +2496,10 @@ class AUSLStatsApp:
         self.render_producer_prep()
         self.render_manual_notes()
         self._verification_count_cache = {}
+        if hasattr(self, "_fact_build_generation"):
+            self._invalidate_fact_state(
+                "Official schedule unavailable — fact collection is unavailable."
+            )
         self.refresh_game_day_dashboard()
 
     def _selected_player_in_team_codes(self, team_codes):
@@ -2360,6 +2520,13 @@ class AUSLStatsApp:
             raise ValueError("An exact official SelectedGame is required")
         previous_id = getattr(getattr(self, "selected_game", None), "game_id", None)
         self.selected_game = selected_game
+        if (
+            previous_id != selected_game.game_id
+            and hasattr(self, "_fact_build_generation")
+        ):
+            self._invalidate_fact_state(
+                f"Game changed to {selected_game.game_id} — rebuilding facts."
+            )
         self.away_var.set(selected_game.away_team)
         self.home_var.set(selected_game.home_team)
         if hasattr(self, "game_choice_var"):
@@ -2385,6 +2552,8 @@ class AUSLStatsApp:
         self.render_producer_prep()
         self.render_manual_notes()
         self._verification_count_cache = {}
+        if hasattr(self, "_fact_build_generation"):
+            self.request_fact_rebuild()
         self.refresh_game_day_dashboard()
 
     def _clear_selected_player(self):
@@ -2881,6 +3050,11 @@ class AUSLStatsApp:
             f"{source_label} lineups saved for official Game {key}; verify before air"
         )
         self.render_producer_prep()
+        if hasattr(self, "_fact_build_generation"):
+            self._invalidate_fact_state(
+                f"Lineup revision {revision} saved — rebuilding starter facts."
+            )
+            self.request_fact_rebuild()
         self.refresh_game_day_dashboard()
 
     def clear_locked_lineups(self):
@@ -2911,6 +3085,11 @@ class AUSLStatsApp:
             else "No official game selected; no lineup lock was changed"
         )
         self.render_producer_prep()
+        if hasattr(self, "_fact_build_generation"):
+            self._invalidate_fact_state(
+                "Saved lineup cleared — rebuilding starter facts."
+            )
+            self.request_fact_rebuild()
         self.refresh_game_day_dashboard()
 
     def _refresh_manual_note_players(self):
@@ -3027,6 +3206,11 @@ class AUSLStatsApp:
             return
         self.db["manual_notes"] = notes
         self.render_manual_notes()
+        if hasattr(self, "_fact_build_generation"):
+            self._invalidate_fact_state(
+                "Manual notes reloaded — rebuilding exact-game facts."
+            )
+            self.request_fact_rebuild()
         if backup_path:
             self.manual_note_status.set(
                 f"Manual notes migrated and reloaded; recoverable backup: {backup_path.name}"
@@ -3115,6 +3299,11 @@ class AUSLStatsApp:
             f"{scope.title()} note saved locally with source and timestamp{backup_suffix}"
         )
         self.render_manual_notes()
+        if hasattr(self, "_fact_build_generation"):
+            self._invalidate_fact_state(
+                "Manual note saved — rebuilding exact-game facts."
+            )
+            self.request_fact_rebuild()
 
     def update_data(self):
         if not self.network_requests_permitted(
@@ -3410,11 +3599,541 @@ class AUSLStatsApp:
             return f"Refresh in progress; stored snapshot remains active. {snapshot_text}"
         return snapshot_text
 
+    def _invalidate_fact_state(self, message):
+        if not hasattr(self, "_fact_build_generation"):
+            return
+        self._fact_build_generation += 1
+        self._fact_collection = None
+        self._last_fact_copy_event = None
+        self.current_broadcast_note = ""
+        if hasattr(self, "fact_panel_status_var"):
+            self.fact_panel_status_var.set(message)
+        render = getattr(self, "_render_fact_cards", None)
+        if callable(render):
+            render()
+
+    def request_fact_rebuild(self):
+        """Queue a bounded, local-only fact rebuild for the current game."""
+
+        if not hasattr(self, "_fact_build_generation"):
+            return
+        selected = getattr(self, "selected_game", None)
+        self._fact_build_generation += 1
+        generation = self._fact_build_generation
+        self._fact_collection = None
+        if not isinstance(selected, SelectedGame):
+            if hasattr(self, "fact_panel_status_var"):
+                self.fact_panel_status_var.set(
+                    "No game selected — choose an official game to build facts."
+                )
+            self._render_fact_cards()
+            return
+        database = dict(getattr(self, "db", {}) or {})
+        task = {
+            "generation": generation,
+            "game_id": selected.game_id,
+            "database_identity": id(getattr(self, "db", None)),
+            "database": database,
+            "selected_game": selected,
+            "lineup_lock": copy.deepcopy(self._current_lineup_lock()),
+        }
+        if hasattr(self, "fact_panel_status_var"):
+            mode = " from the installed snapshot" if self._offline_mode else ""
+            self.fact_panel_status_var.set(f"Building exact-game facts{mode}…")
+        self._render_fact_cards()
+        self._queue_fact_build(task)
+
+    def _queue_fact_build(self, task):
+        lock = getattr(self, "_fact_build_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._fact_build_lock = lock
+        with lock:
+            self._fact_build_pending = task
+            if getattr(self, "_fact_build_running", False):
+                return
+            self._fact_build_running = True
+        self._ensure_main_thread_dispatch()
+        try:
+            threading.Thread(target=self._fact_worker_loop, daemon=True).start()
+        except Exception:
+            with lock:
+                self._fact_build_running = False
+            raise
+
+    def _fact_worker_loop(self):
+        """Run at most one build plus one coalesced replacement at a time."""
+
+        while True:
+            lock = self._fact_build_lock
+            with lock:
+                task = self._fact_build_pending
+                self._fact_build_pending = None
+                if task is None:
+                    self._fact_build_running = False
+                    return
+            database = task["database"]
+            try:
+                result = build_selected_game_facts(
+                    database,
+                    task["selected_game"],
+                    lineup_lock=task["lineup_lock"],
+                    media_approval_validator=_canonical_media_review_state,
+                    team_snapshot_provider=lambda code, season, data=database: (
+                        official_team_snapshot(code, season, data)
+                    ),
+                )
+            except Exception as exc:
+                result = FactCollection(
+                    game_id=task["game_id"],
+                    snapshot_timestamp="",
+                    database_version="",
+                    facts=(),
+                    available=False,
+                    empty_reason=f"Fact generation unavailable: {type(exc).__name__}: {exc}",
+                )
+            self._post_main_thread(
+                self._finish_fact_rebuild,
+                result,
+                task["generation"],
+                task["game_id"],
+                task["database_identity"],
+            )
+
+    def _finish_fact_rebuild(
+        self,
+        collection,
+        generation,
+        game_id,
+        database_identity,
+    ):
+        selected = getattr(self, "selected_game", None)
+        if (
+            generation != getattr(self, "_fact_build_generation", None)
+            or not isinstance(selected, SelectedGame)
+            or selected.game_id != str(game_id)
+            or id(getattr(self, "db", None)) != database_identity
+            or not isinstance(collection, FactCollection)
+            or collection.game_id != selected.game_id
+        ):
+            return False
+        previous_copy = getattr(self, "_last_fact_copy_event", None)
+        if previous_copy is not None:
+            current = next(
+                (
+                    item
+                    for item in collection.facts
+                    if item.fact_id == previous_copy.fact_id
+                ),
+                None,
+            )
+            if current is None or current.evidence_hash != previous_copy.evidence_hash:
+                self._last_fact_copy_event = None
+                self.current_broadcast_note = ""
+        self._fact_collection = collection
+        if hasattr(self, "fact_team_filter"):
+            teams = (
+                "Both teams",
+                selected.away_team_code,
+                selected.home_team_code,
+            )
+            self.fact_team_filter.configure(values=teams)
+            if self.fact_team_filter_var.get() not in teams:
+                self.fact_team_filter_var.set("Both teams")
+        if hasattr(self, "fact_category_filter"):
+            categories = tuple(
+                sorted(
+                    {
+                        item.category.value.replace("_", " ").title()
+                        for item in collection.facts
+                    }
+                )
+            )
+            values = ("All categories", *categories)
+            self.fact_category_filter.configure(values=values)
+            if self.fact_category_filter_var.get() not in values:
+                self.fact_category_filter_var.set("All categories")
+        if hasattr(self, "fact_panel_status_var"):
+            if collection.available:
+                verified = sum(item.air_ready for item in collection.facts)
+                review = len(collection.facts) - verified
+                mode = " · Local/Offline snapshot" if self._offline_mode else ""
+                self.fact_panel_status_var.set(
+                    f"{verified} air-ready · {review} needs review{mode}"
+                )
+            else:
+                self.fact_panel_status_var.set(collection.empty_reason)
+        self._render_fact_cards()
+        self.refresh_game_day_dashboard()
+        return True
+
+    def _filtered_fact_cards(self):
+        collection = getattr(self, "_fact_collection", None)
+        if not isinstance(collection, FactCollection) or not collection.available:
+            return []
+        facts = list(collection.facts)
+        status_filter = (
+            self.fact_status_filter_var.get()
+            if hasattr(self, "fact_status_filter_var")
+            else "Air Ready"
+        )
+        if status_filter == "Air Ready":
+            facts = [item for item in facts if item.air_ready]
+        elif status_filter == "Needs Verification":
+            facts = [item for item in facts if not item.air_ready]
+        team_filter = (
+            self.fact_team_filter_var.get()
+            if hasattr(self, "fact_team_filter_var")
+            else "Both teams"
+        )
+        if team_filter != "Both teams":
+            facts = [item for item in facts if item.team_code == team_filter]
+        category_filter = (
+            self.fact_category_filter_var.get()
+            if hasattr(self, "fact_category_filter_var")
+            else "All categories"
+        )
+        if category_filter != "All categories":
+            facts = [
+                item
+                for item in facts
+                if item.category.value.replace("_", " ").title()
+                == category_filter
+            ]
+        return facts
+
+    def _selected_fact_template_profile(self):
+        label = (
+            self.fact_template_profile_var.get()
+            if hasattr(self, "fact_template_profile_var")
+            else "60 — one line"
+        )
+        return "extended" if str(label).startswith("120") else "one_line"
+
+    def _fact_empty_message(self):
+        selected = getattr(self, "selected_game", None)
+        collection = getattr(self, "_fact_collection", None)
+        if not isinstance(selected, SelectedGame):
+            return "No game selected. Choose one exact official game above."
+        if collection is None:
+            suffix = (
+                " Local/Offline Mode is using the installed snapshot."
+                if bool(getattr(self, "_offline_mode", False))
+                else ""
+            )
+            return f"Facts are being rebuilt for Game {selected.game_id}.{suffix}"
+        if not collection.available:
+            return collection.empty_reason or "Source data unavailable."
+        all_facts = list(collection.facts)
+        status_filter = (
+            self.fact_status_filter_var.get()
+            if hasattr(self, "fact_status_filter_var")
+            else "Air Ready"
+        )
+        team_filter = (
+            self.fact_team_filter_var.get()
+            if hasattr(self, "fact_team_filter_var")
+            else "Both teams"
+        )
+        if not all_facts:
+            return (
+                collection.empty_reason
+                or "No facts are available for this exact selected game."
+            )
+        if status_filter == "Air Ready" and all(not item.air_ready for item in all_facts):
+            return "Facts exist, but all currently require verification."
+        if team_filter != "Both teams":
+            return f"No facts match the current filters for {team_filter}."
+        return "No facts match the current filters."
+
+    def _render_fact_cards(self):
+        container = getattr(self, "fact_cards_container", None)
+        if container is None:
+            return
+        for child in container.winfo_children():
+            child.destroy()
+        facts = self._filtered_fact_cards()
+        if not facts:
+            ttk.Label(
+                container,
+                text=self._fact_empty_message(),
+                style="Sub.TLabel",
+                justify="left",
+                wraplength=1180,
+                padding=10,
+            ).grid(row=0, column=0, sticky="ew")
+            self._bind_fact_cards_mousewheel(container)
+            return
+        container.columnconfigure(0, weight=1)
+        for row_index, item in enumerate(facts):
+            card = ttk.Frame(container, padding=(8, 6))
+            card.grid(row=row_index * 2, column=0, sticky="ew")
+            card.columnconfigure(0, weight=1)
+            marker_style = {
+                VerificationState.VERIFIED: "FactVerified.TLabel",
+                VerificationState.VERIFY: "FactVerify.TLabel",
+                VerificationState.STALE: "FactVerify.TLabel",
+                VerificationState.UNAVAILABLE: "FactUnavailable.TLabel",
+            }[item.verification_state]
+            top = ttk.Frame(card)
+            top.grid(row=0, column=0, sticky="ew")
+            ttk.Label(
+                top,
+                text=f"[{item.verification_state.value}]",
+                style=marker_style,
+            ).pack(side="left")
+            ttk.Label(
+                top,
+                text=(
+                    f"{item.category.value.replace('_', ' ').upper()} · "
+                    f"{item.team_code or 'GLOBAL'} · {item.subject_display_name}"
+                ),
+                style="Sub.TLabel",
+            ).pack(side="left", padx=(7, 0))
+            ttk.Label(
+                card,
+                text=item.headline,
+                style="FactHeadline.TLabel",
+            ).grid(row=1, column=0, sticky="w", pady=(3, 0))
+            ttk.Label(
+                card,
+                text=item.air_copy,
+                justify="left",
+                wraplength=1080,
+            ).grid(row=2, column=0, sticky="ew", pady=(2, 0))
+            primary = item.provenance[0] if item.provenance else None
+            source_bits = [
+                primary.source_name if primary else "Source unavailable",
+                (
+                    f"Game {primary.source_game_id}"
+                    if primary and primary.source_game_id
+                    else ""
+                ),
+                (
+                    f"page {primary.source_page}"
+                    if primary and primary.source_page
+                    else ""
+                ),
+                (
+                    primary.source_date
+                    if primary and primary.source_date
+                    else "date unavailable"
+                ),
+                (
+                    f"snapshot {primary.snapshot_timestamp}"
+                    if primary and primary.snapshot_timestamp
+                    else "snapshot unavailable"
+                ),
+            ]
+            ttk.Label(
+                card,
+                text=" · ".join(bit for bit in source_bits if bit),
+                style="Sub.TLabel",
+                wraplength=1080,
+            ).grid(row=3, column=0, sticky="w", pady=(2, 0))
+            preview = character_count_preview(
+                item.air_copy,
+                self._selected_fact_template_profile(),
+            )
+            guidance = f"{preview.label} · guidance only"
+            if item.warning_reason:
+                guidance += f" · {item.warning_reason}"
+            ttk.Label(
+                card,
+                text=guidance,
+                style="Sub.TLabel",
+                wraplength=1080,
+            ).grid(row=4, column=0, sticky="w", pady=(2, 0))
+            actions = ttk.Frame(card)
+            actions.grid(row=5, column=0, sticky="w", pady=(5, 0))
+            ttk.Button(
+                actions,
+                text="Copy Air Line",
+                state="normal" if item.air_ready else "disabled",
+                command=lambda fact_id=item.fact_id: self.copy_fact_air_line(fact_id),
+            ).pack(side="left")
+            ttk.Button(
+                actions,
+                text="Copy With Source",
+                command=lambda fact_id=item.fact_id: self.copy_fact_with_source(
+                    fact_id
+                ),
+            ).pack(side="left", padx=(6, 0))
+            ttk.Button(
+                actions,
+                text="Details",
+                command=lambda fact_id=item.fact_id: self.show_fact_details(
+                    fact_id
+                ),
+            ).pack(side="left", padx=(6, 0))
+            ttk.Separator(container, orient="horizontal").grid(
+                row=row_index * 2 + 1,
+                column=0,
+                sticky="ew",
+            )
+        self._bind_fact_cards_mousewheel(container)
+
+    @staticmethod
+    def _fact_cards_scroll_units(event):
+        button_number = getattr(event, "num", None)
+        if button_number == 4:
+            return -1
+        if button_number == 5:
+            return 1
+        try:
+            delta = int(getattr(event, "delta", 0))
+        except (TypeError, ValueError):
+            return 0
+        if not delta:
+            return 0
+        units = int(-delta / 120)
+        if units == 0:
+            # macOS and some high-resolution Windows devices report deltas
+            # smaller than the traditional Windows WHEEL_DELTA of 120.
+            return -1 if delta > 0 else 1
+        return units
+
+    def _on_fact_cards_mousewheel(self, event):
+        units = self._fact_cards_scroll_units(event)
+        canvas = getattr(self, "fact_cards_canvas", None)
+        if not units or canvas is None:
+            return None
+        try:
+            canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            return None
+        return "break"
+
+    def _bind_fact_cards_mousewheel(self, widget):
+        """Bind wheel scrolling to the canvas and every rendered card widget."""
+
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_fact_cards_mousewheel)
+        for child in widget.winfo_children():
+            self._bind_fact_cards_mousewheel(child)
+
+    def _fact_by_id(self, fact_id):
+        collection = getattr(self, "_fact_collection", None)
+        if not isinstance(collection, FactCollection):
+            return None
+        return next(
+            (item for item in collection.facts if item.fact_id == fact_id),
+            None,
+        )
+
+    def copy_fact_air_line(self, fact_id):
+        item = self._fact_by_id(fact_id)
+        if item is None:
+            if hasattr(self, "fact_panel_status_var"):
+                self.fact_panel_status_var.set(
+                    "Not copied — the fact version is no longer available."
+                )
+            return False
+        try:
+            event = build_copy_event(
+                item,
+                template_profile=self._selected_fact_template_profile(),
+            )
+        except FactCopyBlocked as exc:
+            if hasattr(self, "fact_panel_status_var"):
+                self.fact_panel_status_var.set(f"Not copied — {exc}")
+            return False
+        self.root.clipboard_clear()
+        self.root.clipboard_append(item.air_copy)
+        self.root.update()
+        self.current_broadcast_note = item.air_copy
+        self._last_fact_copy_event = event
+        if hasattr(self, "fact_panel_status_var"):
+            self.fact_panel_status_var.set(
+                f"Copied exact air line · {item.fact_id} · evidence "
+                f"{item.evidence_hash[:12]}"
+            )
+        return True
+
+    def copy_fact_with_source(self, fact_id):
+        item = self._fact_by_id(fact_id)
+        if item is None:
+            if hasattr(self, "fact_panel_status_var"):
+                self.fact_panel_status_var.set(
+                    "Not copied — the fact version is no longer available."
+                )
+            return False
+        text = copy_with_source_text(item)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        if item.air_ready:
+            self.current_broadcast_note = item.air_copy
+            self._last_fact_copy_event = build_copy_event(
+                item,
+                template_profile=self._selected_fact_template_profile(),
+            )
+        self._last_fact_source_copy = {
+            "fact_id": item.fact_id,
+            "evidence_hash": item.evidence_hash,
+            "provenance": item.provenance,
+            "snapshot_timestamp": (
+                item.provenance[0].snapshot_timestamp
+                if item.provenance
+                else ""
+            ),
+            "copied_at": datetime.now(timezone.utc).isoformat(),
+            "template_profile": self._selected_fact_template_profile(),
+        }
+        if hasattr(self, "fact_panel_status_var"):
+            self.fact_panel_status_var.set(
+                f"Copied with source and {item.verification_state.value} warning state."
+            )
+        return True
+
+    def show_fact_details(self, fact_id):
+        item = self._fact_by_id(fact_id)
+        if item is None:
+            return
+        preview = character_count_preview(
+            item.air_copy,
+            self._selected_fact_template_profile(),
+        )
+        details = [
+            item.air_copy,
+            "",
+            item.supporting_context,
+            "",
+            f"Status: {item.verification_state.value}",
+            f"Air-ready: {'YES' if item.air_ready else 'NO'}",
+            f"Fact ID: {item.fact_id}",
+            f"Evidence hash: {item.evidence_hash}",
+            f"Character guidance: {preview.label}",
+        ]
+        if item.warning_reason:
+            details.append(f"Warning: {item.warning_reason}")
+        for index, source in enumerate(item.provenance, 1):
+            details.extend(
+                [
+                    "",
+                    f"Source {index}: {source.source_name}",
+                    f"Reference: {source.source_reference}",
+                    f"Source date: {source.source_date or 'unavailable'}",
+                    f"Game/page: {source.source_game_id or 'n/a'} / "
+                    f"{source.source_page or 'n/a'}",
+                    f"Snapshot: {source.snapshot_timestamp or 'unavailable'}",
+                ]
+            )
+        messagebox.showinfo("Broadcast Fact Details", "\n".join(details))
+
     def _scoped_verification_count(self):
         selected = getattr(self, "selected_game", None)
         database = getattr(self, "db", {})
         if not isinstance(selected, SelectedGame) or not isinstance(database, dict):
             return None
+        if hasattr(self, "_fact_collection"):
+            collection = self._fact_collection
+            if (
+                not isinstance(collection, FactCollection)
+                or collection.game_id != selected.game_id
+            ):
+                return None
+            return collection.blocking_verification_count
         if not database.get("enrichment_enabled"):
             return None
         frame = database.get("official_game_notes")
