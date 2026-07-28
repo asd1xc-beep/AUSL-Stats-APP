@@ -5,19 +5,20 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5, Phase 6A, and Phase 6B are complete. Phase 6B's reviewed
-functional commits are b2a8f30 (canonical fact model and source adapters),
-d7994ad (Game Day cards and synchronization), eda0bfd (canonical roster-status
-reuse), 5febe19 (copy provenance and 60/120-character guidance), and 919254e
-(minimum-size fact-card layout and deterministic GUI smoke). Phase 6B started
-from the completed Phase 6A head e87b4d7; at that time Phase 6A remained open
-as draft PR #4 and remote main remained 19f2702, so Phase 6B is a stacked
-branch rather than a claim that unmerged work is on main.
+Phases 1-5 and Phase 6A through 6C are complete. Phase 6C's reviewed
+functional commits are d67155d (canonical exact-game session rundown model,
+read-time budgeting, used history, reconciliation, and private export) and
+8048f79 (Game Day rundown, pin/use actions, suggestion suppression, UI
+synchronization, privacy coverage, and deterministic GUI smoke). Phase 6C
+started from remote main 3549954, then explicitly merged the completed Phase
+6B line at 71738c2 because GitHub PR #5 had been merged into the already-merged
+Phase 6A branch rather than main.
 
-The complete offline suite passes 557 tests with warnings treated as errors;
-the 357-test Phase 6B/adjacent safety matrix also passes. The deterministic
-Windows source-app smoke passes at 1120x720 with a usable scrollable fact
-viewport. Compileall, pip check, and checked-in distribution verification pass.
+The complete offline suite passes 611 tests with warnings treated as errors;
+the 339-test Phase 6C/adjacent safety matrix also passes. The deterministic
+Windows source-app smoke passes at 1120x720 with scrollable fact and rundown
+views. Compileall, pip check, Git LFS validation, checked-in distribution
+verification, whitespace validation, and tracked/history secret scans pass.
 The future-season year-generalization patch remains applied once and its
 dedicated regressions pass.
 
@@ -26,9 +27,14 @@ based on the project owner's report. No hardware model, display scaling,
 rehearsal date, or additional observed behavior is asserted here because those
 details were not supplied.
 
-Phase 6C through 6F have not started. Phase 6B does not add a pinned rundown,
-read-time budgeting, used-on-air state, restart persistence, crash recovery,
-change comparison, fuzzy search, or player comparison. This remains an
+The project owner reports that the developer-only optional enrichment refresh
+was run and the resulting real fact cards were manually reviewed without
+dubious facts or enrichment issues being observed. This is an owner-reported
+content audit only; no unsupplied samples, dates, or test details are asserted.
+
+Phase 6D through 6F have not started. Phase 6C does not add restart
+persistence, autosave, crash recovery, the full post-refresh change panel,
+fuzzy search, or player comparison. This remains an
 assisted broadcast tool, not a candidate for unattended on-air use: cards that
 do not pass exact identity, provenance, freshness, source-health, and approval
 gates stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line
@@ -178,6 +184,43 @@ Character guidance is centrally configured for 60-character one-line and
 Air Line uses, labels likely wrapping without truncating or rewriting facts,
 and is guidance only—not validation against an XPression or other graphics
 template.
+
+PINNED RUNDOWN AND ON-AIR WORKFLOW
+The Game Day Rundown view keeps a separate in-memory queue for each exact
+official game ID. Air-ready cards can be pinned directly; warning-bearing
+research cards use Pin for Review and remain visibly separate. Unavailable
+facts cannot be pinned. The queue stores the canonical Broadcast Fact,
+evidence hash, provenance, verification state, pin time, and deterministic
+position rather than reparsing displayed text.
+
+Each exact air-copy string receives a deterministic read-time estimate at a
+central 140-words-per-minute rate, with a one-second minimum for nonempty
+copy. The producer may choose 15/30/45/60/90-second presets or enter a
+validated custom target. The displayed total is the sum of active air-ready
+item estimates. Review, changed, invalidated, and used facts are excluded
+from the remaining air-ready total. Being over target is a workflow warning,
+not a factual readiness failure.
+
+Mark Used on Air records a timezone-aware snapshot and evidence hash whether
+the fact was pinned or used directly from a card. The stable fact ID is then
+suppressed from default suggestions for that exact game, even after an
+ordinary rerender. Show Used reveals it; Undo Used restores suggestion
+eligibility and returns a previously pinned item to a deterministic queue
+position. Another official game has independent pin/use state.
+
+A refresh never silently rewrites a pin. Same fact/evidence remains current;
+changed evidence or downgraded verification moves the retained snapshot into
+review; a missing fact is retained as invalidated. Review / Replace Latest
+requires an explicit confirmation and preserves queue position. This safety
+reconciliation is not the broader Phase 6E What Changed interface.
+
+Copy Rundown produces a source-labeled text version on the clipboard. Export
+Text creates an exclusive, collision-resistant producer-private file under:
+  data\exports\game_packets\rundowns
+That directory is ignored by Git and rejected by the public distribution
+verifier. Rundown state is deliberately session-only in Phase 6C and is lost
+when the application closes; persistence, autosave, and crash recovery belong
+to Phase 6D.
 
 LOCAL/OFFLINE MODE
 The visible Local/Offline Mode control appears beside Quick Refresh and in the

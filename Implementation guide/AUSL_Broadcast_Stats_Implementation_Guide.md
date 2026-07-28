@@ -684,8 +684,9 @@ Implementation status (2026-07-27): complete as the first-tab `Game Day`
 command center, together with the pure `GameDayReadiness` policy and explicit
 Local/Offline Mode. The later broadcast-fact boundary is documented in
 `Phase_6_Broadcast_Fact_Interface.md`. Phase 6B now implements that boundary;
-rundown state, session recovery, change comparison, and faster search remain
-deferred to 6C–6F.
+Phase 6C now implements the session-only rundown and used-on-air workflow;
+session recovery, change comparison, and faster search remain deferred to
+6D–6F.
 
 #### 6B. Air-ready fact cards
 
@@ -720,7 +721,22 @@ text, retain their evidence hashes and provenance, add read-time budgeting,
 and support a used-on-air timestamp. Do not imply direct integration with a
 broadcast graphics system unless one is explicitly implemented.
 
-Implementation status: not started.
+Implementation status (2026-07-28): complete. `src/ausl_rundown.py` owns one
+session-only state per exact official game ID, with canonical fact snapshots,
+dense ordering, timezone-aware pin/use timestamps, a configurable 140-WPM
+estimate, game-local break targets, stable-ID repeat suppression, Undo Used,
+and safe refresh reconciliation. The Game Day Rundown view separates active
+air-ready pins, Needs Verification pins, and used history. It offers reliable
+move buttons, safe copy actions, deliberate latest-version replacement,
+clipboard rundown copy, and exclusive producer-private text export.
+
+Changed, downgraded, or missing current evidence never silently rewrites or
+deletes a pinned snapshot and is excluded from air-ready timing. Read-time
+overage is a workflow warning only. Export files live under the already
+ignored/distribution-forbidden game-packet area. No rundown mutation accesses
+the network, and Local/Offline Mode permits the complete local workflow.
+Phase 6C writes no session state to disk; Phase 6D remains responsible for
+atomic persistence, autosave, crash recovery, and restart restoration.
 
 #### 6D. Session persistence and crash recovery
 

@@ -2,8 +2,9 @@
 
 Phase 6A established this boundary. Phase 6B implements it in
 `src/ausl_facts.py` and renders the resulting immutable values in Game Day.
-Phase 6B still does not create a rundown, read-time estimate, used-on-air
-state, or session persistence.
+Phase 6C consumes the same immutable values in `src/ausl_rundown.py` for a
+session-only pinned rundown, read-time estimate, and used-on-air state. It
+still does not persist or recover that session across application restarts.
 
 ## Required fact input
 
@@ -55,10 +56,18 @@ They must be regenerated after a game or database change. Phase 6A's pure
 aggregator remains the single owner of overall `READY FOR AIR`,
 `NEEDS ATTENTION`, and `NOT READY`.
 
-## Deferred storage
+## Rundown consumption and deferred storage
 
-Pinned order, read-time budget, used-on-air timestamp, acknowledgement state,
-and crash/session recovery belong to Phase 6C/6D. Phase 6B records only the
-current process's most recent canonical copy event (fact ID, evidence hash,
-provenance, snapshot, timestamp, and width profile). It writes no copy/session
-history and reserves no hidden storage fields.
+Phase 6C pins the complete canonical fact value, stable fact ID, evidence hash,
+provenance, and trust state; it never reconstructs a fact from a label. The
+in-memory exact-game state additionally owns dense order, break target, pin
+timestamp, reconciliation state, used timestamp/history, and an explicit
+schema version for later serialization. Stable fact ID suppresses ordinary
+rerenders within the same game while the used evidence hash preserves the
+version actually aired.
+
+Phase 6C intentionally writes no session state. Atomic persistence, autosave,
+crash recovery, restart restoration, and persisted scroll position belong to
+Phase 6D. The only Phase 6C disk output is an explicit producer-requested
+plain-text rundown export under the private, Git-ignored,
+distribution-forbidden game-packet directory.

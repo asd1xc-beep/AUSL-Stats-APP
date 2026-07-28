@@ -1,6 +1,6 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 Project source reviewed: `AUSL_BROADCAST_STATS_project_backup_2026-07-18_223756.zip`  
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -32,23 +32,24 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 5 — Air-ready facts (Phase 6B)
+### Milestone 6 — Pinned rundown and on-air workflow (Phase 6C)
 
-Target outcome for the current phase: turn trusted selected-game outputs into
-compact, deterministic, source-labeled facts that can be copied without
-losing exact identity, evidence version, provenance, or warning state.
+Target outcome for the current phase: let a producer retain canonical
+selected-game facts in a trustworthy ordered rundown, budget exact air copy
+against a break target, and suppress concepts already used during that exact
+game without losing their evidence version or provenance.
 
-Current implementation unit: Phase 6B. `UX-002`, `UX-005`, and `UX-010` are
-`[x]` COMPLETE with one canonical fact model, separate stable/version
-identities, exact-game local adapters and evidence gates, provenance-preserving
-copy, centralized 60/120-character guidance, bounded worker synchronization,
-and a usable minimum-size Game Day card view. Phase 6C through 6F remain
-`PLANNED`/`BACKLOG` and have not started.
+Current implementation unit: Phase 6C. `UX-003`, `UX-006`, and `UX-007` are
+`[x]` COMPLETE with one session-only exact-game rundown model, canonical fact
+snapshots, dense ordering, safe reconciliation, centralized 140-WPM timing,
+game-local break targets, stable-ID used suppression and Undo, a Game Day
+Rundown view, and exclusive producer-private text export. Phase 6D through 6F
+remain `PLANNED`/`BACKLOG` and have not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6B COMPLETE — 2026-07-27 — PHASE 6C THROUGH 6F NOT STARTED**
+Status: **PHASE 6C COMPLETE — 2026-07-28 — PHASE 6D THROUGH 6F NOT STARTED**
 
 ## Master improvement list
 
@@ -324,7 +325,12 @@ Required identity regressions:
     rows, scoped producer notes, and official team snapshots. VERIFIED,
     VERIFY, STALE, and UNAVAILABLE are derived from evidence and health.
 
-- [ ] `UX-003` — Add a local pinned-facts/rundown queue with plain-text export. **P2 · BACKLOG**
+- [x] `UX-003` — Add a local pinned-facts/rundown queue with plain-text export. **P2 · COMPLETE**
+  - One session-only state is keyed by exact official game ID. Canonical fact
+    snapshots retain stable/version identity, provenance, warning state,
+    order, and reconciliation status. Active air-ready, review, and used
+    sections are separate. Clipboard copy and exclusive text export preserve
+    source/freshness and write only under the private game-packet area.
 
 - [ ] `UX-004` — Add a post-refresh `What changed?` panel. **P2 · BACKLOG**
   - Roster/status, records, lineups, starters, injuries, milestones, and invalidated facts.
@@ -334,11 +340,19 @@ Required identity regressions:
     snapshot timestamp, copy timestamp, and selected width profile. Copy With
     Source renders source/status/freshness explicitly. No pin queue exists yet;
     Phase 6C can consume the canonical fact without reparsing display text.
-- [ ] `UX-006` — Add read-time budgeting to fact cards and the pinned rundown. **P2 · PLANNED**
+- [x] `UX-006` — Add read-time budgeting to fact cards and the pinned rundown. **P2 · COMPLETE**
   - Estimate seconds-to-read from word count (~140 wpm); show a running total against a settable break-length target on the pinned queue.
+  - Exact air copy is counted deterministically at a centralized 140 WPM with
+    a one-second minimum for nonempty text. Presets and validated custom
+    targets are exact-game local; active totals equal the displayed per-item
+    sums, while review/changed/invalidated/used items are excluded.
 
-- [ ] `UX-007` — Let a producer mark a suggested fact "used on air" with a timestamp. **P2 · PLANNED**
+- [x] `UX-007` — Let a producer mark a suggested fact "used on air" with a timestamp. **P2 · COMPLETE**
   - A used fact is excluded from default Top Storylines/suggestion surfaces for the remainder of the selected game; it remains visible and selectable in the detailed view.
+  - Pinned and unpinned facts retain the exact evidence hash and timezone-aware
+    used timestamp. Stable-ID suppression is exact-game scoped; Show Used and
+    Undo Used provide history and deterministic recovery without promoting
+    verification.
 
 - [ ] `UX-008` — Add session/crash recovery for producer working state. **P1 · PLANNED**
   - Autosave and restore selected game, pinned/used-fact queue, and scroll position. Distinct from lineup-lock and manual-note storage, which are already atomic-written; this protects in-progress prep, not source data.
@@ -416,6 +430,118 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 6C — Pinned rundown and on-air workflow
+
+- Completion date: 2026-07-28.
+- Starting commit and baseline: latest remote `main`
+  `354995423d43c8f69fbc308d4dae7de5c5401944`. GitHub PR #5 had been
+  merged into the already-merged Phase 6A branch rather than main, so the new
+  `agent/phase6c-rundown-workflow` branch was created from that exact main
+  commit and explicitly merged the completed Phase 6B line (including the
+  reviewed fact-card wheel fix) at
+  `71738c231761d26b763d31f80e64ffbbe85cec26`. The resulting clean offline
+  baseline passed **559 tests in 17.67 s** with warnings treated as errors.
+- Branch and final functional commits: `agent/phase6c-rundown-workflow`;
+  `d67155d` adds the exact-game session rundown model and pure acceptance
+  coverage; `8048f79` integrates pin/use/timing/reconciliation/export behavior
+  into Game Day, adds privacy coverage, and adds the deterministic real-Tk
+  smoke. The documentation acceptance commit is reported in the Phase 6C PR.
+- Rundown model and game isolation: `src/ausl_rundown.py` owns frozen,
+  serialization-ready `PinnedFactEntry`, `UsedFactRecord`, and
+  `GameRundownState` values behind one isolated `RundownSession`. States are
+  keyed only by exact numeric official game ID; repeat-opponent games remain
+  separate. Pins retain the canonical immutable Broadcast Fact object, stable
+  fact ID, evidence hash, provenance, trust state, timezone-aware pin time,
+  dense position, and reconciliation state. Duplicate active pins and
+  wrong/missing game identity fail closed.
+- Ordering and lifecycle: reliable Move Up/Move Down buttons preserve every
+  entry and dense positions; boundary moves are no-ops. Remove affects only
+  session memory. Game switches restore that exact game's current-session
+  queue. All mutations are synchronous local operations on the Tk main thread,
+  create no timer/worker/network request, and remain usable in Local/Offline
+  Mode. Closing intentionally discards the session because Phase 6D has not
+  started.
+- Read-time formula and break targets: exact Air Copy is tokenized with one
+  Unicode-aware deterministic helper. Numbers/records, initials,
+  abbreviations, hyphenated words, apostrophes, accents, and Unicode
+  punctuation have explicit fixtures. Per-item seconds are
+  `max(1, ceil(words / WPM * 60))` for nonempty copy, using the centralized
+  default **140 WPM**; empty copy is zero. The active total is the sum of the
+  displayed eligible per-item estimates. 15/30/45/60/90-second presets and
+  validated 1–3600-second custom targets are exact-game local. Under/exact/over
+  labels are workflow guidance and do not alter factual readiness.
+- Used-on-air policy: Mark Used works from an active queue entry or an
+  unpinned canonical card, records a timezone-aware timestamp and the exact
+  aired evidence version, removes pinned items from active timing, and
+  suppresses the stable fact ID from default suggestions for only that exact
+  game. Show Used reveals current cards; history retains provenance and
+  wording. Undo restores suggestion eligibility and returns a formerly pinned
+  item to its deterministic prior position. A same-ID evidence update remains
+  suppressed while a distinct watch-versus-reached fact ID remains eligible.
+- Refresh reconciliation: an accepted exact-game fact rebuild reconciles only
+  that game's existing pins. Same ID/hash remains current. Same ID/new hash
+  retains the pinned snapshot and becomes `SOURCE CHANGED`; a trust downgrade
+  becomes `VERIFICATION DOWNGRADED`; a missing fact becomes `INVALIDATED`.
+  These entries leave air-ready timing/copy until reviewed. Deliberate
+  Review / Replace Latest requires confirmation, preserves queue position,
+  and then adopts the latest canonical evidence. Used history always retains
+  the version actually aired. Generation/game/database guards continue to
+  discard stale callbacks before reconciliation.
+- Export and privacy: Copy Rundown and plain-text export include teams, exact
+  game ID, schedule/venue when available, UTC export time, revision, target,
+  active estimate, snapshot, verify reminder, separated active/review/used
+  sections, exact wording, status, source/freshness, read estimates, and used
+  timestamps. Filenames include UTC microseconds, exact game ID, and revision;
+  exclusive creation never overwrites. Files go only under
+  `data/exports/game_packets/rundowns`, which is covered by the existing Git
+  ignore rule and distribution-forbidden game-packet policy. Tests exercise
+  the nested rundown path specifically. Logs contain identity/hash/count
+  metadata, never fact or producer-note contents.
+- Failing-first evidence: the first 38 model tests failed at collection because
+  `ausl_rundown` did not exist. After implementation, two fixture assertions
+  were corrected without weakening behavior (case-sensitive exception text
+  and three deliberately distinct export sentences), then all 38 passed.
+  Ten UI tests next failed because no pin/use/rundown callbacks existed; all
+  passed after canonical integration. The first real-Tk smoke exposed that a
+  hidden Notebook subview reports a one-pixel canvas until selected; selecting
+  the actual Rundown view before geometry/wheel assertions produced the real
+  viewport and a passing wheel movement.
+- Automated acceptance:
+  - Phase 6C model/UI plus Phase 6B/6A and build privacy focused suite —
+    **155 passed in 3.73 s**;
+  - required Phase 6C/6B/6A, readiness/offline, exact-game, notes/media,
+    enrichment, team/copy, refresh/callback, packet/privacy/portable, and
+    future-season matrix — **339 passed in 7.35 s**;
+  - complete offline warnings-as-errors suite — **611 passed in 19.82 s**;
+  - `compileall`, `pip check`, checked-in distribution verification, Git LFS
+    workbook validation, `git diff --check`, the actual nested export
+    `git check-ignore`, and tracked filename/content/history secret scans all
+    passed.
+- Windows GUI smoke: deterministic source/real-Tk harness on
+  `Windows-10-10.0.19045-SP0`, Python 3.12.10, exactly `1120x720`, using the
+  checked-in local core snapshot and an isolated temporary private export
+  directory with no network access. It selected an official game; pinned
+  verified facts from both teams and a Needs Verification fact; reordered;
+  set/validated a 30-second target and exact per-item sum; marked one pinned
+  and one unpinned fact used; proved default suppression, Show Used, and Undo;
+  switched repeat-opponent games and restored the first queue; injected a
+  same-ID evidence change and retained/invalidated old wording; exported and
+  inspected separated sections; enabled Offline Mode; moved the real rundown
+  viewport by mouse-wheel event; opened all seven existing top-level tabs; and
+  closed normally.
+- Owner-reported content audit: the project owner reports running the
+  developer-only optional enrichment refresh and manually reviewing the real
+  resulting fact cards without observing dubious facts or enrichment issues.
+  No specific samples or additional test details are inferred or asserted.
+- Known limitations and deferred work: all rundown state is deliberately
+  memory-only and is lost on close. No autosave, crash recovery, restart
+  restoration, persisted scroll position, full Phase 6E change panel,
+  historical version browser, fuzzy search, comparison, cloud/shared queue,
+  graphics integration, generative rewriting, automatic shortening, or
+  automatic ordering was added. Normal producer startup still loads core data
+  only; optional enrichment remains developer-only and approval-gated. Phase
+  6D through 6F have not started.
 
 ### Phase 6B — Air-ready fact cards
 
@@ -532,8 +658,10 @@ Fill in one record when a milestone or major item is completed.
   explicit enrichment database is supplied and all existing gates pass.
   Character thresholds are guidance, not an XPression/template contract.
   Copy events are memory-only. No Linux/Xvfb GUI smoke was performed locally.
-  Phase 6A still must merge before the stacked Phase 6B PR can target a
-  main-only diff.
+  Historical integration note: Phase 6A subsequently merged to main, but
+  Phase 6B PR #5 merged into the already-merged Phase 6A branch. Phase 6C
+  therefore integrated that completed branch explicitly from a new main-based
+  worktree.
 - Intentionally deferred: Phase 6C pinned rundown, drag/order, read-time, and
   used-on-air workflow; Phase 6D session/crash recovery; Phase 6E What
   Changed; Phase 6F fuzzy search/quick filters/player comparison; College
