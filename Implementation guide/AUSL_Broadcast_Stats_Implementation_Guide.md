@@ -684,9 +684,9 @@ Implementation status (2026-07-27): complete as the first-tab `Game Day`
 command center, together with the pure `GameDayReadiness` policy and explicit
 Local/Offline Mode. The later broadcast-fact boundary is documented in
 `Phase_6_Broadcast_Fact_Interface.md`. Phase 6B now implements that boundary;
-Phase 6C now implements the session-only rundown and used-on-air workflow;
-session recovery, change comparison, and faster search remain deferred to
-6D–6F.
+Phase 6C now implements the rundown and used-on-air workflow; Phase 6D now
+implements private autosave and crash recovery. Change comparison and faster
+search remain deferred to 6E–6F.
 
 #### 6B. Air-ready fact cards
 
@@ -735,15 +735,30 @@ deletes a pinned snapshot and is excluded from air-ready timing. Read-time
 overage is a workflow warning only. Export files live under the already
 ignored/distribution-forbidden game-packet area. No rundown mutation accesses
 the network, and Local/Offline Mode permits the complete local workflow.
-Phase 6C writes no session state to disk; Phase 6D remains responsible for
-atomic persistence, autosave, crash recovery, and restart restoration.
+Phase 6D now persists and recovers this canonical state through the separate
+validated private-session boundary described below.
 
 #### 6D. Session persistence and crash recovery
 
 Persist and recover selected game, pinned/used facts, and safe view state
 without weakening existing atomic-write or privacy rules.
 
-Implementation status: not started.
+Implementation status (2026-07-28): complete. `src/ausl_session.py` owns a
+versioned primitive-only schema and reconstructs canonical Phase 6B/6C models
+through validation. State lives in per-user application data outside the
+repository/install, with deterministic UTF-8/LF, serialized generations,
+same-directory temp+fsync+atomic replacement, one validated backup, and
+exclusive quarantine/recovery copies. Corrupt, oversized, malformed,
+cross-game, or future-schema state fails closed.
+
+One 500 ms Tk debounce covers exact game, rundown/use/order/target/reconcile,
+Game Day filters/views, unique player identity, and normalized scroll.
+Shutdown distinguishes clean close from crash. Restore requires exact
+game/season/team identity and reuses Phase 6C reconciliation; it never restores
+Offline Mode, clipboard/copy events, workers, timers, locks, credentials, or
+network state. Game Day exposes recovery Review/Dismiss/Start Fresh and visible
+save failure. Start Fresh cannot clear until an exclusive validated archive
+succeeds.
 
 #### 6E. “What changed?” panel
 

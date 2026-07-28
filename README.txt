@@ -5,19 +5,20 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5 and Phase 6A through 6C are complete. Phase 6C's reviewed
-functional commits are d67155d (canonical exact-game session rundown model,
-read-time budgeting, used history, reconciliation, and private export) and
-8048f79 (Game Day rundown, pin/use actions, suggestion suppression, UI
-synchronization, privacy coverage, and deterministic GUI smoke). Phase 6C
-started from remote main 3549954, then explicitly merged the completed Phase
-6B line at 71738c2 because GitHub PR #5 had been merged into the already-merged
-Phase 6A branch rather than main.
+Phases 1-5 and Phase 6A through 6D are complete. Phase 6D started from the
+latest remote main e9e65dc (the merged Phase 6C pull request). Its reviewed
+functional commits are 0b2816f (versioned schema, canonical rundown
+deserialization, atomic private storage, backup/quarantine, and failing-first
+tests) and f19ffda (debounced autosave, exact restore/reconciliation, recovery
+UI, Start Fresh archive, readiness warning, privacy enforcement, and
+deterministic GUI smoke).
 
-The complete offline suite passes 611 tests with warnings treated as errors;
-the 339-test Phase 6C/adjacent safety matrix also passes. The deterministic
-Windows source-app smoke passes at 1120x720 with scrollable fact and rundown
-views. Compileall, pip check, Git LFS validation, checked-in distribution
+The clean baseline passed 611 offline tests. The completed Phase 6D source
+passes 654 tests with warnings treated as errors; the 149-test Phase 6D and
+adjacent safety matrix also passes. The deterministic Windows source-app
+smoke passes at 1120x720 through clean resume, deliberate crash recovery,
+save failure, recovery archive, Start Fresh, all seven tabs, and zero network
+calls. Compileall, pip check, Git LFS validation, checked-in distribution
 verification, whitespace validation, and tracked/history secret scans pass.
 The future-season year-generalization patch remains applied once and its
 dedicated regressions pass.
@@ -32,9 +33,8 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Phase 6D through 6F have not started. Phase 6C does not add restart
-persistence, autosave, crash recovery, the full post-refresh change panel,
-fuzzy search, or player comparison. This remains an
+Phase 6E and 6F have not started. Phase 6D does not add the full post-refresh
+change panel, fuzzy search, or player comparison. This remains an
 assisted broadcast tool, not a candidate for unattended on-air use: cards that
 do not pass exact identity, provenance, freshness, source-health, and approval
 gates stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line
@@ -218,9 +218,45 @@ Copy Rundown produces a source-labeled text version on the clipboard. Export
 Text creates an exclusive, collision-resistant producer-private file under:
   data\exports\game_packets\rundowns
 That directory is ignored by Git and rejected by the public distribution
-verifier. Rundown state is deliberately session-only in Phase 6C and is lost
-when the application closes; persistence, autosave, and crash recovery belong
-to Phase 6D.
+verifier. Rundown state is now part of the private Phase 6D producer session
+described below. Canonical pinned and used snapshots, exact evidence hashes,
+order, break target, and reconciliation state survive a clean restart or
+crash.
+
+SESSION AUTOSAVE AND RECOVERY
+Phase 6D saves producer working state under the current user's private
+application-data directory, outside the repository and install folder:
+  %LOCALAPPDATA%\AUSL Broadcast Stats\producer_session.json
+
+The versioned JSON contains primitives only. It can retain the exact selected
+official game identity, canonical per-game rundown and used history, Game Day
+view and filters, unique selected player identity, and normalized fact/rundown
+scroll positions. It deliberately does not persist clipboard contents,
+workers, timers, locks, credentials, network responses, or an enabled
+Local/Offline Mode.
+
+Meaningful changes use one 500 ms debounced Tk timer. Saves are serialized,
+written to a same-directory temporary file, flushed, and atomically replaced.
+A previous validated snapshot is retained as a backup. A failed write leaves
+the installed session byte-identical and displays a persistent SESSION NOT
+SAVED warning; it does not alter data-health truth. Normal shutdown flushes a
+closed-cleanly lifecycle marker. A saved active marker produces a crash
+recovery notice on the next launch.
+
+Restore never guesses. The saved game ID, season, away team, and home team
+must all match one current official schedule row. A mismatch remains a
+blocking recovery issue and preserves the saved identity until the producer
+selects a game or starts fresh. Facts are restored as canonical snapshots and
+then passed through the existing refresh reconciliation rules. Offline Mode
+always starts off.
+
+Corrupt, oversized, malformed, or newer-schema files fail closed and are
+copied byte-for-byte to a timestamped quarantine file. A valid backup may be
+used; otherwise the app continues with an empty session and a visible warning.
+The recovery notice offers Review, Dismiss, and Start Fresh. Start Fresh first
+creates an exclusive recovery archive and refuses to clear runtime state if
+that archive cannot be written. Producer session filenames are ignored by Git
+and explicitly rejected by distribution privacy verification.
 
 LOCAL/OFFLINE MODE
 The visible Local/Offline Mode control appears beside Quick Refresh and in the
