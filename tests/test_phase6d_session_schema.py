@@ -170,3 +170,23 @@ def test_snapshot_requires_timezone_aware_ordered_timestamps():
         replace(original, updated_at=datetime(2026, 7, 28, 14, 15, 16))
     with pytest.raises(SessionValidationError, match="before"):
         replace(original, updated_at=NOW - timedelta(seconds=1))
+
+
+def test_rundown_internal_timestamp_and_membership_invariants_fail_closed():
+    payload = json.loads(session_to_json_bytes(populated_snapshot()))
+    state = payload["rundown_states"][0]
+    state["updated_at"] = "2026-07-27T00:00:00+00:00"
+    with pytest.raises(SessionValidationError, match="before"):
+        session_from_json_bytes(json.dumps(payload).encode("utf-8"))
+
+    payload = json.loads(session_to_json_bytes(populated_snapshot()))
+    state = payload["rundown_states"][0]
+    state["used_history"][0]["fact_id"] = state["active_entries"][0]["fact_id"]
+    state["used_history"][0]["fact_snapshot"] = state["active_entries"][0][
+        "fact_snapshot"
+    ]
+    state["used_history"][0]["evidence_hash"] = state["active_entries"][0][
+        "evidence_hash"
+    ]
+    with pytest.raises(SessionValidationError, match="active and used"):
+        session_from_json_bytes(json.dumps(payload).encode("utf-8"))

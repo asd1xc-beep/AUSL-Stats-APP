@@ -181,3 +181,15 @@ def test_start_fresh_archive_is_exclusive_and_preserves_exact_bytes(tmp_path):
     assert archive.read_bytes() == before
     with pytest.raises(FileExistsError):
         store._write_exclusive(archive, before)
+
+
+def test_start_fresh_archives_valid_backup_when_current_is_corrupt(tmp_path):
+    store = SessionStore(tmp_path)
+    store.save(populated_snapshot(), generation=1)
+    valid = store.current_path.read_bytes()
+    store.backup_path.write_bytes(valid)
+    store.current_path.write_bytes(b"corrupt current")
+
+    archive = store.archive_current_for_start_fresh()
+
+    assert archive.read_bytes() == valid

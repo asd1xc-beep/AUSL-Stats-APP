@@ -286,3 +286,25 @@ def test_check_order_and_generated_time_are_stable():
         "network_permission",
     ]
     assert result.generated_at == NOW
+
+
+def test_session_save_warning_and_unresolved_restore_are_honest():
+    warning = readiness(
+        session_issue={
+            "state": "warning",
+            "detail": "Producer session is not saved: disk full.",
+            "blocking": False,
+        }
+    )
+    assert by_key(warning, "producer_session").state == "warning"
+    assert warning.overall_state == "needs-attention"
+
+    blocked = readiness(
+        session_issue={
+            "state": "fail",
+            "detail": "Saved Game 1042 does not match the installed schedule.",
+            "blocking": True,
+        }
+    )
+    assert by_key(blocked, "producer_session").state == "fail"
+    assert blocked.overall_state == "not-ready"

@@ -21,6 +21,7 @@ import tkinter as tk  # noqa: E402
 from ausl_data import empty_locked_lineup_store, load_database  # noqa: E402
 from ausl_facts import FactCollection  # noqa: E402
 from ausl_rundown import ReconciliationState  # noqa: E402
+from ausl_session import SessionStore  # noqa: E402
 import ausl_stats_app  # noqa: E402
 
 
@@ -64,7 +65,10 @@ def main():
     ausl_stats_app.export_dir = lambda: private_root
     root = tk.Tk()
     try:
-        app = ausl_stats_app.AUSLStatsApp(root)
+        app = ausl_stats_app.AUSLStatsApp(
+            root,
+            session_store=SessionStore(private_root / "session"),
+        )
         root.title("AUSL Phase 6C Smoke")
         root.geometry("1120x720")
         root.update()

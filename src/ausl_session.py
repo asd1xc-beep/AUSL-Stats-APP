@@ -534,12 +534,26 @@ def _state_from_dict(value: Any, label: str) -> GameRundownState:
         raise SessionValidationError(f"{label} queue positions are not dense")
     if len({item.entry_id for item in entries}) != len(entries):
         raise SessionValidationError(f"{label} contains duplicate entry identity")
+    active_fact_ids = {item.fact_id for item in entries}
+    used_fact_ids = [item.fact_id for item in history]
+    if active_fact_ids.intersection(used_fact_ids):
+        raise SessionValidationError(
+            f"{label} cannot contain the same fact in active and used state"
+        )
+    if len(set(used_fact_ids)) != len(used_fact_ids):
+        raise SessionValidationError(f"{label} contains duplicate used fact identity")
     target = data.get("break_target_seconds")
     if target is not None:
         try:
             target = validate_break_target(target)
         except RundownMutationError as exc:
             raise SessionValidationError(f"{label} break target is invalid") from exc
+    created_at = _parse_timestamp(data.get("created_at"), f"{label}.created_at")
+    updated_at = _parse_timestamp(data.get("updated_at"), f"{label}.updated_at")
+    if updated_at < created_at:
+        raise SessionValidationError(
+            f"{label}.updated_at cannot be before created_at"
+        )
     return GameRundownState(
         schema_version=RUNDOWN_SCHEMA_VERSION,
         game_id=game_id,
@@ -547,8 +561,8 @@ def _state_from_dict(value: Any, label: str) -> GameRundownState:
         used_history=history,
         break_target_seconds=target,
         revision=_integer(data.get("revision"), f"{label}.revision"),
-        created_at=_parse_timestamp(data.get("created_at"), f"{label}.created_at"),
-        updated_at=_parse_timestamp(data.get("updated_at"), f"{label}.updated_at"),
+        created_at=created_at,
+        updated_at=updated_at,
         session_only=_boolean(data.get("session_only", True), f"{label}.session_only"),
     )
 
@@ -857,8 +871,22 @@ class SessionStore:
 
     def archive_current_for_start_fresh(self) -> Path:
         with self._lock:
-            data = self.current_path.read_bytes()
-            session_from_json_bytes(data)
+            candidates = (self.current_path, self.backup_path)
+            data = None
+            last_error: Exception | None = None
+            for candidate in candidates:
+                try:
+                    candidate_data = candidate.read_bytes()
+                    session_from_json_bytes(candidate_data)
+                except (OSError, SessionValidationError) as exc:
+                    last_error = exc
+                    continue
+                data = candidate_data
+                break
+            if data is None:
+                raise SessionValidationError(
+                    f"No validated session is available to archive: {last_error}"
+                )
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
             destination = (
                 self.directory / f"producer_session.start-fresh-{stamp}.json"

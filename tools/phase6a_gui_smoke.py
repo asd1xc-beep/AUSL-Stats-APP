@@ -16,6 +16,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 import ausl_stats_app  # noqa: E402
+from ausl_session import SessionStore  # noqa: E402
 
 
 REAL_LOAD_DATABASE = ausl_stats_app.load_database
@@ -54,7 +55,10 @@ def _wait_for_initial_load(root, app, deadline, on_ready, on_fail):
 
 def _run_first_window(work_dir: Path, telemetry: dict, hold_ms: int) -> None:
     root = ausl_stats_app.tk.Tk()
-    app = ausl_stats_app.AUSLStatsApp(root)
+    app = ausl_stats_app.AUSLStatsApp(
+        root,
+        session_store=SessionStore(work_dir / "session"),
+    )
     root.geometry("1120x720")
     root.title("AUSL Broadcast Stats - Phase 6A GUI Smoke")
     deadline = time.monotonic() + 20
@@ -173,11 +177,14 @@ def _run_first_window(work_dir: Path, telemetry: dict, hold_ms: int) -> None:
     root.mainloop()
 
 
-def _run_relaunch_window(telemetry: dict) -> None:
+def _run_relaunch_window(work_dir: Path, telemetry: dict) -> None:
     if telemetry["errors"]:
         return
     root = ausl_stats_app.tk.Tk()
-    app = ausl_stats_app.AUSLStatsApp(root)
+    app = ausl_stats_app.AUSLStatsApp(
+        root,
+        session_store=SessionStore(work_dir / "session"),
+    )
     root.geometry("1120x720")
     root.title("AUSL Broadcast Stats - Phase 6A Relaunch Smoke")
     deadline = time.monotonic() + 20
@@ -287,7 +294,7 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(1)
         return
 
-    _run_relaunch_window(telemetry)
+    _run_relaunch_window(args.work_dir, telemetry)
     checks = {
         "no_game_not_ready": telemetry.get("no_game_state") == "not-ready",
         "projected_lineup_saved": telemetry.get("projected_lineup_saved") is True,

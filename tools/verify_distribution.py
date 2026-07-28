@@ -103,6 +103,8 @@ def _policy_reason(entry_name: str) -> str | None:
         return None
 
     name = parts[-1]
+    if name == "producer_session.json" or name.startswith("producer_session."):
+        return "private producer session"
     if name in _FORBIDDEN_NAMES:
         return _FORBIDDEN_NAMES[name]
     if name in _UNVERIFIED_ENRICHMENT_NAMES:

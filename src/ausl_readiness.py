@@ -151,6 +151,7 @@ def aggregate_game_day_readiness(
     packet: Mapping[str, Any] | None,
     offline_mode: bool,
     now: datetime | None = None,
+    session_issue: Mapping[str, Any] | None = None,
 ) -> GameDayReadiness:
     """Aggregate one exact game's current operational readiness.
 
@@ -529,6 +530,21 @@ def aggregate_game_day_readiness(
             False,
         )
     )
+
+    if session_issue:
+        issue_state = _text(session_issue.get("state")).casefold()
+        if issue_state not in {"warning", "fail", "unavailable"}:
+            issue_state = "unavailable"
+        checks.append(
+            ReadinessCheck(
+                "producer_session",
+                "Producer session recovery",
+                issue_state,
+                _text(session_issue.get("detail"))
+                or "Producer-session persistence state is unavailable.",
+                bool(session_issue.get("blocking")),
+            )
+        )
 
     blocking_issue_count = sum(
         check.blocking and check.state in {"fail", "unavailable"}

@@ -9,6 +9,7 @@ import platform
 import sys
 import threading
 import time
+import tempfile
 from pathlib import Path
 
 
@@ -18,6 +19,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 import ausl_stats_app  # noqa: E402
+from ausl_session import SessionStore  # noqa: E402
 
 
 _real_load_database = ausl_stats_app.load_database
@@ -177,12 +179,16 @@ def main(argv: list[str] | None = None) -> None:
 
     ausl_stats_app.update_all_data = _smoke_update_all_data
     ausl_stats_app.load_database = _smoke_load_database
-    root = ausl_stats_app.tk.Tk()
-    app = ausl_stats_app.AUSLStatsApp(root)
-    root.title("AUSL Broadcast Stats - Phase 5 GUI Smoke")
-    if args.automated:
-        _run_automated_smoke(root, app, args.result)
-    root.mainloop()
+    with tempfile.TemporaryDirectory(prefix="ausl-phase5-session-") as state_dir:
+        root = ausl_stats_app.tk.Tk()
+        app = ausl_stats_app.AUSLStatsApp(
+            root,
+            session_store=SessionStore(Path(state_dir)),
+        )
+        root.title("AUSL Broadcast Stats - Phase 5 GUI Smoke")
+        if args.automated:
+            _run_automated_smoke(root, app, args.result)
+        root.mainloop()
 
 
 if __name__ == "__main__":
