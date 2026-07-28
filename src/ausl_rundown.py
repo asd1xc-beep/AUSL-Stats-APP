@@ -324,6 +324,29 @@ class RundownSession:
     def __init__(self):
         self._states: dict[str, GameRundownState] = {}
 
+    @property
+    def states(self) -> tuple[GameRundownState, ...]:
+        """Return deterministic immutable snapshots for persistence/export."""
+
+        return tuple(self._states[key] for key in sorted(self._states, key=int))
+
+    def restore_states(self, states: Iterable[GameRundownState]) -> None:
+        """Replace session state only with already validated exact-game records."""
+
+        restored: dict[str, GameRundownState] = {}
+        for state in states:
+            if not isinstance(state, GameRundownState):
+                raise RundownMutationError(
+                    "Only validated game rundown state can be restored"
+                )
+            exact_id = _game_id(state.game_id)
+            if exact_id in restored:
+                raise RundownMutationError(
+                    f"Duplicate restored rundown state for Game {exact_id}"
+                )
+            restored[exact_id] = state
+        self._states = restored
+
     def get_state(
         self,
         game_id: object,
