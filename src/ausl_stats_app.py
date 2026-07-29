@@ -92,6 +92,8 @@ from ausl_comparison import (
     ComparisonBuildError,
     ComparisonCopyRecord,
     build_player_comparison,
+    comparison_fact_display_text,
+    comparison_statistics_context_text,
     comparison_with_sources_text,
 )
 
@@ -2760,7 +2762,7 @@ class AUSLStatsApp:
     def _build_lookup(self, parent):
         parent.columnconfigure(0, weight=2)
         parent.columnconfigure(1, weight=3)
-        parent.rowconfigure(1, weight=1)
+        parent.rowconfigure(2, weight=1)
         search = ttk.Frame(parent)
         search.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         ttk.Label(search, text="Find player or filter:").pack(side="left")
@@ -2887,7 +2889,7 @@ class AUSLStatsApp:
         )
         ttk.Button(
             controls,
-            text="Copy Comparison + Sources",
+            text="Copy Metrics + Stat Source",
             command=self.copy_comparison_with_sources,
         ).grid(row=1, column=4, sticky="e", pady=(6, 0))
 
@@ -3045,36 +3047,27 @@ class AUSLStatsApp:
             details = []
             details.extend(player.warnings)
             details.extend(
-                f"[VERIFIED] {fact.air_copy}" for fact in player.verified_facts
+                comparison_fact_display_text(fact)
+                for fact in player.verified_facts
             )
             details.extend(
-                f"[{fact.verification_state.value}] {fact.air_copy}"
+                comparison_fact_display_text(fact)
                 for fact in player.review_facts
             )
             if not details:
                 details.append("No exact-game canonical facts available for this player.")
             ttk.Label(
                 container,
-                text="\n".join(details),
+                text="\n\n".join(details),
                 style="Sub.TLabel",
                 wraplength=500,
                 justify="left",
             ).grid(row=row_number, column=column, sticky="nw", padx=10, pady=(12, 4))
-        ttk.Label(container, text="Fact context").grid(
+        ttk.Label(container, text="Statistical context").grid(
             row=row_number, column=0, sticky="nw", padx=6, pady=(12, 4)
         )
         row_number += 1
-        source_text = (
-            (
-                f"Selected game context: Game {comparison.selected_game_id}\n"
-                if comparison.selected_game_id
-                else "Selected game context: Unavailable\n"
-            )
-            + f"Source: {comparison.source_name}\n"
-            f"Data snapshot: {comparison.snapshot_timestamp or 'Unavailable'}"
-        )
-        if comparison.fact_context_warning:
-            source_text += f"\n{comparison.fact_context_warning}"
+        source_text = comparison_statistics_context_text(comparison)
         ttk.Label(
             container,
             text=source_text,

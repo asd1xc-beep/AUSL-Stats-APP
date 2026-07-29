@@ -285,11 +285,16 @@ def parse_player_query(query) -> ParsedPlayerQuery:
         return ParsedPlayerQuery(raw_query="")
     backslash_sentinel = "\u0000"
     try:
+        lexer = shlex.shlex(
+            raw.replace("\\", backslash_sentinel),
+            posix=True,
+        )
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        lexer.quotes = '"'
         tokens = [
             token.replace(backslash_sentinel, "\\")
-            for token in shlex.split(
-                raw.replace("\\", backslash_sentinel), posix=True
-            )
+            for token in lexer
         ]
     except ValueError as exc:
         return ParsedPlayerQuery(
@@ -514,7 +519,11 @@ def _rank_record(
     maximum = _fuzzy_max_distance(query)
     if maximum <= 0:
         return None
-    distances = [bounded_damerau_levenshtein(query, field, maximum) for field in fields]
+    fuzzy_fields = (*fields, *record.name_tokens)
+    distances = [
+        bounded_damerau_levenshtein(query, field, maximum)
+        for field in fuzzy_fields
+    ]
     distance = min((value for value in distances if value is not None), default=None)
     if distance is None:
         return None

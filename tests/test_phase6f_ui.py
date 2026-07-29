@@ -210,6 +210,23 @@ def test_comparison_mousewheel_supports_windows_and_x11_directions(
     ]
 
 
+def test_lookup_player_body_row_is_the_expanding_grid_row():
+    root = ausl_stats_app.tk.Tk()
+    root.withdraw()
+    try:
+        parent = ausl_stats_app.ttk.Frame(root)
+        parent.grid(row=0, column=0, sticky="nsew")
+        app = object.__new__(ausl_stats_app.AUSLStatsApp)
+        app.root = root
+
+        app._build_lookup(parent)
+
+        assert int(parent.grid_rowconfigure(1)["weight"]) == 0
+        assert int(parent.grid_rowconfigure(2)["weight"]) == 1
+    finally:
+        root.destroy()
+
+
 def test_multiline_text_shortcuts_are_not_hijacked(fixture_database):
     app = _app(fixture_database)
     widget = object.__new__(ausl_stats_app.tk.Text)

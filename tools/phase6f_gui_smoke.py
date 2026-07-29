@@ -155,6 +155,14 @@ def main():
         left_name = str(left_row["player_name"])
         right_name = str(right_row["player_name"])
 
+        lookup_tab = app1.main_tabs.nametowidget(app1.main_tabs.tabs()[1])
+        assert int(lookup_tab.grid_rowconfigure(1)["weight"]) == 0
+        assert int(lookup_tab.grid_rowconfigure(2)["weight"]) == 1
+        app1.main_tabs.select(lookup_tab)
+        root1.update_idletasks()
+        assert app1.results.winfo_height() >= 100
+        assert app1.stat_tabs.winfo_height() >= 100
+
         # Keyboard-first search focus, exact lookup, and explicit selection.
         root1.focus_force()
         app1._focus_player_search()
@@ -217,7 +225,9 @@ def main():
         assert app1.copy_comparison_with_sources()
         copied = root1.clipboard_get()
         assert left_name in copied and right_name in copied
-        assert "Source:" in copied and "Data snapshot:" in copied
+        assert "Statistics source:" in copied
+        assert "Statistical snapshot:" in copied
+        assert "Statistical metrics only" in copied
         assert app1._last_comparison_copy_record is not None
         app1.set_local_offline_mode(True)
         assert app1._offline_mode
