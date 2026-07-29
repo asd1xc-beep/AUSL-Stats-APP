@@ -3,17 +3,21 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timezone
 
+import pandas as pd
+
 from ausl_changes import (
     BroadcastSnapshotDigest,
     ChangeComparisonContext,
     ChangeSeverity,
     ChangeType,
     FactDigest,
+    LineupDigest,
     RosterDigest,
     ScheduleDigest,
     SnapshotMetadata,
     SourceHealthDigest,
     TeamDigest,
+    build_snapshot_digest,
     compare_snapshot_digests,
 )
 
@@ -198,8 +202,8 @@ def test_player_team_move_is_attention_without_duplicate_added_removed_noise():
 
     assert len(events) == 1
     assert events[0].category == "roster"
-    assert events[0].before_summary.endswith("BOS")
-    assert events[0].after_summary.endswith("CHI")
+    assert "BOS" in events[0].before_summary
+    assert "CHI" in events[0].after_summary
 
 
 def test_official_record_change_is_informational_by_default():
@@ -210,8 +214,8 @@ def test_official_record_change_is_informational_by_default():
 
     assert event.category == "team"
     assert event.severity is ChangeSeverity.INFO
-    assert event.before_summary == "BOS 10-7"
-    assert event.after_summary == "BOS 11-7"
+    assert event.before_summary.startswith("BOS 10-7")
+    assert event.after_summary.startswith("BOS 11-7")
 
 
 def test_selected_game_schedule_change_is_attention_and_other_game_is_info():
@@ -234,6 +238,22 @@ def test_selected_game_schedule_change_is_attention_and_other_game_is_info():
     assert by_game["1043"].severity is ChangeSeverity.INFO
 
 
+def test_final_score_change_is_exact_game_schedule_evidence():
+    before_game = replace(_game(), status="final", away_score=3, home_score=2)
+    after_game = replace(before_game, away_score=4)
+
+    event = compare_snapshot_digests(
+        _digest(schedule=(before_game,)),
+        _digest(schedule=(after_game,)),
+        context=ChangeComparisonContext(selected_game_id="1042"),
+        detected_at=NOW,
+    ).events[0]
+
+    assert "CHI 3, BOS 2" in event.before_summary
+    assert "CHI 4, BOS 2" in event.after_summary
+    assert event.game_id == "1042"
+
+
 def test_source_health_regression_and_recovery_are_conservative():
     green = SourceHealthDigest("official_stats", "green", "", "hash-1")
     red = SourceHealthDigest("official_stats", "red", "refresh failed", "hash-1")
@@ -248,6 +268,40 @@ def test_source_health_regression_and_recovery_are_conservative():
     assert down.severity is ChangeSeverity.BLOCKING
     assert up.change_type is ChangeType.RESTORED
     assert up.severity is ChangeSeverity.INFO
+
+
+def test_selected_game_confirmed_lineup_invalidation_is_blocking():
+    confirmed = LineupDigest(
+        game_id="1042",
+        season=2026,
+        team_code="BOS",
+        source_state="confirmed",
+        player_ids=("p-1", "p-2"),
+        revision="7",
+    )
+    projected = replace(
+        confirmed,
+        source_state="projected",
+        revision="8",
+    )
+
+    event = compare_snapshot_digests(
+        BroadcastSnapshotDigest.create(
+            metadata=_digest().metadata,
+            lineups=(confirmed,),
+        ),
+        BroadcastSnapshotDigest.create(
+            metadata=_digest().metadata,
+            lineups=(projected,),
+        ),
+        context=ChangeComparisonContext(selected_game_id="1042"),
+        detected_at=NOW,
+    ).events[0]
+
+    assert event.category == "lineup"
+    assert event.change_type is ChangeType.INVALIDATED
+    assert event.severity is ChangeSeverity.BLOCKING
+    assert event.readiness_impact is True
 
 
 def test_fact_evidence_change_preserves_fact_identity_and_flags_pinned_impact():
@@ -406,3 +460,149 @@ def test_unknown_fields_are_rejected_in_persisted_digest():
         assert "unexpected" in str(exc)
     else:
         raise AssertionError("Unknown digest fields must fail closed")
+
+
+def _database_fixture(*, imported_at="2026-07-28T15:00:00+00:00"):
+    return {
+        "manifest": {
+            "updated_at": imported_at,
+            "source": "https://theausl.com",
+            "seasons": {"2026": 369},
+            "source_health": {
+                "official_rosters": {
+                    "source_name": "Official AUSL rosters",
+                    "status": "green",
+                    "content_hash_or_etag": "roster-hash",
+                    "parser_version": "test",
+                },
+                "official_stats": {
+                    "source_name": "Official AUSL stats",
+                    "status": "green",
+                    "content_hash_or_etag": "stats-hash",
+                    "parser_version": "test",
+                },
+            },
+        },
+        "roster": pd.DataFrame(
+            [
+                {
+                    "season": 2026,
+                    "player_id": "p-1",
+                    "player_name": "Ada Active",
+                    "team_code": "BOS",
+                    "roster_status": "Active",
+                    "jersey_number": 7,
+                    "position": "P",
+                },
+                {
+                    "season": 2026,
+                    "player_id": "p-2",
+                    "player_name": "Rae Reserve",
+                    "team_code": None,
+                    "roster_status": "Reserve Pool",
+                    "jersey_number": None,
+                    "position": "IF",
+                },
+            ]
+        ),
+        "standings": pd.DataFrame(
+            [
+                {
+                    "seasonId": 369,
+                    "team_code": "BOS",
+                    "wins": 10,
+                    "losses": 7,
+                    "rank": 2,
+                    "gamesBehind": 1.0,
+                    "winStreak": "W2",
+                    "standingsTypeLk": "SEASON",
+                    "source_url": "official-standings",
+                }
+            ]
+        ),
+        "schedule_results": pd.DataFrame(
+            [
+                {
+                    "game_id": "1042",
+                    "season": 2026,
+                    "away_team_code": "CHI",
+                    "home_team_code": "BOS",
+                    "game_date": "2026-07-28T23:00:00+00:00",
+                    "venue": "AUSL Field",
+                    "status": "Scheduled",
+                }
+            ]
+        ),
+        "batting_2026": pd.DataFrame([{"player_id": "p-1", "hits": 20}]),
+    }
+
+
+def test_database_adapter_is_order_independent_and_ignores_routine_stat_noise():
+    left_db = _database_fixture()
+    right_db = _database_fixture(imported_at="2026-07-28T16:00:00+00:00")
+    right_db["roster"] = right_db["roster"].iloc[::-1].reset_index(drop=True)
+    right_db["batting_2026"].loc[0, "hits"] = 21
+
+    left = build_snapshot_digest(left_db)
+    right = build_snapshot_digest(right_db)
+
+    assert left.snapshot_id == right.snapshot_id
+    assert len(left.roster) == 2
+    assert next(item for item in left.roster if item.player_id == "p-2").team_code == "UNASSIGNED"
+    assert compare_snapshot_digests(left, right, detected_at=NOW).events == ()
+
+
+def test_database_adapter_uses_canonical_fact_evidence_for_stat_change():
+    left = build_snapshot_digest(_database_fixture(), facts=(_fact(),))
+    right_db = _database_fixture(imported_at="2026-07-28T16:00:00+00:00")
+    right_db["batting_2026"].loc[0, "hits"] = 21
+    right = build_snapshot_digest(
+        right_db,
+        facts=(
+            _fact(
+                evidence_hash="hits-21",
+                air_copy="Ada Active is one hit shy of 50 career AUSL hits.",
+            ),
+        ),
+    )
+
+    events = compare_snapshot_digests(left, right, detected_at=NOW).events
+
+    assert len(events) == 1
+    assert events[0].category == "fact"
+
+
+def test_database_adapter_normalizes_exact_game_locked_lineup_structure():
+    lock = {
+        "games": {
+            "1042": {
+                "game_id": "1042",
+                "source": "official",
+                "revision": 3,
+                "lineups": {
+                    "away": {
+                        "team_code": "CHI",
+                        "lineup": [
+                            {"player_id": "p-3", "batting_order": 1},
+                            {"player_id": "p-4", "batting_order": 2},
+                        ],
+                    },
+                    "home": {
+                        "team_code": "BOS",
+                        "lineup": [
+                            {"player_id": "p-1", "batting_order": 1},
+                            {"player_id": "p-2", "batting_order": 2},
+                        ],
+                    },
+                },
+            }
+        }
+    }
+
+    digest = build_snapshot_digest(_database_fixture(), locked_lineups=lock)
+
+    assert [(item.team_code, item.player_ids) for item in digest.lineups] == [
+        ("BOS", ("p-1", "p-2")),
+        ("CHI", ("p-3", "p-4")),
+    ]
+    assert all(item.source_state == "official" for item in digest.lineups)

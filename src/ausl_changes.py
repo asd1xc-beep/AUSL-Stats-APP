@@ -193,6 +193,8 @@ class ScheduleDigest:
     scheduled_start: str
     venue: str
     status: str
+    away_score: int | None = None
+    home_score: int | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "game_id", _identifier(self.game_id, "game_id"))
@@ -212,6 +214,14 @@ class ScheduleDigest:
         )
         object.__setattr__(self, "venue", _text(self.venue))
         object.__setattr__(self, "status", _identifier(self.status, "status").lower())
+        for name in ("away_score", "home_score"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer")
 
     @property
     def key(self) -> tuple[int, str]:
@@ -669,7 +679,9 @@ def build_snapshot_digest(
                 RosterDigest(
                     player_id=_scalar_text(row.get("player_id")),
                     season=row_season,
-                    team_code=_scalar_text(row.get("team_code")),
+                    team_code=(
+                        _scalar_text(row.get("team_code")) or "UNASSIGNED"
+                    ),
                     roster_status=_scalar_text(row.get("roster_status")),
                     player_name=_scalar_text(row.get("player_name")),
                     jersey_number=_scalar_text(row.get("jersey_number")),
@@ -743,6 +755,8 @@ def build_snapshot_digest(
                     scheduled_start=scheduled_start,
                     venue=_scalar_text(row.get("venue")),
                     status=_scalar_text(row.get("status")) or "unavailable",
+                    away_score=_scalar_int(row.get("away_score")),
+                    home_score=_scalar_int(row.get("home_score")),
                 )
             )
 
@@ -761,13 +775,27 @@ def build_snapshot_digest(
             raw_lineups = lock.get("lineups", {})
             if not isinstance(raw_lineups, Mapping):
                 continue
-            for team_code, players in raw_lineups.items():
-                if isinstance(players, Mapping):
-                    player_values = players.values()
-                elif isinstance(players, (list, tuple)):
-                    player_values = players
+            for side_or_code, team_lineup in raw_lineups.items():
+                if isinstance(team_lineup, Mapping):
+                    team_code = _scalar_text(team_lineup.get("team_code"))
+                    if not team_code:
+                        team_code = (
+                            matching.away_team_code
+                            if str(side_or_code).lower() == "away"
+                            else matching.home_team_code
+                            if str(side_or_code).lower() == "home"
+                            else str(side_or_code)
+                        )
+                    player_values = team_lineup.get("lineup", ())
+                elif isinstance(team_lineup, (list, tuple)):
+                    team_code = str(side_or_code)
+                    player_values = team_lineup
                 else:
                     continue
+                if not isinstance(player_values, (list, tuple, Mapping)):
+                    continue
+                if isinstance(player_values, Mapping):
+                    player_values = player_values.values()
                 player_ids = []
                 for player in player_values:
                     if isinstance(player, Mapping):
@@ -782,7 +810,7 @@ def build_snapshot_digest(
                     LineupDigest(
                         game_id=matching.game_id,
                         season=matching.season,
-                        team_code=str(team_code),
+                        team_code=team_code,
                         source_state=_scalar_text(lock.get("source")) or "unknown",
                         player_ids=tuple(player_ids),
                         revision=_scalar_text(
@@ -992,6 +1020,47 @@ def _fact_summary(fact: FactDigest | None) -> str:
     return f"{fact.air_copy or fact.headline} · {fact.verification_state}"
 
 
+def _roster_summary(item: RosterDigest | None) -> str:
+    if item is None:
+        return "Not on installed roster"
+    details = [item.roster_status, item.team_code]
+    if item.jersey_number:
+        details.append(f"#{item.jersey_number}")
+    if item.position:
+        details.append(item.position)
+    return f"{item.player_name}: {' · '.join(details)}"
+
+
+def _team_summary(item: TeamDigest | None) -> str:
+    if item is None:
+        return "Unavailable"
+    details = [f"{item.team_code} {item.wins}-{item.losses}"]
+    if item.rank is not None:
+        details.append(f"rank {item.rank}")
+    if item.games_back:
+        details.append(f"{item.games_back} GB")
+    if item.streak:
+        details.append(item.streak)
+    return " · ".join(details)
+
+
+def _schedule_summary(item: ScheduleDigest | None) -> str:
+    if item is None:
+        return "Not present"
+    details = [
+        f"{item.away_team_code} at {item.home_team_code}",
+        item.scheduled_start,
+        item.status,
+        item.venue or "venue unavailable",
+    ]
+    if item.away_score is not None and item.home_score is not None:
+        details.append(
+            f"{item.away_team_code} {item.away_score}, "
+            f"{item.home_team_code} {item.home_score}"
+        )
+    return " · ".join(details)
+
+
 def _fact_event(
     before_digest: BroadcastSnapshotDigest,
     after_digest: BroadcastSnapshotDigest,
@@ -1118,17 +1187,17 @@ def compare_snapshot_digests(
             continue
         subject = new or old
         if old and new:
-            old_summary = f"{old.player_name}: {old.roster_status} · {old.team_code}"
-            new_summary = f"{new.player_name}: {new.roster_status} · {new.team_code}"
+            old_summary = _roster_summary(old)
+            new_summary = _roster_summary(new)
             change_type = ChangeType.UPDATED
             headline = f"{subject.player_name} roster status changed"
         elif new:
-            old_summary = "Not on installed roster"
-            new_summary = f"{new.player_name}: {new.roster_status} · {new.team_code}"
+            old_summary = _roster_summary(None)
+            new_summary = _roster_summary(new)
             change_type = ChangeType.ADDED
             headline = f"{subject.player_name} added to roster"
         else:
-            old_summary = f"{old.player_name}: {old.roster_status} · {old.team_code}"
+            old_summary = _roster_summary(old)
             new_summary = "No longer on installed roster"
             change_type = ChangeType.REMOVED
             headline = f"{subject.player_name} removed from roster"
@@ -1171,10 +1240,10 @@ def compare_snapshot_digests(
                 ),
                 headline=f"{subject.team_code} official record changed",
                 before_summary=(
-                    f"{old.team_code} {old.wins}-{old.losses}" if old else "Unavailable"
+                    _team_summary(old)
                 ),
                 after_summary=(
-                    f"{new.team_code} {new.wins}-{new.losses}" if new else "Unavailable"
+                    _team_summary(new)
                 ),
                 severity=ChangeSeverity.INFO,
                 identity={"season": subject.season, "team_code": subject.team_code},
@@ -1204,14 +1273,10 @@ def compare_snapshot_digests(
                 ),
                 headline=f"Game {subject.game_id} schedule changed",
                 before_summary=(
-                    f"{old.away_team_code} at {old.home_team_code} · "
-                    f"{old.status} · {old.venue}"
-                    if old else "Not present"
+                    _schedule_summary(old)
                 ),
                 after_summary=(
-                    f"{new.away_team_code} at {new.home_team_code} · "
-                    f"{new.status} · {new.venue}"
-                    if new else "Removed"
+                    _schedule_summary(new) if new else "Removed"
                 ),
                 severity=(
                     ChangeSeverity.ATTENTION if selected else ChangeSeverity.INFO
@@ -1236,8 +1301,11 @@ def compare_snapshot_digests(
         selected = context.selected_game_id == subject.game_id
         lost_confirmation = bool(
             old
-            and old.source_state == "confirmed"
-            and (new is None or new.source_state != "confirmed")
+            and old.source_state in {"confirmed", "official"}
+            and (
+                new is None
+                or new.source_state not in {"confirmed", "official"}
+            )
         )
         severity = (
             ChangeSeverity.BLOCKING
