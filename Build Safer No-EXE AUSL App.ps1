@@ -1,4 +1,8 @@
-param([switch]$NonInteractive)
+param(
+    [switch]$NonInteractive,
+    [ValidateSet("core", "approved-enrichment")]
+    [string]$DistributionProfile = "core"
+)
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -17,14 +21,6 @@ $requiredExports = @(
     "data\exports\refresh_attempt.json"
 )
 
-function Write-DistributionManifest {
-    param([string]$Destination)
-    & $python (Join-Path $PSScriptRoot "tools\generate_distribution_manifest.py") $Destination
-    if ($LASTEXITCODE -ne 0) {
-        throw "Distribution manifest generation failed with exit code $LASTEXITCODE."
-    }
-}
-
 function Copy-ShareableExports {
     param([string]$Destination)
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
@@ -33,14 +29,21 @@ function Copy-ShareableExports {
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
             throw "Required data export is missing: $relativePath"
         }
-        Copy-Item -LiteralPath $source -Destination $Destination -Force
     }
-    Write-DistributionManifest -Destination $Destination
+    & $python (Join-Path $PSScriptRoot "tools\build_distribution_profile.py") `
+        (Join-Path $PSScriptRoot "data\exports") `
+        $Destination `
+        --profile $DistributionProfile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Distribution profile staging failed with exit code $LASTEXITCODE."
+    }
 }
 
 function Confirm-CleanDistribution {
     param([string[]]$Targets)
-    & $python (Join-Path $PSScriptRoot "tools\verify_distribution.py") @Targets
+    & $python (Join-Path $PSScriptRoot "tools\verify_distribution.py") `
+        --profile $DistributionProfile `
+        @Targets
     if ($LASTEXITCODE -ne 0) {
         throw "Distribution privacy verification failed with exit code $LASTEXITCODE."
     }

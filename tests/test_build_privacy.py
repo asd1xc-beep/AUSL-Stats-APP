@@ -320,10 +320,14 @@ def test_build_scripts_are_clean_by_default_and_fail_closed():
         assert "official_game_notes.xlsx" not in lowered
         assert "ausl_batting_splits.xlsx" not in lowered
         assert "ausl_team_context.xlsx" in lowered
-        assert "generate_distribution_manifest.py" in lowered
+        assert "build_distribution_profile.py" in lowered
+        assert "approved-enrichment" in lowered
         assert "generate_portable_source_manifest.py" in lowered
         assert "refresh_attempt.json" in lowered
-        assert "param([switch]$noninteractive)" in "".join(lowered.split())
+        compact = "".join(lowered.split())
+        assert "param(" in compact
+        assert "[switch]$noninteractive" in compact
+        assert '$distributionprofile="core"' in compact
         assert "if(-not$noninteractive)" in "".join(lowered.split())
 
     assert "--upgrade" not in "\n".join(scripts).casefold()
