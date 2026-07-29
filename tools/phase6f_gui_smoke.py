@@ -212,6 +212,26 @@ def main():
         )
         assert "winner" not in comparison.summary.casefold()
         assert "better" not in comparison.summary.casefold()
+        comparison_facts = (
+            comparison.left.verified_facts
+            + comparison.left.review_facts
+            + comparison.right.verified_facts
+            + comparison.right.review_facts
+        )
+        assert comparison_facts
+        visible_comparison_text = "\n".join(
+            str(child.cget("text"))
+            for child in app1.comparison_container.winfo_children()
+            if "text" in child.keys()
+        )
+        for fact in comparison_facts:
+            assert fact.air_copy in visible_comparison_text
+            assert f"[{fact.verification_state.value}]" in visible_comparison_text
+            assert f"Source health: {fact.source_health.upper()}" in visible_comparison_text
+            if fact.provenance:
+                assert fact.provenance[0].source_name in visible_comparison_text
+        assert "Statistics source:" in visible_comparison_text
+        assert "Statistical snapshot:" in visible_comparison_text
 
         # Scrollbar/wheel reachability, provenance-preserving copy, and offline mode.
         root1.update_idletasks()
@@ -307,6 +327,7 @@ def main():
                 app2.comparison_right_player_id,
             ],
             "aligned_metrics": True,
+            "per_fact_provenance": True,
             "comparison_scroll": True,
             "copy_with_sources": True,
             "local_replacement_rebuilt": True,

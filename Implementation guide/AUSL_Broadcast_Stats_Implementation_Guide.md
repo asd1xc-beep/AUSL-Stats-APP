@@ -1,10 +1,12 @@
 # AUSL Broadcast Stats — Codex Implementation Guide
 
-Version: 1.1
+Version: 1.2
 
 Roadmap updated: 2026-07-29
 
-Prepared from: GitHub `main` at `d7f255b` (through Phase 6E)
+Prepared from: GitHub `main` at
+`bca5be6286996da844e0f260ae1e06f1feaf054e` (through Phase 6F and the
+project-owner Phase 7 roadmap update)
 
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 
@@ -76,12 +78,14 @@ Codex should establish these source-of-truth rules before changing presentation 
 
 ## 5. Recommended implementation sequence
 
-Roadmap note (2026-07-29): Phases 6A–6E are complete on the reviewed `main`
-branch. Phase 6F and a full Phase 6 acceptance review remain required before
-Phase 7 begins. Direct producer feedback makes the College Résumé the next
-major product feature; approved optional enrichment is promoted first because
-the college layer must reuse the same trust, provenance, freshness, and
-last-known-good boundaries.
+Roadmap note (2026-07-29): Phases 6A–6F are complete on the reviewed `main`
+branch. A focused independent-review stabilization pass and the project
+owner's 100%/125%/150% Windows display-scaling sign-off remain required before
+the full Phase 6 acceptance record can be closed. Phase 7 has not started.
+Direct producer feedback makes the College Résumé the next major product
+feature; approved optional enrichment is promoted first because the college
+layer must reuse the same trust, provenance, freshness, and last-known-good
+boundaries.
 
 ### Phase 0 — Baseline, fixtures, and safety rails
 
@@ -699,7 +703,8 @@ Local/Offline Mode. The later broadcast-fact boundary is documented in
 `Phase_6_Broadcast_Fact_Interface.md`. Phase 6B now implements that boundary;
 Phase 6C now implements the rundown and used-on-air workflow; Phase 6D now
 implements private autosave and crash recovery; Phase 6E now implements
-validated snapshot comparison. Faster search remains deferred to 6F.
+validated snapshot comparison. Phase 6F now implements faster discovery and
+comparison through the boundaries below.
 
 #### 6B. Air-ready fact cards
 
@@ -825,7 +830,40 @@ Search should support player name/aliases, team, number, position, roster
 status, typo tolerance, and lightweight quick filters. Add side-by-side player
 comparison only after collision-safe identity behavior is tested.
 
-Implementation status: not started.
+Implementation status (2026-07-29): complete; the full Phase 6 acceptance
+review and project-owner display-scaling sign-off remain pending.
+
+`src/ausl_search.py` owns one immutable local roster index per installed
+database and a nonexecuting parser for quoted quick filters. Filters apply
+before the fixed ranking order: exact full name, exact approved alias, exact
+name token, prefix, substring, then conservative length-aware
+Damerau-Levenshtein. Possible typos are labeled and never auto-select. The
+independent-review stabilization extends fuzzy matching to individual first
+and last name tokens and treats ordinary straight/smart apostrophes as inert
+name characters while preserving strict malformed double-quote checks.
+
+Player Lookup displays parsed filters, effective scope, result count, exact
+identity, and match reason. Highlighting is separate from selection. Ctrl+F,
+Escape, arrows, Enter, Ctrl+1, and Ctrl+2 support the primary workflow without
+intercepting multiline note editors. The list/card body expands on the correct
+grid row and retains its visible scrollbar.
+
+`src/ausl_comparison.py` owns a neutral aligned model and one stable registry
+for current-season and AUSL-career batting, pitching, and fielding. It reuses
+canonical WHIP/innings rules, preserves exact player/team/game identity,
+retains roster warnings and two-way roles, and contains no winner or
+better-player field. Each player's exact-game canonical facts remain
+independent. The comparison UI renders each fact's own verification state,
+source reference/date/page/game, snapshot, source health, and warning without
+promoting trust. The shared statistical snapshot is labeled separately.
+Metrics-only copy names the statistics source and does not implicitly add fact
+wording.
+
+Producer-session schema version 3 persists only exact comparison player IDs
+and normalized scroll position. Comparison rows and copy records rebuild
+locally. Missing identities remain unavailable and are never guessed. The
+detailed acceptance evidence remains in
+`Implementation guide/Phase_6F_Acceptance_Record.md`.
 
 #### Cross-cutting readability and accessibility
 
@@ -1312,14 +1350,15 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-1. Complete Phase 6F without weakening exact identity or fact provenance.
-2. Run the full Phase 6 acceptance review, including target-Windows scaling,
-   keyboard/scroll reachability, privacy, distribution verification, session
-   recovery, Offline Mode, cancellation, and the producer workflow.
-3. Record failures as new or reopened stable tracker items. Do not begin Phase
-   7 while a P0/P1 release blocker remains open.
-4. Begin Phase 7A with failing-first tests for split qualification and negative
-   enrichment gates.
+1. Finish the focused Phase 6 stabilization pass without weakening exact
+   identity, fact provenance, privacy, offline, session, refresh, or
+   last-known-good safeguards.
+2. Wait for the project owner's Windows display-scaling sign-off at 100%,
+   125%, and 150%; do not infer or pre-mark `UI-002`.
+3. Record the full Phase 6 acceptance only after stabilization and scaling
+   sign-off are both complete.
+4. Then begin Phase 7A with failing-first tests for split qualification and
+   negative enrichment gates.
 5. Add the producer-facing Full Enrichment Refresh only after its cancellation,
    per-source failure, last-known-good, approval, and packaging tests pass.
 6. Stop after Phase 7A acceptance. Review its trust boundaries before creating
