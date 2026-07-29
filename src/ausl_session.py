@@ -238,6 +238,18 @@ class SessionChangeState:
             self.latest_comparison, ChangeComparison
         ):
             raise SessionValidationError("Latest change comparison is invalid")
+        if self.latest_comparison is not None and self.baseline is None:
+            raise SessionValidationError(
+                "Latest change comparison requires a validated baseline"
+            )
+        if (
+            self.latest_comparison is not None
+            and self.latest_comparison.after_snapshot_id
+            != self.baseline.snapshot_id
+        ):
+            raise SessionValidationError(
+                "Latest change comparison does not match the active baseline"
+            )
         acknowledgements = tuple(
             dict.fromkeys(
                 _string(value, "acknowledged event_id")
