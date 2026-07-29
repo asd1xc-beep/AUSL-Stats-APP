@@ -2,7 +2,9 @@
 
 Last updated: 2026-07-29
 
-Project source reviewed: GitHub `main` at `d7f255b` (through Phase 6E)
+Project source reviewed: GitHub `main` at
+`bca5be6286996da844e0f260ae1e06f1feaf054e` (through Phase 6F and the
+project-owner roadmap update)
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -34,22 +36,23 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 6 — Completion and release review (Phase 6F)
+### Milestone 6 — Full Phase 6 acceptance review
 
-Target outcome for the current phase: finish collision-safe faster search and
-the player/matchup comparison workflow, then run one full Phase 6 regression,
-Windows scaling, privacy, packaging, and producer-workflow audit across
-Phases 6A–6F.
+Phase 6F completed on 2026-07-29. The current implementation unit is the
+focused Phase 6 stabilization pass identified by the independent full-phase
+review: restore the Phase 6F acceptance status, correct per-fact comparison
+provenance, fix Player Lookup expansion, and harden partial-name typo and
+apostrophe handling.
 
-Current implementation unit: Phase 6F. Phases 6A–6E are complete. `SEARCH-005`
-and `UX-011` are the next implementation items. Phase 6 is not accepted until
-the Phase 6F tests and the full release review pass; this tracker does not
-infer completion from implementation alone.
+After stabilization, the project owner will separately test Windows display
+scaling at 100%, 125%, and 150%. Phase 6 remains unaccepted until that
+project-owner sign-off and the full acceptance record are complete. Phase 7
+has not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6E COMPLETE — 2026-07-28 — PHASE 6F NEXT**
+Status: **PHASE 6 STABILIZATION COMPLETE — DISPLAY SCALING SIGN-OFF PENDING**
 
 ## Approved next roadmap
 
@@ -60,8 +63,8 @@ be reused by the college layer.
 
 | Order | Implementation unit | Outcome | Start gate |
 |---|---|---|---|
-| 1 | Phase 6F | Faster search and side-by-side comparison | Current next pass |
-| 2 | Phase 6 acceptance | Full regression, Windows scaling, packaging/privacy, and producer workflow review | Phase 6F implementation complete |
+| 1 | Phase 6 stabilization | Close the four independent-review findings without starting Phase 7 | Current pass |
+| 2 | Phase 6 acceptance | Owner scaling sign-off and final full-phase acceptance record | Stabilization complete |
 | 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Phase 6 accepted; split reliability complete |
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Phase 7A trust boundaries stable |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Phase 7B specification accepted |
@@ -216,17 +219,26 @@ requirement or a P0/P1 reliability issue changes the order.
 - [x] `SEARCH-003` — Search numbers with or without `#` and include roster status. **P2 · COMPLETE**
   - Examples: `22`, `#22`, `inactive`, and `reserve`.
 
-- [ ] `SEARCH-004` — Add optional quick filters. **P2 · NEXT — PHASE 6F**
-  - Candidate syntax: `team:CHI`, `pos:P`, `status:inactive`, `#22`.
+- [x] `SEARCH-004` — Add optional quick filters. **P2 · COMPLETE**
+  - Supports deterministic AND-combined team, position, roster-status,
+    jersey-number, and quoted name filters without executing input.
 
 - [x] `STATE-001` — Rerender or clear the selected player card after data refresh. **P0 · COMPLETE**
   - Clipboard text and `current_broadcast_note` must use the same database version as the visible card.
 
-- [ ] `UI-001` — Add visible scrollbars to long content panels. **P2 · NEXT — PHASE 6 ACCEPTANCE**
+- [ ] `UI-001` — Add visible scrollbars to long content panels. **P2 · IN PROGRESS — PHASE 6 ACCEPTANCE**
+  - Player Lookup and Compare Players have visible vertical scrolling, and the
+    comparison surface supports the mouse wheel. Broader cross-tab manual
+    confirmation remains part of the full Phase 6 acceptance review.
 
-- [ ] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · NEXT — PHASE 6 ACCEPTANCE**
+- [ ] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · BLOCKED — OWNER SCALING SIGN-OFF**
+  - The automated 1120×720 Windows smoke passes. The project owner will
+    separately confirm 100%, 125%, and 150% scaling; this pass does not infer
+    that result.
 
-- [ ] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · NEXT — PHASE 6 ACCEPTANCE**
+- [x] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · COMPLETE**
+  - Ctrl+F, Escape, arrows, Enter, Ctrl+1, and Ctrl+2 preserve explicit player
+    selection and do not intercept multiline note editing.
 
 ### I. Media-guide accuracy
 
@@ -406,8 +418,12 @@ Required identity regressions:
     `NEEDS ATTENTION`; only all applicable passes produce `READY FOR AIR`.
     There is no force-green control.
 
-- [ ] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · NEXT — PHASE 6F**
-  - Edit-distance or phonetic tolerance on player-name queries; must not introduce false-positive collisions between distinct players. A tolerance improvement to `SEARCH-004`, not a new search mode.
+- [x] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · COMPLETE**
+  - Conservative length-aware Damerau-Levenshtein matching covers full names
+    and individual name tokens. Partial first/last-name typos remain labeled
+    `POSSIBLE TYPO`, never auto-select, preserve distinct candidates, and stay
+    disabled for short queries. Straight and smart apostrophes are inert name
+    characters; double-quoted filters retain strict malformed-quote checks.
 
 - [x] `UX-010` — Add a character-count preview on copy actions against common graphics-template widths. **P2 · COMPLETE**
   - Central profiles provide 60-character one-line and 120-character extended
@@ -415,8 +431,12 @@ Required identity regressions:
     rewrite it, and are explicitly labeled guidance rather than graphics-system
     validation.
 
-- [ ] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · NEXT — PHASE 6F**
-  - Two selected players' stat lines, verified notes, and milestones in parallel columns, each independently source/freshness-labeled. A new screen, not a variant of the existing player card.
+- [x] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · COMPLETE**
+  - Two exact player identities retain aligned neutral statistics and
+    independent exact-game canonical facts. Each fact now displays its own
+    verification state, source reference/date/page/game, snapshot, health,
+    and review warning. The shared statistical snapshot is labeled separately,
+    and metrics-only copy does not silently add fact wording.
 
 ### M. Producer-facing approved enrichment
 
@@ -508,20 +528,63 @@ Fill in one record when a milestone or major item is completed.
 
 ### Phase 6 full acceptance — PENDING
 
-- [ ] Phase 6F focused tests and full offline regression pass.
-- [ ] Collision-safe fuzzy search and quick-filter identity tests pass.
-- [ ] Side-by-side comparison preserves independent source, freshness, and
+- [x] Phase 6F focused tests and full offline regression pass.
+- [x] Collision-safe fuzzy search and quick-filter identity tests pass.
+- [x] Side-by-side comparison preserves independent source, freshness, and
   verification labels for both players.
-- [ ] Keyboard and scroll reachability pass at the minimum supported window.
+- [x] Keyboard and scroll reachability pass at the normal automated minimum
+  1120×720 window.
 - [ ] Windows 100%, 125%, and 150% scaling pass on target truck hardware.
-- [ ] Privacy and distribution verification exclude all producer-private,
+- [x] Privacy and distribution verification exclude all producer-private,
   raw/debug, and unapproved enrichment artifacts.
-- [ ] Offline startup, Local/Offline Mode, refresh cancellation,
+- [x] Offline startup, Local/Offline Mode, refresh cancellation,
   last-known-good recovery, session restore, and What Changed remain stable.
 - [ ] Producer workflow smoke covers game selection, player search, fact copy,
   pin/rundown, used-on-air, comparison, packet export, and recovery.
 - [ ] Completion report records commands, counts, hardware/environment,
   screenshots or observations, known limitations, and the accepted commit.
+
+### Phase 6F — Faster discovery and player comparison
+
+- Completion date: 2026-07-29.
+- Starting commit and branch: remote `main`
+  `d7f255b273acfc52f24aea98c544bbb945391f2b`;
+  `agent/phase6f-search-compare`.
+- Reviewed implementation commits: `14356a1` added the immutable local search
+  index and conservative ranked query model; `20745a0` added the canonical
+  neutral comparison model; `846cbfc` integrated Player Lookup, Compare
+  Players, keyboard workflow, schema-v3 recovery, and the real-Tk smoke.
+  `c5e10d1` recorded the detailed acceptance evidence.
+- Completed tracker scope: `SEARCH-004`, `SEARCH-005`, `UI-003`, `UX-011`, and
+  the Player Lookup/Compare Players portion of `UI-001`. `UI-002` remains open.
+- Search behavior: exact full name, exact approved alias, exact name token,
+  prefix, substring, then conservative possible-typo matching. Filters apply
+  before ranking. Selected-game relevance and active status are tie-breakers
+  only. Fuzzy results never auto-select; explicit exact identities remain
+  separate.
+- Comparison behavior: one aligned registry covers current-season and AUSL
+  career batting, pitching, and fielding without a winner judgment. Missing
+  values stay unavailable, exact-player/exact-game facts remain independent,
+  and wrong-game fact collections fail closed. The 2026-07-29 stabilization
+  adds the missing per-fact source/trust display without changing canonical
+  verification.
+- Automated acceptance: Phase 6F focused/adjacent tests passed **83 tests in
+  1.16 s**; the Phase 6A–6F matrix passed **432 tests in 7.22 s**; the complete
+  offline suite passed **750 tests in 24.17 s** with warnings as errors.
+  Compilation, dependency integrity, distribution verification, Git LFS,
+  whitespace, privacy, and tracked/history secret checks passed.
+- Windows GUI smoke: source/real-Tk execution passed on
+  `Windows-10-10.0.19045-SP0`, Python 3.12.10, at 1120×720 with zero network
+  calls. It exercised exact/typo/filter lookup, explicit keyboard selection,
+  two-player comparison, wheel scrolling, source-labeled copy, local database
+  replacement, exact-game rebuilding, Local/Offline Mode, all eight tabs,
+  clean save, and exact restart restore.
+- Remaining limitations: the full Phase 6 cross-phase review and
+  project-owner 100%/125%/150% scaling sign-off remain pending. Alias matching
+  uses only explicit approved aliases; typo tolerance remains conservative,
+  comparison copy history remains memory-only, and Phase 7 has not started.
+- Detailed evidence source:
+  `Implementation guide/Phase_6F_Acceptance_Record.md`.
 
 ### Phase 6D — Session persistence and crash recovery
 
@@ -1036,6 +1099,25 @@ When working on this tracker:
 
 ### 2026-07-29
 
+- Restored the Phase 6F acceptance status accidentally reverted by the
+  project-owner roadmap replacement. `SEARCH-004`, `SEARCH-005`, `UI-003`, and
+  `UX-011` are complete; Player Lookup and Compare Players satisfy their
+  scoped `UI-001` scrolling behavior; `UI-002` remains open for the owner's
+  100%/125%/150% Windows scaling sign-off.
+- Started the independent-review stabilization from remote `main`
+  `bca5be6286996da844e0f260ae1e06f1feaf054e` on
+  `agent/phase6-final-stabilization`. Functional commit `55a4af0` adds
+  independent per-fact comparison provenance, separates the statistical
+  snapshot label, expands the correct Player Lookup row, adds conservative
+  token-level typo matching, and treats ordinary straight/smart apostrophes
+  as name characters while preserving strict double-quoted filters.
+- Failing-first evidence for this pass was **15 failed, 55 passed**: seven
+  search/parser failures, five comparison-provenance failures, one layout
+  failure, and two stale-documentation failures. The first implemented
+  search/comparison/UI slice then passed **68 tests**, and the adjacent
+  Phase 6F/fact/session/media matrix passed **168 tests**. Final cross-phase,
+  packaging/privacy, and GUI results are recorded in the separate
+  stabilization acceptance record.
 - Updated the current milestone to Phase 6F plus the full Phase 6 acceptance
   review; no Phase 6F item is marked complete by this planning update.
 - Promoted approved optional enrichment and the College Résumé from backlog to

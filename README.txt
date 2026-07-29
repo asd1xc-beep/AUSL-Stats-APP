@@ -5,21 +5,23 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5 and Phase 6A through 6F are implemented. Phase 6F started from
-latest remote main d7f255b (the merged Phase 6E pull request). Its reviewed
-functional commits are 14356a1 (deterministic indexed player discovery),
-20745a0 (canonical neutral comparison model), and 846cbfc (keyboard-first
-lookup/comparison UI plus schema-v3 recovery).
+Phases 1-5 and Phase 6A through 6F are implemented. The focused Phase 6
+stabilization started from latest remote main
+bca5be6286996da844e0f260ae1e06f1feaf054e and its functional correction is
+55a4af0 (per-fact comparison provenance, Player Lookup expansion, token-level
+typo matching, and apostrophe-safe parsing).
 
-The clean Phase 6E baseline passed 695 offline tests. The completed Phase 6F
-source passes 750 tests with warnings treated as errors. The deterministic
-Windows source-app smoke passes at 1120x720 using the checked-in local snapshot
-through exact/typo/filter searches, explicit keyboard selection, two-player
-comparison, wheel scrolling, source-labeled copy, local snapshot replacement,
-exact-game rebuild, Local/Offline Mode, all eight tabs, clean save, and exact
-restart recovery. No live refresh or internet source was used. Compileall, pip
-check, Git LFS validation, checked-in distribution verification, whitespace
-validation, and tracked/history secret scans pass.
+The clean main baseline passed 750 offline tests. The stabilized source passes
+769 tests with warnings treated as errors. The deterministic Windows source-app
+smoke passes at 1120x720 using the checked-in local snapshot through
+exact/typo/filter searches, explicit keyboard selection, two-player comparison,
+visible independent per-fact source/trust blocks, correct lookup expansion,
+wheel scrolling, statistical-source-labeled metrics copy, local snapshot
+replacement, exact-game rebuild, Local/Offline Mode, all eight tabs, clean
+save, and exact restart recovery. No live refresh or internet source was used.
+Compileall, pip check, Git LFS validation, checked-in distribution
+verification, whitespace validation, packaging/privacy checks, and
+tracked/history private-data and secret scans pass.
 The future-season year-generalization patch remains applied once and its
 dedicated regressions pass.
 
@@ -33,12 +35,14 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Phase 6 implementation is complete, but the requested full Phase 6
-cross-phase review remains pending. Phase 7 has not started. This remains an
-assisted broadcast tool, not a candidate for unattended on-air use: cards that
-do not pass exact identity, provenance, freshness, source-health, and approval
-gates stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line
-copy. Cancellation is cooperative while a single urllib request is inside its
+Status: PHASE 6 STABILIZATION COMPLETE — DISPLAY SCALING SIGN-OFF PENDING.
+The project owner will separately verify Windows display scaling at 100%,
+125%, and 150%; `UI-002` and full Phase 6 acceptance remain open until that
+sign-off is recorded. Phase 7 has not started. This remains an assisted
+broadcast tool, not a candidate for unattended on-air use: cards that do not
+pass exact identity, provenance, freshness, source-health, and approval gates
+stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line copy.
+Cancellation is cooperative while a single urllib request is inside its
 bounded timeout, although cancelled/superseded jobs cannot overlap core
 commits or replace a newer coherent snapshot.
 
@@ -297,9 +301,14 @@ status, jersey number, free text, and AND-combined filters such as:
 
 Ranking is deterministic: exact full name, approved alias, exact name token,
 prefix, substring, then conservative typo candidates. A possible typo is
-visibly labeled and never auto-selects a player. Explicit team filters override
-the selected-game scope for that query only; the saved scope preference is not
-mutated. Unknown or malformed filters show a safe explanation.
+visibly labeled and never auto-selects a player. Typo matching includes
+individual first/last name tokens, so conservative partial-name errors such as
+`Gacria` can surface Rachel Garcia without opening her automatically. Ordinary
+straight and smart apostrophes in names remain inert text; double-quoted filter
+values retain strict malformed-quote validation. Explicit team filters
+override the selected-game scope for that query only; the saved scope
+preference is not mutated. Unknown or malformed filters show a safe
+explanation.
 
 The Compare Players tab accepts two different exact roster identities. It
 aligns current-season and AUSL-career batting, pitching, and fielding values
@@ -307,11 +316,15 @@ through one metric registry and the existing canonical WHIP/innings rules.
 Missing values stay Unavailable; two-way players keep both roles; inactive,
 reserve, unknown-status, or teamless players retain warnings. The view makes no
 winner or "better player" judgment. Exact-game canonical facts are kept
-independent by player, with their original trust state.
+independent by player, with their original trust state. Each visible fact now
+shows its own verification state, source reference/date/page/game, snapshot,
+source health, and review warning. The shared statistical database line is
+separately labeled `Statistics source` / `Statistical snapshot`.
 
-Copy Comparison + Sources includes both identities, selected-game context,
-source, snapshot freshness, and an explicit verify-before-air status. Its
-in-memory copy record is not persisted. Ctrl+F focuses Player Lookup, arrow
+Copy Metrics + Stat Source remains deliberately metrics-only. It includes both
+identities, selected-game context, statistical source, snapshot freshness, and
+an explicit verify-before-air status without implicitly adding fact wording.
+Its in-memory copy record is not persisted. Ctrl+F focuses Player Lookup, arrow
 keys move the result highlight, Enter explicitly opens that identity, Escape
 clears the search, and Ctrl+1/Ctrl+2 assign the highlighted or selected player
 to the comparison sides. These shortcuts do not intercept multiline note

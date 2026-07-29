@@ -56,6 +56,53 @@ class FakeClipboardRoot:
         self.text = value
 
 
+class HeadlessVar:
+    def __init__(self, value=""):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+class HeadlessWidget:
+    def __init__(self, *_args, **_kwargs):
+        self.row_weights = {}
+        self.column_weights = {}
+
+    def pack(self, *_args, **_kwargs):
+        return None
+
+    def grid(self, *_args, **_kwargs):
+        return None
+
+    def bind(self, *_args, **_kwargs):
+        return None
+
+    def bind_all(self, *_args, **_kwargs):
+        return None
+
+    def configure(self, *_args, **_kwargs):
+        return None
+
+    def rowconfigure(self, row, *, weight):
+        self.row_weights[int(row)] = int(weight)
+
+    def columnconfigure(self, column, *, weight):
+        self.column_weights[int(column)] = int(weight)
+
+    def add(self, *_args, **_kwargs):
+        return None
+
+    def yview(self, *_args, **_kwargs):
+        return None
+
+    def set(self, *_args, **_kwargs):
+        return None
+
+
 def _app(fixture_database):
     app = make_app()
     app.db = dict(fixture_database)
@@ -208,6 +255,31 @@ def test_comparison_mousewheel_supports_windows_and_x11_directions(
         (-3, "units"),
         (3, "units"),
     ]
+
+
+def test_lookup_player_body_row_is_the_expanding_grid_row(monkeypatch):
+    monkeypatch.setattr(ausl_stats_app.tk, "StringVar", HeadlessVar)
+    monkeypatch.setattr(ausl_stats_app.tk, "Listbox", HeadlessWidget)
+    monkeypatch.setattr(ausl_stats_app.tk, "Text", HeadlessWidget)
+    for widget_name in (
+        "Frame",
+        "Label",
+        "Entry",
+        "Button",
+        "LabelFrame",
+        "Scrollbar",
+        "Notebook",
+    ):
+        monkeypatch.setattr(ausl_stats_app.ttk, widget_name, HeadlessWidget)
+
+    parent = HeadlessWidget()
+    app = object.__new__(ausl_stats_app.AUSLStatsApp)
+    app.root = HeadlessWidget()
+
+    app._build_lookup(parent)
+
+    assert parent.row_weights.get(1, 0) == 0
+    assert parent.row_weights[2] == 1
 
 
 def test_multiline_text_shortcuts_are_not_hijacked(fixture_database):

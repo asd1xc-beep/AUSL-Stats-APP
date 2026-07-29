@@ -14,6 +14,7 @@ from ausl_comparison import (
     build_player_comparison,
     comparison_with_sources_text,
 )
+import ausl_comparison
 from ausl_facts import (
     BroadcastFact,
     FactCategory,
@@ -197,6 +198,113 @@ def test_fact_context_is_independently_scoped_by_player_and_game(fixture_databas
     assert comparison.right.verified_facts == ()
 
 
+def test_comparison_fact_display_keeps_each_players_independent_source(
+    fixture_database,
+):
+    left = replace(
+        _fact("101", verified=True),
+        provenance=(
+            SourceProvenance(
+                source_name="Left Official Notes",
+                source_reference="local:left-notes",
+                source_date="2026-07-18",
+                source_game_id="9001",
+                source_page="4",
+                snapshot_timestamp="2026-07-18T23:45:00+00:00",
+            ),
+        ),
+    )
+    right = replace(
+        _fact("103", verified=True),
+        provenance=(
+            SourceProvenance(
+                source_name="Right Approved Guide",
+                source_reference="local:right-guide",
+                source_date="2026-06-01",
+                source_game_id="9001",
+                source_page="22",
+                snapshot_timestamp="2026-07-19T01:15:00+00:00",
+            ),
+        ),
+    )
+    collection = FactCollection(
+        game_id="9001",
+        snapshot_timestamp="2026-07-19T01:15:00+00:00",
+        database_version="fixture",
+        facts=(left, right),
+        available=True,
+        empty_reason="",
+    )
+    comparison = build_player_comparison(
+        _database(fixture_database),
+        "101",
+        "103",
+        season=2026,
+        selected_game_id="9001",
+        facts=collection,
+    )
+
+    left_text = ausl_comparison.comparison_fact_display_text(
+        comparison.left.verified_facts[0]
+    )
+    right_text = ausl_comparison.comparison_fact_display_text(
+        comparison.right.verified_facts[0]
+    )
+
+    assert "Left Official Notes" in left_text
+    assert "local:left-notes" in left_text
+    assert "Right Approved Guide" not in left_text
+    assert "Right Approved Guide" in right_text
+    assert "local:right-guide" in right_text
+    assert "Left Official Notes" not in right_text
+
+
+def test_comparison_fact_display_renders_available_provenance_and_trust_fields():
+    fact = _fact("101", verified=True)
+    before = (fact.verification_state, fact.air_ready, fact.evidence_hash)
+
+    text = ausl_comparison.comparison_fact_display_text(fact)
+
+    assert "[VERIFIED]" in text
+    assert "Official AUSL Game Notes" in text
+    assert "local:game-notes" in text
+    assert "Source date: 2026-07-18" in text
+    assert "Page: 4" in text
+    assert "Game: 9001" in text
+    assert "Snapshot: 2026-07-18T23:45:00+00:00" in text
+    assert "Source health: GREEN" in text
+    assert (fact.verification_state, fact.air_ready, fact.evidence_hash) == before
+
+
+def test_comparison_fact_display_is_honest_when_provenance_is_missing():
+    fact = replace(
+        _fact("101", verified=False),
+        provenance=(),
+        verification_state=VerificationState.UNAVAILABLE,
+        source_health="unknown",
+        warning_reason="Source provenance unavailable.",
+    )
+
+    text = ausl_comparison.comparison_fact_display_text(fact)
+
+    assert "[UNAVAILABLE]" in text
+    assert "Fact source: Unavailable" in text
+    assert "Snapshot: Unavailable" in text
+    assert "Source health: UNKNOWN" in text
+    assert "Review: Source provenance unavailable." in text
+
+
+def test_comparison_review_fact_displays_warning_without_promoting_state():
+    fact = _fact("103", verified=False)
+    before = (fact.verification_state, fact.air_ready, fact.evidence_hash)
+
+    text = ausl_comparison.comparison_fact_display_text(fact)
+
+    assert "[VERIFY]" in text
+    assert "Review: Producer verification required." in text
+    assert (fact.verification_state, fact.air_ready, fact.evidence_hash) == before
+
+
 def test_wrong_game_fact_collection_is_not_reused(fixture_database):
     collection = FactCollection(
         game_id="9002",
@@ -237,6 +345,35 @@ def test_copy_comparison_retains_both_identities_and_provenance(fixture_database
     assert record.database_identity == comparison.database_identity
     assert record.copied_at == copied_at
     assert record.text == text
+
+
+def test_global_statistical_provenance_is_distinct_and_copy_stays_metrics_only(
+    fixture_database,
+):
+    comparison = build_player_comparison(
+        _database(fixture_database),
+        "101",
+        "103",
+        season=2026,
+        selected_game_id="9001",
+        facts=FactCollection(
+            game_id="9001",
+            snapshot_timestamp="2026-07-18T23:45:00+00:00",
+            database_version="fixture",
+            facts=(_fact("101", verified=True),),
+            available=True,
+            empty_reason="",
+        ),
+    )
+
+    context = ausl_comparison.comparison_statistics_context_text(comparison)
+    copied = comparison_with_sources_text(comparison)
+
+    assert "Statistics source: Official AUSL local snapshot" in context
+    assert "Statistical snapshot: 2026-07-18T23:45:00+00:00" in context
+    assert "Statistics source: Official AUSL local snapshot" in copied
+    assert "Statistical metrics only" in copied
+    assert _fact("101", verified=True).air_copy not in copied
 
 
 def test_refresh_changes_database_identity_and_values(fixture_database):

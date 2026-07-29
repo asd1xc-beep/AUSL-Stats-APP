@@ -296,13 +296,75 @@ def comparison_with_sources_text(comparison: PlayerComparison) -> str:
                 if comparison.selected_game_id
                 else "Selected game context: Unavailable"
             ),
-            f"Source: {comparison.source_name}",
-            f"Data snapshot: {comparison.snapshot_timestamp or 'Unavailable'}",
+            f"Statistics source: {comparison.source_name}",
+            f"Statistical snapshot: {comparison.snapshot_timestamp or 'Unavailable'}",
+            "Included content: Statistical metrics only; comparison facts are not copied.",
             "Status: Verify roster availability and source freshness before air.",
         ]
     )
     if comparison.fact_context_warning:
         lines.append(f"Fact context: {comparison.fact_context_warning}")
+    return "\n".join(lines)
+
+
+def comparison_fact_display_text(fact: BroadcastFact) -> str:
+    """Render compact canonical fact provenance without changing fact trust."""
+
+    lines = [f"[{fact.verification_state.value}] {fact.air_copy}"]
+    if fact.provenance:
+        for index, source in enumerate(fact.provenance):
+            label = "Fact source" if index == 0 else "Supporting source"
+            parts = [
+                _text(source.source_name) or "Unavailable",
+                _text(source.source_reference) or "Reference unavailable",
+            ]
+            if _text(source.source_date):
+                parts.append(f"Source date: {_text(source.source_date)}")
+            if _text(source.source_page):
+                parts.append(f"Page: {_text(source.source_page)}")
+            if _text(source.source_game_id):
+                parts.append(f"Game: {_text(source.source_game_id)}")
+            lines.append(f"{label}: {' | '.join(parts)}")
+        snapshot = next(
+            (
+                _text(source.snapshot_timestamp)
+                for source in fact.provenance
+                if _text(source.snapshot_timestamp)
+            ),
+            "",
+        )
+    else:
+        lines.append("Fact source: Unavailable")
+        snapshot = ""
+    lines.append(f"Snapshot: {snapshot or 'Unavailable'}")
+    lines.append(f"Source health: {(_text(fact.source_health) or 'unknown').upper()}")
+
+    review_reason = _text(fact.warning_reason)
+    if not review_reason and fact.producer_confirmation_required:
+        review_reason = "Producer confirmation required."
+    if not review_reason and not fact.air_ready:
+        review_reason = (
+            f"Verification state is {fact.verification_state.value}; verify before air."
+        )
+    if review_reason:
+        lines.append(f"Review: {review_reason}")
+    return "\n".join(lines)
+
+
+def comparison_statistics_context_text(comparison: PlayerComparison) -> str:
+    """Label the shared statistical database separately from fact sources."""
+
+    lines = [
+        (
+            f"Selected game context: Game {comparison.selected_game_id}"
+            if comparison.selected_game_id
+            else "Selected game context: Unavailable"
+        ),
+        f"Statistics source: {comparison.source_name or 'Unavailable'}",
+        f"Statistical snapshot: {comparison.snapshot_timestamp or 'Unavailable'}",
+    ]
+    if comparison.fact_context_warning:
+        lines.append(comparison.fact_context_warning)
     return "\n".join(lines)
 
 
