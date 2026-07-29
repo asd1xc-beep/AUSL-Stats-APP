@@ -5,21 +5,23 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5 and Phase 6A through 6D are complete. Phase 6D started from the
-latest remote main e9e65dc (the merged Phase 6C pull request). Its reviewed
-functional commits are 0b2816f (versioned schema, canonical rundown
-deserialization, atomic private storage, backup/quarantine, and failing-first
-tests) and f19ffda (debounced autosave, exact restore/reconciliation, recovery
-UI, Start Fresh archive, readiness warning, privacy enforcement, and
-deterministic GUI smoke).
+Phases 1-5 and Phase 6A through 6E are complete. Phase 6E started from the
+latest remote main b00027b (the merged Phase 6D pull request). Its reviewed
+functional commits are 4fc2736 (typed deterministic digests/events and
+failing-first tests), aafd8f4 (explicit producer-session schema-v2 migration),
+c8d05f3 (material source adapters and severity policies), e989434 (Game Day
+What Changed workflow, worker guards, acknowledgement, and readiness impact),
+and f3c7076 (checked-in snapshot integration and persistence bounds).
 
-The clean baseline passed 611 offline tests. The completed Phase 6D source
-passes 654 tests with warnings treated as errors; the 149-test Phase 6D and
-adjacent safety matrix also passes. The deterministic Windows source-app
-smoke passes at 1120x720 through clean resume, deliberate crash recovery,
-save failure, recovery archive, Start Fresh, all seven tabs, and zero network
-calls. Compileall, pip check, Git LFS validation, checked-in distribution
-verification, whitespace validation, and tracked/history secret scans pass.
+The clean baseline passed 654 offline tests. The completed Phase 6E source
+passes 695 tests with warnings treated as errors. The deterministic Windows
+source-app smoke passes at 1280x820 using the checked-in local snapshot and an
+in-memory changed-snapshot fixture through baseline creation, roster/schedule/
+source/fact differences, pinned and used impact, acknowledgement, filters,
+repeat-game switching, Local/Offline Mode, all existing tabs, clean save, and
+restart recovery. No live refresh or internet source was used. Compileall, pip
+check, Git LFS validation, checked-in distribution verification, whitespace
+validation, and tracked/history secret scans pass.
 The future-season year-generalization patch remains applied once and its
 dedicated regressions pass.
 
@@ -33,8 +35,8 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Phase 6E and 6F have not started. Phase 6D does not add the full post-refresh
-change panel, fuzzy search, or player comparison. This remains an
+Phase 6F has not started. Phase 6E does not add fuzzy search or player
+comparison. This remains an
 assisted broadcast tool, not a candidate for unattended on-air use: cards that
 do not pass exact identity, provenance, freshness, source-health, and approval
 gates stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line
@@ -257,6 +259,35 @@ The recovery notice offers Review, Dismiss, and Start Fresh. Start Fresh first
 creates an exclusive recovery archive and refuses to clear runtime state if
 that archive cannot be written. Producer session filenames are ignored by Git
 and explicitly rejected by distribution privacy verification.
+
+POST-REFRESH WHAT CHANGED
+The Game Day "What Changed?" view compares only two validated installed
+snapshot digests. The first valid snapshot establishes a baseline without
+reporting every row as newly added. A later successful local load or core
+refresh can report material roster/status/team assignment, official
+record/rank/games-back/streak, exact-game schedule/final-score, lineup,
+source-health, canonical fact, verification, and milestone-transition changes.
+Routine stat-row churn appears only when it changes a canonical broadcast fact.
+
+Each immutable event retains before/after snapshot identity, exact player/team/
+game/season/fact identity where applicable, concise before/after summaries,
+severity, selected-game/pinned/used/readiness impact, source context, and a
+stable event ID. Milestones are linked only by canonical identity, never by
+similar prose. Manual producer-note wording is not copied into the digest.
+
+The view provides All Changes, Needs Attention, Selected Game, Pinned, and
+Used filters plus team/category filters. Acknowledgement is persisted as event
+identity only and never changes a fact, source-health state, rundown entry, or
+readiness gate. Pinned wording is never silently replaced; Review Pinned and
+the existing confirmed Replace With Latest path remain explicit.
+
+Digest creation and comparison are local/network-free and run in one bounded
+worker with one coalesced replacement. Late generation, database, or selected-
+game results cannot promote a baseline. Failed/cancelled refreshes and failed
+comparisons retain the prior baseline/report. The schema-v2 private producer
+session atomically stores the baseline, latest complete result,
+acknowledgements, five compact history summaries, refresh outcome metadata,
+and normalized change-panel filters/scroll position.
 
 LOCAL/OFFLINE MODE
 The visible Local/Offline Mode control appears beside Quick Refresh and in the

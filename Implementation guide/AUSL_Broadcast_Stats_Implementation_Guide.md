@@ -685,8 +685,8 @@ command center, together with the pure `GameDayReadiness` policy and explicit
 Local/Offline Mode. The later broadcast-fact boundary is documented in
 `Phase_6_Broadcast_Fact_Interface.md`. Phase 6B now implements that boundary;
 Phase 6C now implements the rundown and used-on-air workflow; Phase 6D now
-implements private autosave and crash recovery. Change comparison and faster
-search remain deferred to 6E–6F.
+implements private autosave and crash recovery; Phase 6E now implements
+validated snapshot comparison. Faster search remains deferred to 6F.
 
 #### 6B. Air-ready fact cards
 
@@ -774,7 +774,37 @@ After refresh, summarize material changes since the previous validated version:
 
 This is often more valuable before air than rereading every panel.
 
-Implementation status: not started.
+Implementation status (2026-07-28): complete. `src/ausl_changes.py` owns a
+versioned, deterministic, normalized `BroadcastSnapshotDigest`, immutable
+`ChangeEvent`, and pure severity/comparison policy. Snapshot identity excludes
+row ordering and wall-clock-only import churn while retaining authoritative
+source/content identity, exact roster/team/game/lineup identity, source health,
+and canonical fact evidence. Routine stat rows enter the report only through a
+changed canonical broadcast fact. Manual producer-note wording is redacted
+from the digest.
+
+The first validated local snapshot creates a baseline without an all-added
+flood. Each later successful validated local load or core refresh compares
+against that baseline and promotes the new baseline only after diff success.
+Failed/cancelled refreshes and comparison failures retain the prior baseline
+and complete report. One local/network-free worker plus one coalesced pending
+request provides bounded processing; generation, database, and selected-game
+guards discard late results.
+
+The Game Day `What Changed?` view reports blocking, attention, and
+informational counts with All Changes, Needs Attention, Selected Game, Pinned,
+Used, team, and category filters. Cards show before/after summaries,
+source/snapshot context, selected-game/pinned/used/readiness impacts, explicit
+review actions, and acknowledgement. Acknowledgement changes only persisted
+event identity. It never edits verification, readiness, facts, lineups, or
+rundown state. Existing confirmed Replace With Latest remains the only path
+that can replace pinned evidence.
+
+Producer-session schema version 2 explicitly migrates version 1 and atomically
+persists the baseline, latest complete comparison, acknowledgement IDs, five
+bounded history summaries, refresh metadata, filters, and scroll position.
+Corrupt Phase 6E state is dropped with a visible recovery warning without
+making an otherwise valid Phase 6D session/rundown unrecoverable.
 
 #### 6F. Faster search and player comparison
 
