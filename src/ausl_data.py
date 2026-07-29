@@ -23,6 +23,12 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
+from ausl_enrichment import (
+    DEVELOPER_ONLY_KEYS,
+    PRODUCER_ENRICHMENT_KEYS,
+    EnrichmentMode,
+    approved_enrichment_frames,
+)
 from ausl_logging import configure_logging, log_event
 
 try:
@@ -213,6 +219,7 @@ def export_dir() -> Path:
 
 REFRESH_ATTEMPT_FILENAME = "refresh_attempt.json"
 _CORE_REFRESH_COMMIT_LOCK = threading.Lock()
+_REFRESH_EXECUTION_LOCK = threading.Lock()
 _REFRESH_ATTEMPT_LOCK = threading.Lock()
 
 
@@ -1399,7 +1406,10 @@ def _parse_media_guide_frames_from_pdf(
 
 
 def fetch_media_guide_frames(
-    roster: pd.DataFrame, progress=None
+    roster: pd.DataFrame,
+    progress=None,
+    *,
+    cancel_token: CancelToken | None = None,
 ) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
@@ -1421,8 +1431,12 @@ def fetch_media_guide_frames(
     try:
         progress(f"Revalidating {media_context['source_name']} PDF...")
         candidate_hash = _download_file(
-            str(media_context["source_url"]), candidate_path
+            str(media_context["source_url"]),
+            candidate_path,
+            **_cancel_kwargs(cancel_token),
         )
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         existing_hash = None
         if pdf_path.exists():
             try:
@@ -1665,15 +1679,24 @@ def split_stat_frames(payload: dict, season: int, split_key: str, split_label: s
     return batting, pitching, fielding
 
 
-def fetch_split_payload(season_id: int, split_key: str) -> tuple[dict, str]:
+def fetch_split_payload(
+    season_id: int,
+    split_key: str,
+    *,
+    cancel_token: CancelToken | None = None,
+) -> tuple[dict, str]:
     static_path = f"/data/statsApiData_{season_id}_{split_key}.json"
     try:
-        return _get_json(static_path), BASE_URL + static_path
+        return _get_json(
+            static_path, **_cancel_kwargs(cancel_token)
+        ), BASE_URL + static_path
     except HTTPError as exc:
         if exc.code != 404:
             raise
     api_path = f"/api/season-stats/{season_id}?statSplitType={split_key}"
-    return _get_json(api_path), BASE_URL + api_path
+    return _get_json(
+        api_path, **_cancel_kwargs(cancel_token)
+    ), BASE_URL + api_path
 
 
 def fetch_standings_frame(*, cancel_token: CancelToken | None = None) -> pd.DataFrame:
@@ -2094,7 +2117,14 @@ def _save_game_notes_cache(cache: dict) -> None:
     _write_json_atomic(cache_path, safe_cache, prefix=".notes-cache-")
 
 
-def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame, progress=None, limit: int | None = None) -> pd.DataFrame:
+def fetch_official_game_notes_frame(
+    schedule: pd.DataFrame,
+    roster: pd.DataFrame,
+    progress=None,
+    limit: int | None = None,
+    *,
+    cancel_token: CancelToken | None = None,
+) -> pd.DataFrame:
     progress = progress or (lambda _message: None)
     if schedule.empty or "game_notes" not in schedule:
         return pd.DataFrame()
@@ -2133,6 +2163,8 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
     cache_dirty = False
 
     for game, url in note_urls:
+        if cancel_token is not None:
+            cancel_token.raise_if_cancelled()
         game_id = game.get("game_id", "")
         safe_url_tail = re.sub(r"[^A-Za-z0-9]+", "_", url.split("/")[-1]).strip("_")[:80] or "notes"
         pdf_path = app_root() / "data" / "sources" / "game_notes" / f"game_{game_id}_{safe_url_tail}.pdf"
@@ -2147,7 +2179,11 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
         try:
             progress(f"Revalidating official game notes for game {game_id}...")
             try:
-                content_hash = _download_file(url, candidate_path)
+                content_hash = _download_file(
+                    url, candidate_path, **_cancel_kwargs(cancel_token)
+                )
+            except RefreshCancelled:
+                raise
             except Exception as exc:
                 progress(f"Skipping game notes {game_id}: {exc}")
                 if (
@@ -2179,6 +2215,8 @@ def fetch_official_game_notes_frame(schedule: pd.DataFrame, roster: pd.DataFrame
                 continue
             file_rows = []
             for page_number, page in enumerate(reader.pages, 1):
+                if cancel_token is not None:
+                    cancel_token.raise_if_cancelled()
                 try:
                     page_text = page.extract_text() or ""
                 except Exception:
@@ -3043,8 +3081,9 @@ def _stage_and_promote_core_snapshot(
     manifest: dict,
     progress,
     cancel_token: CancelToken | None,
+    additional_workbooks: dict[Path, dict[str, pd.DataFrame]] | None = None,
 ) -> None:
-    """Serialize the complete core stage/promotion transaction."""
+    """Serialize one complete installed core-and-enrichment transaction."""
 
     output.mkdir(parents=True, exist_ok=True)
     progress("Waiting for the previous refresh to finish committing, if any...")
@@ -3088,15 +3127,18 @@ def _stage_and_promote_core_snapshot(
                 {"standings": standings, "schedule_results": schedule},
             )
             _write_json_atomic(staged_manifest, manifest, prefix=".manifest-")
-            _promote_file_set(
-                {
-                    staged_roster: roster_path,
-                    staged_season: season_path,
-                    staged_career: career_path,
-                    staged_team_context: team_context_path,
-                    staged_manifest: manifest_path,
-                }
-            )
+            staged_to_final = {
+                staged_roster: roster_path,
+                staged_season: season_path,
+                staged_career: career_path,
+                staged_team_context: team_context_path,
+                staged_manifest: manifest_path,
+            }
+            for final_path, sheets in (additional_workbooks or {}).items():
+                staged_path = stage_dir / final_path.name
+                _write_excel_atomic(staged_path, sheets)
+                staged_to_final[staged_path] = final_path
+            _promote_file_set(staged_to_final)
         finally:
             shutil.rmtree(stage_dir, ignore_errors=True)
 
@@ -3142,14 +3184,29 @@ def _update_all_data_impl(
 
     split_batting, split_pitching, split_fielding = [], [], []
     split_refresh_complete = True
+    split_errors = []
     if include_enrichment:
         for year, season_id in SEASONS.items():
             for split_key, split_label in SPLIT_TYPES.items():
                 progress(f"Downloading {year} AUSL split stats: {split_label}...")
                 try:
-                    payload, source_url = fetch_split_payload(season_id, split_key)
+                    if cancel_token is None:
+                        payload, source_url = fetch_split_payload(
+                            season_id, split_key
+                        )
+                    else:
+                        payload, source_url = fetch_split_payload(
+                            season_id,
+                            split_key,
+                            cancel_token=cancel_token,
+                        )
+                except RefreshCancelled:
+                    raise
                 except Exception as exc:
                     split_refresh_complete = False
+                    split_errors.append(
+                        f"{year} {split_label}: {type(exc).__name__}: {exc}"
+                    )
                     progress(f"Skipping {year} {split_label} split stats: {exc}")
                     log_source_result(
                         f"split_{year}_{split_key}",
@@ -3224,19 +3281,32 @@ def _update_all_data_impl(
 
     official_game_notes = pd.DataFrame()
     official_game_notes_ready = False
+    official_game_notes_error = None
     media_players = pd.DataFrame()
     media_teams = pd.DataFrame()
     media_notes = pd.DataFrame()
     media_raw_chunks = pd.DataFrame()
     media_audit = pd.DataFrame()
     media_guide_ready = False
+    media_guide_error = None
     if include_enrichment:
         progress("Importing official AUSL game notes PDFs...")
         try:
-            official_game_notes = fetch_official_game_notes_frame(
-                schedule, rosters[max(SEASONS)], progress
-            )
+            if cancel_token is None:
+                official_game_notes = fetch_official_game_notes_frame(
+                    schedule, rosters[max(SEASONS)], progress
+                )
+            else:
+                official_game_notes = fetch_official_game_notes_frame(
+                    schedule,
+                    rosters[max(SEASONS)],
+                    progress,
+                    cancel_token=cancel_token,
+                )
+        except RefreshCancelled:
+            raise
         except Exception as exc:
+            official_game_notes_error = f"{type(exc).__name__}: {exc}"
             progress(f"Skipping official game notes: {exc}")
             log_source_result(
                 "official_game_notes",
@@ -3246,6 +3316,8 @@ def _update_all_data_impl(
             )
         else:
             official_game_notes_ready = not official_game_notes.empty
+            if not official_game_notes_ready:
+                official_game_notes_error = "empty response was not promoted"
             log_source_result(
                 "official_game_notes",
                 official_game_notes,
@@ -3260,10 +3332,27 @@ def _update_all_data_impl(
 
         progress("Importing AUSL media guide enrichment...")
         try:
-            media_players, media_teams, media_notes, media_raw_chunks, media_audit = (
-                fetch_media_guide_frames(rosters[max(SEASONS)], progress)
-            )
+            if cancel_token is None:
+                media_result = fetch_media_guide_frames(
+                    rosters[max(SEASONS)], progress
+                )
+            else:
+                media_result = fetch_media_guide_frames(
+                    rosters[max(SEASONS)],
+                    progress,
+                    cancel_token=cancel_token,
+                )
+            (
+                media_players,
+                media_teams,
+                media_notes,
+                media_raw_chunks,
+                media_audit,
+            ) = media_result
+        except RefreshCancelled:
+            raise
         except Exception as exc:
+            media_guide_error = f"{type(exc).__name__}: {exc}"
             progress(f"Skipping media guide enrichment: {exc}")
             log_source_result(
                 "media_guide",
@@ -3366,6 +3455,15 @@ def _update_all_data_impl(
         },
     }
     if include_enrichment:
+        combined_batting_splits = combined(split_batting)
+        combined_pitching_splits = combined(split_pitching)
+        combined_fielding_splits = combined(split_fielding)
+        split_workbooks_ready = bool(
+            split_refresh_complete
+            and not combined_batting_splits.empty
+            and not combined_pitching_splits.empty
+            and not combined_fielding_splits.empty
+        )
         source_health["official_game_notes"] = _enrichment_source_health_entry(
             source_name="Official AUSL game notes",
             ok=official_game_notes_ready,
@@ -3374,7 +3472,7 @@ def _update_all_data_impl(
             row_count=int(len(official_game_notes)) if isinstance(official_game_notes, pd.DataFrame) else 0,
             content_hash=_frame_fingerprint(official_game_notes),
             status_detail_ok="validated official note refresh",
-            error_summary=None if official_game_notes_ready else "official game notes were not promoted",
+            error_summary=official_game_notes_error,
             previous_entry=previous_health.get("official_game_notes"),
         )
         source_health["media_guide"] = _enrichment_source_health_entry(
@@ -3385,26 +3483,68 @@ def _update_all_data_impl(
             row_count=int(len(media_players)) if isinstance(media_players, pd.DataFrame) else 0,
             content_hash=_frame_fingerprint(media_players),
             status_detail_ok="validated media-guide enrichment",
-            error_summary=None if media_guide_ready else "media guide enrichment was not promoted",
+            error_summary=media_guide_error,
             previous_entry=previous_health.get("media_guide"),
         )
         combined_split_frame = combined([*split_batting, *split_pitching, *split_fielding])
         source_health["split_stats"] = _enrichment_source_health_entry(
             source_name="Official AUSL split stats",
-            ok=split_refresh_complete,
+            ok=split_workbooks_ready,
             now_iso=imported_at,
             now=now_dt,
-            row_count=sum(
-                int(len(frame))
-                for frame in (split_batting, split_pitching, split_fielding)
-                if isinstance(frame, list)
-            ),
+            row_count=int(len(combined_split_frame)),
             content_hash=_frame_fingerprint(combined_split_frame),
             status_detail_ok="validated split refresh",
-            error_summary=None if split_refresh_complete else "split statistics were not promoted",
+            error_summary=(
+                None
+                if split_workbooks_ready
+                else "; ".join(split_errors)[:800]
+                or "split statistics were incomplete and were not promoted"
+            ),
             previous_entry=previous_health.get("split_stats"),
         )
+        optional_statuses = [
+            source_health[key]["status"]
+            for key in ("official_game_notes", "media_guide", "split_stats")
+        ]
+        aggregate_status = (
+            "green"
+            if set(optional_statuses) == {"green"}
+            else "yellow"
+            if "red" not in optional_statuses
+            else "red"
+        )
+        source_health["optional_enrichment"] = {
+            "source_name": "Optional producer enrichment",
+            "source_type": "optional_enrichment",
+            "status": aggregate_status,
+            "last_attempt_at": imported_at,
+            "last_success_at": (
+                imported_at if aggregate_status == "green" else None
+            ),
+            "row_count": sum(
+                int(source_health[key].get("row_count", 0))
+                for key in ("official_game_notes", "media_guide", "split_stats")
+            ),
+            "content_hash_or_etag": None,
+            "status_detail": (
+                "all optional sources refreshed and validated"
+                if aggregate_status == "green"
+                else "one or more optional sources use fallback or are unavailable"
+            ),
+            "error_summary": None,
+            "used_fallback": aggregate_status != "green",
+            "parser_version": "phase7a-enrichment-gates-v1",
+        }
     else:
+        for source_key in (
+            "official_game_notes",
+            "media_guide",
+            "split_stats",
+        ):
+            previous_entry = previous_health.get(source_key)
+            if isinstance(previous_entry, dict):
+                source_health[source_key] = dict(previous_entry)
         source_health["optional_enrichment"] = {
             "source_name": "Optional enrichment",
             "source_type": "optional_enrichment",
@@ -3413,7 +3553,10 @@ def _update_all_data_impl(
             "last_success_at": None,
             "row_count": 0,
             "content_hash_or_etag": None,
-            "status_detail": "core refresh only; optional enrichment remains disabled",
+            "status_detail": (
+                "core refresh only; validated local optional enrichment was "
+                "not fetched or rewritten"
+            ),
             "error_summary": None,
             "used_fallback": True,
             "parser_version": "2026-07-24",
@@ -3439,6 +3582,46 @@ def _update_all_data_impl(
             }
         },
     }
+    additional_workbooks: dict[Path, dict[str, pd.DataFrame]] = {}
+    if include_enrichment:
+        if split_workbooks_ready:
+            additional_workbooks.update(
+                {
+                    batting_splits_path: {
+                        "batting_splits": combined_batting_splits
+                    },
+                    pitching_splits_path: {
+                        "pitching_splits": combined_pitching_splits
+                    },
+                    fielding_splits_path: {
+                        "fielding_splits": combined_fielding_splits
+                    },
+                }
+            )
+        additional_workbooks[source_registry_path] = {
+            "sources": source_registry_frame()
+        }
+        if media_guide_ready:
+            additional_workbooks.update(
+                {
+                    media_players_path: {
+                        "player_bio_enrichment": media_players
+                    },
+                    media_teams_path: {"team_media_guide": media_teams},
+                    media_notes_path: {"media_guide_notes": media_notes},
+                    media_audit_path: {"media_guide_audit": media_audit},
+                    clean_media_notes_path: {
+                        "clean_media_guide_notes": media_notes
+                    },
+                    raw_media_chunks_path: {
+                        "raw_media_guide_chunks": media_raw_chunks
+                    },
+                }
+            )
+        if official_game_notes_ready:
+            additional_workbooks[official_game_notes_path] = {
+                "official_game_notes": official_game_notes
+            }
     _stage_and_promote_core_snapshot(
         output=output,
         roster_path=roster_path,
@@ -3455,48 +3638,8 @@ def _update_all_data_impl(
         manifest=manifest,
         progress=progress,
         cancel_token=cancel_token,
+        additional_workbooks=additional_workbooks,
     )
-
-    if include_enrichment:
-        combined_batting_splits = combined(split_batting)
-        combined_pitching_splits = combined(split_pitching)
-        combined_fielding_splits = combined(split_fielding)
-        if (
-            split_refresh_complete
-            and not combined_batting_splits.empty
-            and not combined_pitching_splits.empty
-            and not combined_fielding_splits.empty
-        ):
-            _write_excel_atomic(
-                batting_splits_path, {"batting_splits": combined_batting_splits}
-            )
-            _write_excel_atomic(
-                pitching_splits_path,
-                {"pitching_splits": combined_pitching_splits},
-            )
-            _write_excel_atomic(
-                fielding_splits_path,
-                {"fielding_splits": combined_fielding_splits},
-            )
-        _write_excel_atomic(source_registry_path, {"sources": source_registry_frame()})
-        if media_guide_ready:
-            _write_excel_atomic(
-                media_players_path, {"player_bio_enrichment": media_players}
-            )
-            _write_excel_atomic(media_teams_path, {"team_media_guide": media_teams})
-            _write_excel_atomic(media_notes_path, {"media_guide_notes": media_notes})
-            _write_excel_atomic(media_audit_path, {"media_guide_audit": media_audit})
-            _write_excel_atomic(
-                clean_media_notes_path, {"clean_media_guide_notes": media_notes}
-            )
-            _write_excel_atomic(
-                raw_media_chunks_path, {"raw_media_guide_chunks": media_raw_chunks}
-            )
-        if official_game_notes_ready:
-            _write_excel_atomic(
-                official_game_notes_path,
-                {"official_game_notes": official_game_notes},
-            )
     progress("AUSL database update complete.")
     log_event(
         DATA_LOGGER,
@@ -3513,15 +3656,17 @@ def _update_all_data_impl(
         "manifest": manifest_path,
     }
     if include_enrichment:
-        outputs.update(
-            {
-                "batting_splits": batting_splits_path,
-                "pitching_splits": pitching_splits_path,
-                "fielding_splits": fielding_splits_path,
-                "sources": source_registry_path,
-                "official_game_notes": official_game_notes_path,
-            }
-        )
+        outputs["sources"] = source_registry_path
+        if split_workbooks_ready:
+            outputs.update(
+                {
+                    "batting_splits": batting_splits_path,
+                    "pitching_splits": pitching_splits_path,
+                    "fielding_splits": fielding_splits_path,
+                }
+            )
+        if official_game_notes_ready:
+            outputs["official_game_notes"] = official_game_notes_path
         if media_guide_ready:
             outputs.update(
                 {
@@ -3542,8 +3687,9 @@ def update_all_data(
     include_enrichment: bool = False,
     cancel_token: CancelToken | None = None,
 ) -> dict[str, Path]:
-    """Run a refresh and persist its outcome separately from the LKG snapshot."""
+    """Serialize refresh jobs and persist outcomes separately from the LKG."""
 
+    progress = progress or (lambda _message: None)
     started_at = datetime.now(timezone.utc).isoformat()
     affected_source = (
         "optional_enrichment_sources"
@@ -3565,27 +3711,64 @@ def update_all_data(
             "error_summary": error_summary,
         }
 
-    _persist_refresh_attempt(attempt("in_progress"))
+    progress("Waiting for the previous refresh to finish before starting...")
+    with _REFRESH_EXECUTION_LOCK:
+        if cancel_token is not None and cancel_token.cancelled:
+            _persist_refresh_attempt(attempt("cancelled"))
+            raise RefreshCancelled("Refresh cancelled")
+
+        _persist_refresh_attempt(attempt("in_progress"))
+        try:
+            outputs = _update_all_data_impl(
+                progress,
+                include_enrichment=include_enrichment,
+                cancel_token=cancel_token,
+            )
+        except RefreshCancelled:
+            _persist_refresh_attempt(attempt("cancelled"))
+            raise
+        except Exception as exc:
+            _persist_refresh_attempt(
+                attempt("failed", error_summary=_safe_refresh_error_summary(exc))
+            )
+            raise
+        _persist_refresh_attempt(attempt("succeeded"))
+        outputs["refresh_attempt"] = _refresh_attempt_path()
+        return outputs
+
+
+def _resolve_enrichment_mode(
+    *,
+    enrichment_mode: EnrichmentMode | str | None,
+    include_enrichment: bool | None,
+) -> EnrichmentMode:
+    """Resolve typed producer modes; the legacy true flag is review-only."""
+
+    if enrichment_mode is not None and include_enrichment is not None:
+        raise ValueError("Choose enrichment_mode or include_enrichment, not both")
+    if include_enrichment is not None:
+        return (
+            EnrichmentMode.DEVELOPER_REVIEW
+            if include_enrichment
+            else EnrichmentMode.CORE_ONLY
+        )
+    if enrichment_mode is None:
+        return EnrichmentMode.CORE_ONLY
     try:
-        outputs = _update_all_data_impl(
-            progress,
-            include_enrichment=include_enrichment,
-            cancel_token=cancel_token,
-        )
-    except RefreshCancelled:
-        _persist_refresh_attempt(attempt("cancelled"))
-        raise
-    except Exception as exc:
-        _persist_refresh_attempt(
-            attempt("failed", error_summary=_safe_refresh_error_summary(exc))
-        )
-        raise
-    _persist_refresh_attempt(attempt("succeeded"))
-    outputs["refresh_attempt"] = _refresh_attempt_path()
-    return outputs
+        return EnrichmentMode(enrichment_mode)
+    except ValueError as exc:
+        raise ValueError(f"Unknown enrichment mode: {enrichment_mode}") from exc
 
 
-def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame]:
+def load_database(
+    *,
+    enrichment_mode: EnrichmentMode | str | None = None,
+    include_enrichment: bool | None = None,
+) -> dict[str, pd.DataFrame]:
+    mode = _resolve_enrichment_mode(
+        enrichment_mode=enrichment_mode,
+        include_enrichment=include_enrichment,
+    )
     output = export_dir()
     paths = {
         "roster": output / "ausl_rosters.xlsx",
@@ -3593,8 +3776,15 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
         "career": output / "ausl_career_stats.xlsx",
     }
     if not all(path.exists() for path in paths.values()):
-        update_all_data(include_enrichment=include_enrichment)
+        update_all_data(include_enrichment=mode is not EnrichmentMode.CORE_ONLY)
     manifest_path = output / "update_manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            manifest = {}
+    else:
+        manifest = {}
     result = {"roster": pd.read_excel(paths["roster"], sheet_name=f"roster_{max(SEASONS)}")}
     log_source_result("roster", result["roster"], status="loaded")
     for year in SEASONS:
@@ -3645,8 +3835,9 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
         else:
             result[key] = pd.DataFrame()
             log_source_result(key, result[key], status="unavailable")
+    raw_enrichment = {}
     for key, (path, sheet) in enrichment_workbooks.items():
-        if not include_enrichment:
+        if mode is EnrichmentMode.CORE_ONLY:
             result[key] = pd.DataFrame()
             log_source_result(key, result[key], status="disabled")
             continue
@@ -3655,6 +3846,7 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
                 frame = pd.read_excel(path, sheet_name=sheet)
                 if key == "pitching_splits":
                     frame = normalize_pitching_frame(frame)
+                raw_enrichment[key] = frame
                 result[key] = frame
             except Exception as exc:
                 result[key] = pd.DataFrame()
@@ -3669,13 +3861,33 @@ def load_database(*, include_enrichment: bool = False) -> dict[str, pd.DataFrame
         else:
             result[key] = pd.DataFrame()
             log_source_result(key, result[key], status="unavailable")
-    result["enrichment_enabled"] = bool(include_enrichment)
+    if mode is EnrichmentMode.PRODUCER_APPROVED:
+        filtered = approved_enrichment_frames(
+            raw_enrichment,
+            roster=result["roster"],
+            manifest=manifest,
+        )
+        for key in (*PRODUCER_ENRICHMENT_KEYS, *DEVELOPER_ONLY_KEYS):
+            result[key] = filtered.get(key, pd.DataFrame())
+            log_source_result(
+                key,
+                result[key],
+                status=(
+                    "loaded_approved"
+                    if isinstance(result[key], pd.DataFrame)
+                    and not result[key].empty
+                    else "unavailable"
+                ),
+            )
+    result["enrichment_enabled"] = mode is not EnrichmentMode.CORE_ONLY
+    result["enrichment_mode"] = mode.value
+    result["enrichment_counts"] = {
+        key: int(len(result.get(key, pd.DataFrame())))
+        for key in PRODUCER_ENRICHMENT_KEYS
+    }
     result["manual_notes"] = load_manual_notes()
     log_source_result("manual_notes", result["manual_notes"], status="loaded")
-    if manifest_path.exists():
-        result["manifest"] = json.loads(manifest_path.read_text(encoding="utf-8"))
-    else:
-        result["manifest"] = {}
+    result["manifest"] = manifest
     result["refresh_attempt"] = load_refresh_attempt(output)
     return result
 

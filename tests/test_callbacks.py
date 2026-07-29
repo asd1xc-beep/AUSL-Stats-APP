@@ -96,7 +96,7 @@ def test_initial_load_reports_the_original_error_after_deferred_callback(monkeyp
     monkeypatch.setattr(
         ausl_stats_app,
         "load_database",
-        lambda *, include_enrichment: (_ for _ in ()).throw(
+        lambda *, enrichment_mode: (_ for _ in ()).throw(
             RuntimeError("initial fixture failure")
         ),
     )
@@ -114,8 +114,11 @@ def test_initial_load_suppresses_a_duplicate_job_until_terminal_callback(monkeyp
     loads = []
     app._finish_load = lambda _data: app.status_var.set("Initial load complete")
 
-    def load_once(*, include_enrichment):
-        assert include_enrichment is False
+    def load_once(*, enrichment_mode):
+        assert (
+            enrichment_mode
+            is ausl_stats_app.EnrichmentMode.PRODUCER_APPROVED
+        )
         loads.append("load")
         return {"roster": []}
 
@@ -172,7 +175,10 @@ def test_data_update_suppresses_duplicate_and_restores_button_on_success(monkeyp
     monkeypatch.setattr(
         ausl_stats_app,
         "load_database",
-        lambda *, include_enrichment: {"roster": [1, 2]},
+        lambda *, enrichment_mode: {
+            "roster": [1, 2],
+            "enrichment_counts": {},
+        },
     )
 
     app.update_data()
@@ -186,7 +192,11 @@ def test_data_update_suppresses_duplicate_and_restores_button_on_success(monkeyp
 
     assert app._data_update_in_flight is False
     assert app.update_button.state == "normal"
-    assert app.status_var.get() == "Update complete — 2 current players loaded"
+    assert (
+        app.status_var.get()
+        == "Update complete — 2 current players loaded; approved local "
+        "enrichment reloaded without fetching it"
+    )
 
 
 def test_live_refresh_reports_the_original_error_after_deferred_callback(monkeypatch):
