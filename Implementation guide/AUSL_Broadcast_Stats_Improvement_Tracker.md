@@ -1,7 +1,9 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-07-28
-Project source reviewed: `AUSL_BROADCAST_STATS_project_backup_2026-07-18_223756.zip`  
+Last updated: 2026-07-29
+
+Project source reviewed: GitHub `main` at `d7f255b` (through Phase 6E)
+
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
 ## Project goal
@@ -32,24 +34,43 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 6 — Post-refresh What Changed (Phase 6E)
+### Milestone 6 — Completion and release review (Phase 6F)
 
-Target outcome for the current phase: compare consecutive validated installed
-snapshots and surface only material broadcast changes without weakening Phase
-6A–6D identity, source-health, rundown reconciliation, privacy, readiness, or
-atomic-session guarantees.
+Target outcome for the current phase: finish collision-safe faster search and
+the player/matchup comparison workflow, then run one full Phase 6 regression,
+Windows scaling, privacy, packaging, and producer-workflow audit across
+Phases 6A–6F.
 
-Current implementation unit: Phase 6E. `UX-004` is `[x]` COMPLETE with a
-versioned deterministic snapshot digest, immutable typed change events, pure
-severity policy, conservative exact-identity detection, bounded local worker,
-Game Day filters/cards/actions, persisted acknowledgements, schema-v1-to-v2
-migration, and atomic baseline/report persistence. Phase 6F remains `PLANNED`
-and has not started.
+Current implementation unit: Phase 6F. Phases 6A–6E are complete. `SEARCH-005`
+and `UX-011` are the next implementation items. Phase 6 is not accepted until
+the Phase 6F tests and the full release review pass; this tracker does not
+infer completion from implementation alone.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6F COMPLETE — 2026-07-29 — FULL PHASE 6 REVIEW PENDING**
+Status: **PHASE 6E COMPLETE — 2026-07-28 — PHASE 6F NEXT**
+
+## Approved next roadmap
+
+Producer feedback elevated the College Résumé from backlog to the next major
+product milestone. Approved enrichment becomes producer-visible first so the
+same source, identity, freshness, approval, and last-known-good boundaries can
+be reused by the college layer.
+
+| Order | Implementation unit | Outcome | Start gate |
+|---|---|---|---|
+| 1 | Phase 6F | Faster search and side-by-side comparison | Current next pass |
+| 2 | Phase 6 acceptance | Full regression, Windows scaling, packaging/privacy, and producer workflow review | Phase 6F implementation complete |
+| 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Phase 6 accepted; split reliability complete |
+| 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Phase 7A trust boundaries stable |
+| 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Phase 7B specification accepted |
+| 6 | Phase 7D | Add the separate College Résumé tab | Pilot data and producer review accepted |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | College tab pilot accepted |
+
+The college milestone takes precedence over `NOTE-004`, live milestone watch,
+scenario calculations, news intake, and multi-user work unless a new producer
+requirement or a P0/P1 reliability issue changes the order.
 
 ## Master improvement list
 
@@ -151,13 +172,13 @@ Status: **PHASE 6F COMPLETE — 2026-07-29 — FULL PHASE 6 REVIEW PENDING**
   - ERA/WHIP: `0.88`, `1.00`.
   - Missing is `—`/`N/A`, never a fabricated zero.
 
-- [ ] `SPLIT-001` — Exclude `regularSeason` aggregate rows from the best situational-split list. **P1 · PLANNED**
+- [ ] `SPLIT-001` — Exclude `regularSeason` aggregate rows from the best situational-split list. **P1 · NEXT — PHASE 7A PREREQUISITE**
 
-- [ ] `SPLIT-002` — Establish configurable sample thresholds and reliability labels. **P1 · PLANNED**
+- [ ] `SPLIT-002` — Establish configurable sample thresholds and reliability labels. **P1 · NEXT — PHASE 7A PREREQUISITE**
   - Initial review target: hitter at least 10–12 PA; pitcher at least 3 IP or a batters-faced threshold.
   - Always show sample size.
 
-- [ ] `SPLIT-003` — Keep small samples available in detail without promoting them as top storylines. **P2 · PLANNED**
+- [ ] `SPLIT-003` — Keep small samples available in detail without promoting them as top storylines. **P2 · NEXT — PHASE 7A PREREQUISITE**
 
 ### G. Exact game identity and lineup workflow
 
@@ -195,25 +216,17 @@ Status: **PHASE 6F COMPLETE — 2026-07-29 — FULL PHASE 6 REVIEW PENDING**
 - [x] `SEARCH-003` — Search numbers with or without `#` and include roster status. **P2 · COMPLETE**
   - Examples: `22`, `#22`, `inactive`, and `reserve`.
 
-- [x] `SEARCH-004` — Add optional quick filters. **P2 · COMPLETE**
+- [ ] `SEARCH-004` — Add optional quick filters. **P2 · NEXT — PHASE 6F**
   - Candidate syntax: `team:CHI`, `pos:P`, `status:inactive`, `#22`.
-  - Phase 6F adds one safely parsed AND-combined query with quoted values,
-    validation messages, visible filter chips/count/scope, and no scope-preference
-    mutation.
 
 - [x] `STATE-001` — Rerender or clear the selected player card after data refresh. **P0 · COMPLETE**
   - Clipboard text and `current_broadcast_note` must use the same database version as the visible card.
 
-- [ ] `UI-001` — Add visible scrollbars to long content panels. **P2 · PLANNED**
-  - Phase 6F scope is complete: the primary Player Lookup list and new Compare
-    Players view have visible vertical scrollbars and direct mouse-wheel support.
-    The tracker item remains open pending the requested broader Phase 6 UI review.
+- [ ] `UI-001` — Add visible scrollbars to long content panels. **P2 · NEXT — PHASE 6 ACCEPTANCE**
 
-- [ ] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · PLANNED**
+- [ ] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · NEXT — PHASE 6 ACCEPTANCE**
 
-- [x] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · COMPLETE**
-  - Phase 6F provides Ctrl+F, Escape, arrows, Enter, double-click, Ctrl+1, and
-    Ctrl+2 for player discovery/comparison without hijacking multiline editors.
+- [ ] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · NEXT — PHASE 6 ACCEPTANCE**
 
 ### I. Media-guide accuracy
 
@@ -393,11 +406,8 @@ Required identity regressions:
     `NEEDS ATTENTION`; only all applicable passes produce `READY FOR AIR`.
     There is no force-green control.
 
-- [x] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · COMPLETE**
+- [ ] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · NEXT — PHASE 6F**
   - Edit-distance or phonetic tolerance on player-name queries; must not introduce false-positive collisions between distinct players. A tolerance improvement to `SEARCH-004`, not a new search mode.
-  - Length-aware bounded Damerau-Levenshtein runs only after exact/token/prefix/
-    substring matching. Possible matches are labeled, bounded, deterministic,
-    and never automatically selected.
 
 - [x] `UX-010` — Add a character-count preview on copy actions against common graphics-template widths. **P2 · COMPLETE**
   - Central profiles provide 60-character one-line and 120-character extended
@@ -405,39 +415,69 @@ Required identity regressions:
     rewrite it, and are explicitly labeled guidance rather than graphics-system
     validation.
 
-- [x] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · COMPLETE**
+- [ ] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · NEXT — PHASE 6F**
   - Two selected players' stat lines, verified notes, and milestones in parallel columns, each independently source/freshness-labeled. A new screen, not a variant of the existing player card.
-  - Phase 6F uses one neutral aligned metric registry, exact identities,
-    canonical stat formatting/calculation helpers, unavailable-not-zero values,
-    independent fact trust/provenance, source-labeled copy, refresh/game guards,
-    and schema-v3 exact-ID recovery. It makes no winner judgment.
 
-### M. College Résumé tab
+### M. Producer-facing approved enrichment
+
+Only enrichment that passes the existing canonical identity, approval,
+freshness, and source-health gates may leave developer mode. Raw parser output,
+debug exports, ambiguous identities, and unapproved rows remain excluded.
+
+- [ ] `ENRICH-001` — Add a producer-facing `Full Enrichment Refresh` workflow. **P1 · PLANNED — PHASE 7A**
+  - Require deliberate opt-in, per-source progress and health, cancellation,
+    Local/Offline Mode enforcement, and last-known-good retention.
+  - A failed or cancelled source must not replace its prior validated snapshot.
+
+- [ ] `ENRICH-002` — Promote approved media-guide facts to ordinary producer mode. **P0 · PLANNED — PHASE 7A**
+  - Reuse the canonical approval transaction, exact player/team identity,
+    printed/PDF provenance, guide date, reviewer, approval timestamp, and
+    unresolved-warning gates.
+
+- [ ] `ENRICH-003` — Promote approved official game-note facts to ordinary producer mode. **P0 · PLANNED — PHASE 7A**
+  - Require exact official game ID, subject/team identity, source document,
+    page/location, publication/effective date, parser version, freshness, and
+    approval state. Ambiguous or wrong-game rows remain unavailable.
+
+- [ ] `ENRICH-004` — Define and verify an enrichment-capable distribution profile. **P1 · PLANNED — PHASE 7A**
+  - Package only validated approved outputs and their manifests.
+  - Continue excluding raw/debug artifacts, unapproved review queues, caches,
+    manual notes, lineup locks, private session state, and producer exports.
+
+### N. College Résumé tab
 
 The college layer must remain visually and statistically separate from AUSL professional totals.
 
-- [ ] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · BACKLOG**
+- [ ] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · PLANNED — PHASE 7B**
   - Support multiple schools, seasons, transfers, shortened seasons, extra eligibility, and two-way players.
 
-- [ ] `COLLEGE-002` — Add a separate `College Résumé` tab or player-card section. **P2 · BACKLOG**
-  - Proposed sections: Snapshot, Career Totals, Season-by-Season, Honors/Records, and Broadcast Connections.
+- [ ] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · PLANNED — PHASE 7D**
+  - Sections: Snapshot, Schools/Transfer Timeline, College Career Totals,
+    Season-by-Season Summary, Honors/Records, WCWS/Championships, Broadcast
+    Connections, and Sources/Completeness.
 
-- [ ] `COLLEGE-003` — Build a verified core résumé from official AUSL player profiles. **P2 · BACKLOG**
+- [ ] `COLLEGE-003` — Build a verified core résumé from official sources. **P2 · PLANNED — PHASE 7C**
   - School(s), seasons, career batting/pitching totals, final season, championships/WCWS, awards, and records.
 
-- [ ] `COLLEGE-004` — Add source hierarchy and field-level provenance. **P1 · BACKLOG**
+- [ ] `COLLEGE-004` — Add source hierarchy and field-level provenance. **P1 · PLANNED — PHASE 7B**
   - Preferred order: official AUSL profile, NCAA statistics, official school athletics site, manually verified entry.
+  - Every displayed value must retain its own source, effective season/date,
+    retrieval time, and verification state; one good source must not silently
+    validate unrelated fields.
 
-- [ ] `COLLEGE-005` — Add `Verified`, `Partial`, and `Needs review` completeness states. **P1 · BACKLOG**
+- [ ] `COLLEGE-005` — Add `Verified`, `Partial`, and `Needs review` completeness states. **P1 · PLANNED — PHASE 7B**
   - Missing information remains unavailable and is never converted to zero.
 
-- [ ] `COLLEGE-006` — Pilot the résumé with ten varied players before full-roster import. **P2 · BACKLOG**
-  - Include rookies, veterans, transfers, pitchers, and two-way players.
+- [ ] `COLLEGE-006` — Pilot the résumé with ten varied players before full-roster import. **P2 · PLANNED — PHASE 7C**
+  - Include rookies, veterans, transfers, hitters, pitchers, two-way players,
+    award/WCWS résumés, and at least one deliberately incomplete record.
+  - The pilot target is a verified useful résumé, not forced completeness for
+    every season and field.
 
-- [ ] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · BACKLOG**
+- [ ] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · PLANNED — PHASE 7E**
   - Former teammates, conference rivals, champions, homecomings, coaches, and role changes.
 
-- [ ] `COLLEGE-008` — Consider complete season-by-season college statistics only after the pilot proves useful. **P3 · BACKLOG**
+- [ ] `COLLEGE-008` — Consider complete season-by-season college statistics only after the pilot proves useful. **P3 · DEFERRED — PRODUCER DECISION AFTER PHASE 7D**
 
 College display rule example:
 
@@ -448,7 +488,7 @@ COLLEGE CAREER — Oklahoma: .376 AVG, 54 HR, 301 H
 
 College and AUSL numbers must never be combined into one unlabeled career total.
 
-### N. Longer-term ideas
+### O. Longer-term ideas
 
 - [ ] `FUTURE-001` — Live milestone watch that updates pregame thresholds from the live box score. **P3 · BACKLOG**
 
@@ -466,30 +506,22 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 
 Fill in one record when a milestone or major item is completed.
 
-### Phase 6F — Faster discovery and player comparison
+### Phase 6 full acceptance — PENDING
 
-- Completion date: 2026-07-29.
-- Starting commit and baseline: latest remote `main`
-  `d7f255b273acfc52f24aea98c544bbb945391f2b`, the merged Phase 6E PR;
-  **695 passed in 23.39 s** with warnings treated as errors.
-- Branch and reviewed functional commits: `agent/phase6f-search-compare`;
-  `14356a1` deterministic indexed discovery; `20745a0` canonical neutral
-  comparison; `846cbfc` keyboard/UI/schema-v3 integration.
-- Automated acceptance: **83 focused/adjacent tests passed in 1.16 s** and
-  **750 complete offline tests passed in 24.17 s**. A broader Phase 6 adjacency
-  matrix passed **432 tests in 7.22 s**. Compileall, pip check,
-  distribution verification, Git LFS materialization, whitespace validation,
-  and tracked/history privacy/secret scans passed.
-- Windows GUI smoke: real Tk source execution at 1120×720 covered exact/typo/
-  structured-filter discovery, keyboard selection, aligned comparison, wheel
-  scrolling, source-labeled copy, local replacement, exact-game rebuild,
-  Local/Offline Mode, all eight tabs, and exact restart recovery with zero
-  network calls.
-- Full policy/design/evidence/limitations:
-  [Phase_6F_Acceptance_Record.md](Phase_6F_Acceptance_Record.md).
-- Verdict: **PHASE 6F COMPLETE — FULL PHASE 6 REVIEW PENDING**.
-  `UI-002`, the broader `UI-001` review, and the full Phase 6 cross-phase review
-  remain open. Phase 7 has not started.
+- [ ] Phase 6F focused tests and full offline regression pass.
+- [ ] Collision-safe fuzzy search and quick-filter identity tests pass.
+- [ ] Side-by-side comparison preserves independent source, freshness, and
+  verification labels for both players.
+- [ ] Keyboard and scroll reachability pass at the minimum supported window.
+- [ ] Windows 100%, 125%, and 150% scaling pass on target truck hardware.
+- [ ] Privacy and distribution verification exclude all producer-private,
+  raw/debug, and unapproved enrichment artifacts.
+- [ ] Offline startup, Local/Offline Mode, refresh cancellation,
+  last-known-good recovery, session restore, and What Changed remain stable.
+- [ ] Producer workflow smoke covers game selection, player search, fact copy,
+  pin/rundown, used-on-air, comparison, packet export, and recovery.
+- [ ] Completion report records commands, counts, hardware/environment,
+  screenshots or observations, known limitations, and the accepted commit.
 
 ### Phase 6D — Session persistence and crash recovery
 
@@ -1001,6 +1033,19 @@ When working on this tracker:
 8. Keep the detailed implementation guide aligned if a decision materially changes the technical plan.
 
 ## Change log
+
+### 2026-07-29
+
+- Updated the current milestone to Phase 6F plus the full Phase 6 acceptance
+  review; no Phase 6F item is marked complete by this planning update.
+- Promoted approved optional enrichment and the College Résumé from backlog to
+  the ordered Phase 7 roadmap based on direct producer feedback.
+- Added `ENRICH-001` through `ENRICH-004`, made `SPLIT-001` through
+  `SPLIT-003` Phase 7A prerequisites, and assigned `COLLEGE-001` through
+  `COLLEGE-008` to Phases 7B–7E.
+- Deferred exhaustive season-by-season college statistics until the ten-player
+  pilot and producer review prove that the additional breadth is worth its
+  verification and maintenance cost.
 
 ### 2026-07-23
 

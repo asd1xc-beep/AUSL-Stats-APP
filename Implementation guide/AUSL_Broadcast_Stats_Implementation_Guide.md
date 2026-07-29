@@ -1,7 +1,11 @@
 # AUSL Broadcast Stats — Codex Implementation Guide
 
-Version: 1.0  
-Prepared from: `AUSL_BROADCAST_STATS_project_backup_2026-07-18_223756.zip`  
+Version: 1.1
+
+Roadmap updated: 2026-07-29
+
+Prepared from: GitHub `main` at `d7f255b` (through Phase 6E)
+
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 
 ## 1. Purpose
@@ -65,10 +69,19 @@ Codex should establish these source-of-truth rules before changing presentation 
 | Live game facts | Live box score | None | Show last update and stale state |
 | Media-guide biography | Exact TOC player/page mapping | None | Unmatched player is explicitly not included |
 | Official game note | Official PDF plus parsed source location | None | Show verification/source metadata |
+| Approved optional enrichment | Canonical reviewed row plus validated source manifest | Last-known-good approved snapshot | Producer mode may show only rows that pass identity, approval, freshness, and source-health gates |
+| College résumé field | Official AUSL profile, NCAA statistics, or official school athletics source | Explicit manually verified entry | Store provenance per field; missing and conflicting values remain unavailable or needs review |
 | Producer note | Manual-note store | None | Scope explicitly to player/team/game |
 | Projected lineup | Validated lineup lock or active-roster projection | None | Clearly distinguish locked from projected |
 
 ## 5. Recommended implementation sequence
+
+Roadmap note (2026-07-29): Phases 6A–6E are complete on the reviewed `main`
+branch. Phase 6F and a full Phase 6 acceptance review remain required before
+Phase 7 begins. Direct producer feedback makes the College Résumé the next
+major product feature; approved optional enrichment is promoted first because
+the college layer must reuse the same trust, provenance, freshness, and
+last-known-good boundaries.
 
 ### Phase 0 — Baseline, fixtures, and safety rails
 
@@ -812,39 +825,7 @@ Search should support player name/aliases, team, number, position, roster
 status, typo tolerance, and lightweight quick filters. Add side-by-side player
 comparison only after collision-safe identity behavior is tested.
 
-Implementation status (2026-07-29): complete; full Phase 6 cross-phase review
-is still pending. `src/ausl_search.py` owns one local roster index per installed
-database, a nonexecuting quoted query parser, canonical team/position/status/
-number filters, explicit approved-alias support, deterministic match reasons,
-selected-game/all-player scope, out-of-scope explanations, bounded output, and
-conservative length-aware Damerau-Levenshtein typo candidates. Ranking is exact
-full name, exact approved alias, exact name token, prefix, substring, then
-fuzzy. Filters apply first. Fuzzy results are visibly possible matches and
-never auto-select.
-
-Player Lookup renders parsed filters, validation messages, result counts,
-effective scope, match reason, and exact roster identity. Highlighting is
-separate from selection; Enter/double-click explicitly opens the player.
-Ctrl+F, Escape, arrows, Enter, Ctrl+1, and Ctrl+2 support the primary workflow
-without taking over multiline note editors. The lookup list retains its visible
-scrollbar.
-
-`src/ausl_comparison.py` owns a GUI-free, neutral, aligned comparison model and
-one ordered metric registry for current-season and AUSL-career batting,
-pitching, and fielding. It reuses canonical WHIP/innings rules, preserves exact
-player/team/game identity, independently scopes canonical facts, labels
-missing values unavailable, retains roster warnings and two-way roles, and
-contains no winner or better-player field. The new Compare Players tab has a
-visible scrollbar and mouse-wheel navigation. Source-labeled copy records both
-identities, database identity, exact game context, copy time, and text in
-memory only.
-
-Producer-session schema version 3 explicitly migrates versions 1 and 2. It
-persists only exact left/right player IDs and normalized comparison scroll
-position; comparison rows and copy records are rebuilt locally. Missing player
-IDs stay visibly unavailable and are never guessed. Corrupt comparison state
-is discarded without losing valid selected-game, rundown, or What Changed
-state.
+Implementation status: not started.
 
 #### Cross-cutting readability and accessibility
 
@@ -866,29 +847,202 @@ state.
 
 ---
 
-### Phase 7 — Higher-value future features
+### Phase 7 — Producer-facing enrichment and College Résumé
 
-Begin only after Phases 0–6 pass. These are worthwhile, but none should delay reliability work.
+Begin only after Phase 6F and the full Phase 6 release review pass. Phase 7 is
+an ordered set of reviewable units, not one large rewrite.
 
-#### Live milestone watch
+#### 7A. Promote approved optional enrichment
 
-Combine pregame thresholds with live box-score events. Example: `Player needs 2 hits for 100 career` becomes `1 away` after a hit. Preserve the pregame source and label the live calculation time.
+Objective: let an ordinary producer use validated enrichment without exposing
+developer-only, ambiguous, stale, or unapproved material.
 
-#### Verification desk
+Work:
 
-Collect all `needs_review`, stale, ambiguous, or conflicting items in one queue. Permit a producer to approve, correct, suppress, or annotate a fact, with an audit timestamp.
+1. Keep `Quick Refresh (Core)` as the predictable default. Add a deliberate
+   producer-facing `Full Enrichment Refresh` action with a short explanation
+   of the additional sources and expected duration.
+2. Reuse the existing refresh coordinator, per-source staging, validation,
+   cancellation, source-health, Local/Offline Mode, and last-known-good rules.
+   A failed or cancelled enrichment source must not disturb the current
+   approved snapshot.
+3. Promote media-guide rows only through the canonical approval transaction:
+   exact player/team identity, verified match state, printed and PDF
+   provenance, guide date, reviewer, approval timestamp, and no unresolved
+   warning.
+4. Promote official game-note rows only when exact game, subject/team,
+   document, page/location, publication/effective date, parser version,
+   freshness, and approval gates pass.
+5. Complete `SPLIT-001`, `SPLIT-002`, and `SPLIT-003` before splits can appear
+   in ordinary producer suggestions:
+   - exclude `regularSeason` aggregates from situational rankings;
+   - enforce configurable hitter and pitcher sample thresholds;
+   - show sample size on every split;
+   - retain small samples in detail, labeled, but never promote them as a top
+     storyline.
+6. Add an enrichment-capable distribution profile. Include only validated,
+   approved outputs plus source/distribution manifests and visible freshness.
+   Continue excluding raw/debug data, review queues, caches, manual notes,
+   lineup locks, session state, and producer exports.
+7. Keep ordinary startup and all producer browsing network-free. Enrichment
+   must remain usable from the last-known-good local snapshot.
 
-#### Scenario and standings context
+Acceptance criteria:
 
-If the AUSL format makes it useful, calculate clinching/elimination or seeding scenarios from official rules and standings. This requires a versioned rules source and extensive tests; never infer rules from standings alone.
+- Producer mode can run, cancel, and recover from Full Enrichment Refresh
+  without entering developer mode.
+- Ambiguous, unapproved, wrong-game, stale-beyond-policy, or source-unhealthy
+  rows cannot produce air-ready copy.
+- Quick Refresh neither fetches nor rewrites optional enrichment.
+- A failure injected into each optional source leaves its prior validated
+  snapshot usable and reports the failed latest attempt honestly.
+- Distribution verification proves that only allowlisted approved enrichment
+  and its manifests are included.
+- Split tests prove that aggregate and below-threshold rows cannot win a
+  situational ranking.
 
-#### Shared show workflow
+#### 7B. College data foundation
 
-Support export/import of a game package containing selected game, locked lineups, pinned facts, and producer notes. Use conflict-aware revisions and exclude unrelated personal data. Consider multi-user/cloud synchronization only with clear ownership, authentication, and offline behavior.
+Objective: define a durable college résumé model before importing a large,
+uneven historical dataset.
 
-#### News and transaction intake
+Create a normalized specification that can represent:
 
-Add a review-only feed for official AUSL/team announcements. Never insert third-party or social text directly into air-ready copy. Require source link, publication time, subject identity, and producer verification.
+- stable AUSL player identity plus reviewed college identity mappings;
+- multiple schools, transfers, seasons, redshirts, shortened seasons, and
+  extra eligibility;
+- batting, pitching, and two-way roles without forcing one record shape;
+- college career totals and season-level totals as separate record types;
+- honors, records, conference awards, WCWS/championship appearances and
+  results;
+- field-level source, source URL/document, source season/effective date,
+  retrieval time, reviewer, approval time, and parser/manual-entry version;
+- `Verified`, `Partial`, and `Needs review` completeness states.
+
+Recommended source order:
+
+1. Official AUSL player profile for identity and a compact résumé.
+2. NCAA statistics for standardized season/career numbers when available.
+3. Official school athletics pages, rosters, bios, and record books.
+4. Explicit manually verified entry when official sources cannot be
+   normalized automatically.
+
+The hierarchy is a preference, not permission to overwrite silently. Preserve
+conflicting values, choose a displayed value only through a documented
+resolution rule, and retain provenance for the decision. Never infer that two
+similar names are the same player, convert missing fields to zero, or combine
+college and AUSL career totals.
+
+Acceptance criteria:
+
+- The specification round-trips a hitter, pitcher, two-way player, transfer,
+  multi-school career, shortened season, and incomplete record.
+- Every displayed scalar can be traced to a field-level source and
+  verification state.
+- Conflicting and missing values fail closed into review/unavailable states.
+- Schema validation and versioned migration tests pass before production data
+  is imported.
+
+#### 7C. Ten-player college résumé pilot
+
+Objective: prove usefulness and verification cost before full-roster import.
+
+Select ten players across a documented coverage matrix:
+
+- rookie and veteran;
+- single-school and transfer;
+- hitter, pitcher, and two-way player;
+- award winner and WCWS/championship participant;
+- at least one player with intentionally incomplete or conflicting source
+  material.
+
+Build the smallest verified useful résumé first: schools and transfer
+timeline, seasons, batting/pitching career totals when authoritative, final
+season, honors/records, and WCWS/championship context. Do not make complete
+season-by-season statistics a pilot requirement.
+
+For each player, retain a review record that shows source coverage, unresolved
+fields, completeness state, and the exact facts eligible for air-ready copy.
+Have the producer review the ten-player set before the UI or importer is
+generalized.
+
+Acceptance criteria:
+
+- All ten pilots pass exact AUSL-to-college identity review.
+- No field without adequate evidence appears as verified.
+- Batting and pitching totals reconcile to the cited official source or carry
+  an explicit unresolved conflict.
+- A reviewer can understand why each résumé is Verified, Partial, or Needs
+  review without opening raw parser/debug files.
+- Producer feedback confirms the section order and the minimum useful data
+  before full-roster work begins.
+
+#### 7D. College Résumé tab
+
+Objective: make college context fast to use while preserving a hard visual and
+statistical boundary from AUSL professional performance.
+
+Add a separate `College Résumé` tab with:
+
+- Snapshot;
+- Schools and Transfer Timeline;
+- College Career Totals;
+- Season-by-Season Summary;
+- Honors and Records;
+- WCWS and Championships;
+- Broadcast Connections;
+- Sources and Completeness.
+
+Use `COLLEGE CAREER` and explicit school/season labels on every statistic and
+copy action. Never place college numbers in an unlabeled AUSL career field.
+Show sources and completeness close to the fact, while keeping raw/debug
+details out of the producer workflow. Missing sections collapse honestly
+rather than rendering zero-filled tables.
+
+Acceptance criteria:
+
+- A producer can move from an AUSL player to the college résumé and copy a
+  clearly labeled college fact in seconds.
+- Hitters, pitchers, two-way players, transfers, and partial résumés render
+  without exceptions or misleading empty values.
+- College and AUSL totals remain separate in the UI, clipboard, rundown,
+  export, session restore, and What Changed comparisons.
+- Keyboard navigation, minimum window size, visible scrolling, and Windows
+  scaling at 100%, 125%, and 150% pass on target hardware.
+
+#### 7E. Scale and college-based broadcast connections
+
+Objective: expand the accepted pilot safely and generate useful softball
+connections from structured evidence.
+
+1. Extend the reviewed import to the full roster in bounded batches with
+   coverage and unresolved-identity reports.
+2. Model connections from structured identities and dated records: former
+   teammates, former opponents, conference rivalries, shared WCWS appearances,
+   championships, homecomings, coaches, and college-to-pro role changes.
+3. Generate deterministic candidate wording from evidence; do not use
+   unreviewed free-form generation as an air-ready source.
+4. Apply the existing `BroadcastFact` identity, provenance, approval,
+   freshness, copy, pin, used-on-air, and What Changed boundaries.
+5. Revisit complete season-by-season college statistics only after the
+   producer evaluates the pilot. If approved, add them as a later bounded
+   import rather than silently expanding Phase 7D.
+
+Acceptance criteria:
+
+- Every rostered player is either represented with an honest completeness
+  state or listed in a review report; no player is silently omitted.
+- Every connection names the evidence and relevant school/season.
+- Identity or date uncertainty suppresses the connection from air-ready use.
+- Refresh, packaging, session restore, and offline startup remain within the
+  accepted Phase 6 reliability behavior.
+
+#### Deferred until after the College Résumé milestone
+
+Live milestone watch, a broad verification desk, standings/scenario
+calculations, shared multi-user workflow, and news/transaction intake remain
+valuable. They stay behind Phase 7E unless producer feedback or a reliability
+issue changes priority.
 
 ## 6. Function-by-function work map
 
@@ -910,11 +1064,14 @@ Add a review-only feed for official AUSL/team announcements. Never insert third-
 | `src/ausl_stats_app.py` | `generate_pregame_report` | Render section model once; source timestamps; unique filename |
 | `src/ausl_stats_app.py` | `gfx_text`, `copy_gfx` | Null-safe copy, clear season/career labels, status gate |
 | `src/ausl_stats_app.py` | `_schedule_live`, `_auto_refresh`, `_finish_live` | One timer, stale state, deterministic cleanup |
+| `src/ausl_stats_app.py` | Full Enrichment Refresh and college-tab integration | Producer-safe refresh controls; separate College Résumé navigation and copy labels |
 | `src/ausl_data.py` | `roster_frame` | Unknown-by-default status and normalized identifiers |
 | `src/ausl_data.py` | `_clean_media_guide_text`, `fetch_media_guide_frames` | TOC/page-range extraction and audit metadata |
 | `src/ausl_data.py` | `_game_note_category`, `_split_game_note_items`, `fetch_official_game_notes_frame` | Conservative categories, subjects, dates, hashes |
 | `src/ausl_data.py` | `update_all_data`, `_write_excel_atomic`, `load_database` | Per-source staging, validation, manifest, fallback |
 | `src/ausl_data.py` | `_ip_to_outs`, `career_pitching` | Shared innings math and derived-metric validation |
+| New focused college module(s) | Schema, validation, identity mapping, source resolution, and résumé assembly | Keep college business rules testable and outside Tkinter callbacks; avoid a broad framework rewrite |
+| Distribution tooling | Enrichment allowlist and manifest verification | Include only approved outputs; preserve all existing privacy exclusions |
 
 ## 7. Split-stat reliability policy
 
@@ -946,6 +1103,8 @@ Tests must prove that a 6-PA batting split and 1-IP pitching split are not promo
 - media TOC/range parsing, identity validation, and deduplication;
 - game-note classification, subject extraction, hashing, freshness, balance, and priority;
 - split qualification and sample labels;
+- college schema validation, identity mapping, source conflicts, completeness,
+  two-way records, transfers, and college/AUSL label separation;
 - copy text for every status and copy type.
 
 ### Integration tests
@@ -957,6 +1116,10 @@ Tests must prove that a 6-PA batting split and 1-IP pitching split are not promo
 - live-response parser and stale-live detection;
 - database refresh followed by selected-card and producer-prep rerender;
 - manual-note and lineup atomic-write/migration recovery.
+- Full Enrichment Refresh success, cancellation, per-source failure, and
+  last-known-good retention;
+- college pilot import, field-level provenance, partial records, and
+  conflicting-source review behavior.
 
 ### Regression sweeps
 
@@ -966,11 +1129,15 @@ Tests must prove that a 6-PA batting split and 1-IP pitching split are not promo
 - repeated manual/automatic refresh: one timer, no duplicate job;
 - injected failure for each optional source: app remains usable and retains prior data;
 - packet sections: no accidental duplicate storyline blocks.
+- every college résumé: no college/AUSL total mixing and every displayed field
+  has provenance plus a completeness state;
+- every college connection: exact player/school/season identity and
+  deterministic evidence-backed wording.
 
 ### Manual Windows smoke test
 
 1. Start from a clean install and from an existing-data upgrade.
-2. Open all six main tabs.
+2. Open all main tabs; after Phase 7D this includes `College Résumé`.
 3. Select two different games between repeat opponents.
 4. Search by name, team, position, `22`, `#22`, `inactive`, and `reserve`.
 5. Open active, inactive, reserve, and unknown-status player cards.
@@ -981,6 +1148,11 @@ Tests must prove that a 6-PA batting split and 1-IP pitching split are not promo
 10. Enable/disable live auto-refresh repeatedly and confirm only one timer runs.
 11. Generate two packets and verify unique filenames and consistent records.
 12. Test minimum supported window size and Windows scaling at 100%, 125%, and 150%.
+13. In ordinary producer mode, run Full Enrichment Refresh, cancel once, retry,
+    and confirm that only approved media/game-note/split facts become
+    air-ready.
+14. Open hitter, pitcher, two-way, transfer, and partial College Résumés;
+    exercise copy, pin, export, session restore, and What Changed behavior.
 
 ## 9. Suggested implementation boundaries
 
@@ -1000,6 +1172,12 @@ OfficialNote
 StorylineCandidate
 ProducerPrep
 RefreshResult
+CollegeIdentity
+CollegeProgramStint
+CollegeSeasonLine
+CollegeHonor
+CollegeFieldProvenance
+CollegeResume
 ```
 
 Recommended services:
@@ -1093,8 +1271,17 @@ does not claim unattended live-broadcast readiness.
 
 ### Gate D — Feature expansion
 
-- Phase 6 complete and stable through rehearsal/live use.
-- Only then begin Phase 7 capabilities.
+- Phase 6F and the full Phase 6 acceptance review are complete.
+- Split reliability policy passes before producer-facing split promotion.
+- Only then begin Phase 7A.
+
+### Gate E — College Résumé rollout
+
+- Phase 7A producer-facing enrichment passes source-failure, cancellation,
+  packaging/privacy, offline-startup, and target-Windows smoke checks.
+- Phase 7B schema and provenance rules pass review.
+- Phase 7C ten-player pilot passes identity/data review and producer sign-off.
+- Only then generalize the UI/importer and scale beyond the pilot.
 
 ## 11. Definition of done for every change
 
@@ -1109,7 +1296,7 @@ A task is done only when:
 - the relevant Windows manual smoke check passes;
 - the implementation notes identify any remaining assumption that a producer must validate.
 
-## 12. First Codex work order
+## 12. Original first Codex work order (historical)
 
 The safest first implementation session is intentionally limited:
 
@@ -1122,3 +1309,22 @@ The safest first implementation session is intentionally limited:
 7. Run the full suite and a six-tab Windows smoke test.
 
 Do not start media-guide parsing, game-note classification, or a UI redesign in that first work order. The initial milestone should leave the current application visibly familiar but materially safer for a broadcast producer.
+
+## 13. Current next work order
+
+1. Complete Phase 6F without weakening exact identity or fact provenance.
+2. Run the full Phase 6 acceptance review, including target-Windows scaling,
+   keyboard/scroll reachability, privacy, distribution verification, session
+   recovery, Offline Mode, cancellation, and the producer workflow.
+3. Record failures as new or reopened stable tracker items. Do not begin Phase
+   7 while a P0/P1 release blocker remains open.
+4. Begin Phase 7A with failing-first tests for split qualification and negative
+   enrichment gates.
+5. Add the producer-facing Full Enrichment Refresh only after its cancellation,
+   per-source failure, last-known-good, approval, and packaging tests pass.
+6. Stop after Phase 7A acceptance. Review its trust boundaries before creating
+   the Phase 7B college schema.
+
+Do not combine Phase 7A with college ingestion in one implementation pass. The
+purpose of 7A is to prove the producer-facing trust boundary that the College
+Résumé will reuse.
