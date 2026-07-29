@@ -32,24 +32,24 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 6 — Session persistence and crash recovery (Phase 6D)
+### Milestone 6 — Post-refresh What Changed (Phase 6E)
 
-Target outcome for the current phase: preserve the producer's exact canonical
-selected-game/rundown working state across clean restarts and crashes without
-weakening Phase 6A–6C identity, reconciliation, privacy, or readiness gates.
+Target outcome for the current phase: compare consecutive validated installed
+snapshots and surface only material broadcast changes without weakening Phase
+6A–6D identity, source-health, rundown reconciliation, privacy, readiness, or
+atomic-session guarantees.
 
-Current implementation unit: Phase 6D. `UX-008` is `[x]` COMPLETE with a
-versioned primitive-only schema, per-user private storage, serialized
-debounced autosave, same-directory atomic replacement, validated backup,
-corrupt/incompatible quarantine, clean-versus-crash lifecycle, exact schedule
-restore, canonical rundown reconciliation, normalized UI restore, visible
-save failure, and archive-before-clear Start Fresh. Phase 6E and 6F remain
-`PLANNED`/`BACKLOG` and have not started.
+Current implementation unit: Phase 6E. `UX-004` is `[x]` COMPLETE with a
+versioned deterministic snapshot digest, immutable typed change events, pure
+severity policy, conservative exact-identity detection, bounded local worker,
+Game Day filters/cards/actions, persisted acknowledgements, schema-v1-to-v2
+migration, and atomic baseline/report persistence. Phase 6F remains `PLANNED`
+and has not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6D COMPLETE — 2026-07-28 — PHASE 6E AND 6F NOT STARTED**
+Status: **PHASE 6E COMPLETE — 2026-07-28 — PHASE 6F NOT STARTED**
 
 ## Master improvement list
 
@@ -332,8 +332,17 @@ Required identity regressions:
     sections are separate. Clipboard copy and exclusive text export preserve
     source/freshness and write only under the private game-packet area.
 
-- [ ] `UX-004` — Add a post-refresh `What changed?` panel. **P2 · BACKLOG**
-  - Roster/status, records, lineups, starters, injuries, milestones, and invalidated facts.
+- [x] `UX-004` — Add a post-refresh `What changed?` panel. **P2 · COMPLETE**
+  - Roster/status/team assignment, official record/rank/games-back/streak,
+    exact-game schedule/final score, locked-lineup state, source health,
+    canonical fact/evidence/verification, milestones, pinned impact, used
+    history impact, and invalidation are compared only between validated
+    normalized snapshots.
+  - The first valid snapshot establishes a quiet baseline. Successful
+    comparisons promote atomically with the result; failed/cancelled refreshes
+    and failed comparisons retain the prior baseline/report. Stable event IDs,
+    exact scope, pure severity, filters, review actions, and acknowledgements
+    never mutate facts or silently replace pins.
 
 - [x] `UX-005` — Preserve source/freshness metadata when copying or pinning a fact. **P1 · COMPLETE**
   - Phase 6B copy events retain exact fact ID, evidence hash, full provenance,
@@ -356,10 +365,12 @@ Required identity regressions:
 
 - [x] `UX-008` — Add session/crash recovery for producer working state. **P1 · COMPLETE**
   - Autosave and restore selected game, pinned/used-fact queue, and scroll position. Distinct from lineup-lock and manual-note storage, which are already atomic-written; this protects in-progress prep, not source data.
-  - Schema v1 persists canonical primitives under the current user's private
+  - Schema v2 (with explicit v1 migration) persists canonical primitives under
     application-data directory. One 500 ms debounced timer covers exact game,
     rundown/use/order/target/reconciliation, Game Day view/filters, unique
-    player selection, and normalized fact/rundown scroll. Atomic saves retain
+    player selection, normalized fact/rundown/change scroll, Phase 6E baseline,
+    latest complete comparison, acknowledgement IDs, bounded history
+    summaries, and refresh metadata. Atomic saves retain
     one validated backup; corrupt/future/oversized state is quarantined and
     fails closed. Exact game/team/season identity is never guessed. Clean
     resume, crash recovery, save failure, and Start Fresh are visibly

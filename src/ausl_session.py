@@ -1,4 +1,4 @@
-"""Private, versioned producer-session persistence for Phase 6D.
+"""Private, versioned producer-session persistence for Phases 6D and 6E.
 
 The module is GUI-free and network-free. It accepts only primitive JSON data,
 reconstructs canonical Phase 6B/6C models through their validation paths, and
@@ -15,12 +15,16 @@ import sys
 import tempfile
 import threading
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from ausl_changes import (
+    BroadcastSnapshotDigest,
+    ChangeComparison,
+)
 from ausl_facts import (
     BroadcastFact,
     FactCategory,
@@ -39,7 +43,7 @@ from ausl_rundown import (
 )
 
 
-SESSION_SCHEMA_VERSION = 1
+SESSION_SCHEMA_VERSION = 2
 SESSION_FILENAME = "producer_session.json"
 SESSION_BACKUP_FILENAME = "producer_session.backup.json"
 SESSION_TEMP_PREFIX = ".producer-session-"
@@ -50,12 +54,14 @@ MAX_ENTRIES_PER_GAME = 250
 MAX_USED_PER_GAME = 500
 MAX_PROVENANCE_ITEMS = 32
 MAX_STRING_LENGTH = 16_384
+MAX_CHANGE_ACKNOWLEDGEMENTS = 1_000
+MAX_CHANGE_HISTORY = 5
 _GAME_ID_RE = re.compile(r"\d+")
 _TEAM_CODE_RE = re.compile(r"[A-Z0-9]{2,12}")
 
 
 class SessionValidationError(ValueError):
-    """Raised when untrusted persisted state does not satisfy the v1 schema."""
+    """Raised when untrusted persisted state does not satisfy the current schema."""
 
 
 class SessionLifecycle(str, Enum):
@@ -106,6 +112,10 @@ class SessionUIState:
     selected_player_id: str | None = None
     fact_scroll_fraction: float = 0.0
     rundown_scroll_fraction: float = 0.0
+    what_changed_filter: str = "All Changes"
+    what_changed_team_filter: str = "Both teams"
+    what_changed_category_filter: str = "All categories"
+    what_changed_scroll_fraction: float = 0.0
     prior_offline_mode: bool = False
 
     def __post_init__(self):
@@ -116,6 +126,9 @@ class SessionUIState:
             "fact_team_filter",
             "fact_category_filter",
             "fact_template_profile",
+            "what_changed_filter",
+            "what_changed_team_filter",
+            "what_changed_category_filter",
         ):
             object.__setattr__(self, name, _string(getattr(self, name), name))
         if not isinstance(self.show_used, bool):
@@ -125,7 +138,11 @@ class SessionUIState:
         if self.selected_player_id is not None:
             player = _string(self.selected_player_id, "selected_player_id")
             object.__setattr__(self, "selected_player_id", player or None)
-        for name in ("fact_scroll_fraction", "rundown_scroll_fraction"):
+        for name in (
+            "fact_scroll_fraction",
+            "rundown_scroll_fraction",
+            "what_changed_scroll_fraction",
+        ):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise SessionValidationError(f"{name} scroll value must be numeric")
@@ -133,6 +150,237 @@ class SessionUIState:
             if normalized < 0.0 or normalized > 1.0:
                 raise SessionValidationError(f"{name} scroll value must be 0 through 1")
             object.__setattr__(self, name, normalized)
+
+
+@dataclass(frozen=True)
+class RefreshComparisonMetadata:
+    state: str
+    completed_at: str
+    affected_source: str
+    error_summary: str = ""
+
+    def __post_init__(self):
+        state = _string(self.state, "refresh comparison state").lower()
+        if state not in {
+            "baseline_created",
+            "success",
+            "failed",
+            "cancelled",
+            "local_reload",
+            "comparison_failed",
+        }:
+            raise SessionValidationError("Unknown refresh comparison state")
+        object.__setattr__(self, "state", state)
+        timestamp = _parse_timestamp(
+            self.completed_at, "refresh comparison completed_at"
+        )
+        object.__setattr__(self, "completed_at", timestamp.isoformat())
+        object.__setattr__(
+            self,
+            "affected_source",
+            _string(self.affected_source, "affected_source"),
+        )
+        object.__setattr__(
+            self,
+            "error_summary",
+            _string(self.error_summary, "error_summary", allow_empty=True),
+        )
+
+
+@dataclass(frozen=True)
+class ComparisonHistorySummary:
+    before_snapshot_id: str
+    after_snapshot_id: str
+    detected_at: str
+    blocking_count: int
+    attention_count: int
+    info_count: int
+
+    def __post_init__(self):
+        for name in ("before_snapshot_id", "after_snapshot_id"):
+            object.__setattr__(self, name, _string(getattr(self, name), name))
+        timestamp = _parse_timestamp(self.detected_at, "history detected_at")
+        object.__setattr__(self, "detected_at", timestamp.isoformat())
+        for name in ("blocking_count", "attention_count", "info_count"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise SessionValidationError(f"{name} must be a non-negative integer")
+
+    @classmethod
+    def from_comparison(cls, comparison: ChangeComparison):
+        if not isinstance(comparison, ChangeComparison):
+            raise SessionValidationError("Validated comparison required")
+        return cls(
+            before_snapshot_id=comparison.before_snapshot_id,
+            after_snapshot_id=comparison.after_snapshot_id,
+            detected_at=comparison.detected_at,
+            blocking_count=comparison.blocking_count,
+            attention_count=comparison.attention_count,
+            info_count=comparison.info_count,
+        )
+
+
+@dataclass(frozen=True)
+class SessionChangeState:
+    baseline: BroadcastSnapshotDigest | None = None
+    latest_comparison: ChangeComparison | None = None
+    acknowledged_event_ids: tuple[str, ...] = ()
+    recent_history: tuple[ComparisonHistorySummary, ...] = ()
+    refresh_metadata: RefreshComparisonMetadata | None = None
+    recovery_warning: str = ""
+
+    def __post_init__(self):
+        if self.baseline is not None and not isinstance(
+            self.baseline, BroadcastSnapshotDigest
+        ):
+            raise SessionValidationError("Change baseline is invalid")
+        if self.latest_comparison is not None and not isinstance(
+            self.latest_comparison, ChangeComparison
+        ):
+            raise SessionValidationError("Latest change comparison is invalid")
+        if self.latest_comparison is not None and self.baseline is None:
+            raise SessionValidationError(
+                "Latest change comparison requires a validated baseline"
+            )
+        if (
+            self.latest_comparison is not None
+            and self.latest_comparison.after_snapshot_id
+            != self.baseline.snapshot_id
+        ):
+            raise SessionValidationError(
+                "Latest change comparison does not match the active baseline"
+            )
+        acknowledgements = tuple(
+            dict.fromkeys(
+                _string(value, "acknowledged event_id")
+                for value in self.acknowledged_event_ids
+            )
+        )[-MAX_CHANGE_ACKNOWLEDGEMENTS:]
+        object.__setattr__(
+            self, "acknowledged_event_ids", tuple(sorted(acknowledgements))
+        )
+        history = tuple(self.recent_history)
+        if any(not isinstance(item, ComparisonHistorySummary) for item in history):
+            raise SessionValidationError("Comparison history is invalid")
+        object.__setattr__(self, "recent_history", history[-MAX_CHANGE_HISTORY:])
+        if self.refresh_metadata is not None and not isinstance(
+            self.refresh_metadata, RefreshComparisonMetadata
+        ):
+            raise SessionValidationError("Refresh comparison metadata is invalid")
+        object.__setattr__(
+            self,
+            "recovery_warning",
+            _string(
+                self.recovery_warning,
+                "change recovery warning",
+                allow_empty=True,
+            ),
+        )
+
+    def with_refresh_outcome(
+        self,
+        *,
+        state: str,
+        completed_at: datetime | str,
+        affected_source: str,
+        error_summary: str = "",
+    ):
+        timestamp = (
+            completed_at.isoformat()
+            if isinstance(completed_at, datetime)
+            else completed_at
+        )
+        return replace(
+            self,
+            refresh_metadata=RefreshComparisonMetadata(
+                state=state,
+                completed_at=timestamp,
+                affected_source=affected_source,
+                error_summary=error_summary,
+            ),
+        )
+
+    def establish_first_baseline(
+        self,
+        digest: BroadcastSnapshotDigest,
+        *,
+        completed_at: datetime | str,
+        affected_source: str = "installed_snapshot",
+    ):
+        if not isinstance(digest, BroadcastSnapshotDigest):
+            raise SessionValidationError("Validated baseline digest required")
+        timestamp = (
+            completed_at.isoformat()
+            if isinstance(completed_at, datetime)
+            else completed_at
+        )
+        return replace(
+            self,
+            baseline=digest,
+            latest_comparison=None,
+            acknowledged_event_ids=(),
+            recent_history=(),
+            refresh_metadata=RefreshComparisonMetadata(
+                state="baseline_created",
+                completed_at=timestamp,
+                affected_source=affected_source,
+            ),
+            recovery_warning="",
+        )
+
+    def promote(
+        self,
+        digest: BroadcastSnapshotDigest,
+        comparison: ChangeComparison,
+        *,
+        affected_source: str = "installed_snapshot",
+    ):
+        if not isinstance(digest, BroadcastSnapshotDigest) or not isinstance(
+            comparison, ChangeComparison
+        ):
+            raise SessionValidationError("Validated digest and comparison required")
+        if comparison.after_snapshot_id != digest.snapshot_id:
+            raise SessionValidationError("Comparison does not describe new baseline")
+        history = (
+            *self.recent_history,
+            ComparisonHistorySummary.from_comparison(comparison),
+        )
+        current_ids = {item.event_id for item in comparison.events}
+        return replace(
+            self,
+            baseline=digest,
+            latest_comparison=comparison,
+            acknowledged_event_ids=tuple(
+                item
+                for item in self.acknowledged_event_ids
+                if item in current_ids
+            ),
+            recent_history=history,
+            refresh_metadata=RefreshComparisonMetadata(
+                state="success",
+                completed_at=comparison.detected_at,
+                affected_source=affected_source,
+            ),
+            recovery_warning="",
+        )
+
+    def acknowledge(self, event_ids: Iterable[str]):
+        values = {
+            *self.acknowledged_event_ids,
+            *(_string(item, "event_id") for item in event_ids),
+        }
+        return replace(self, acknowledged_event_ids=tuple(values))
+
+    def clear_acknowledgements(self, event_ids: Iterable[str]):
+        removed = {_string(item, "event_id") for item in event_ids}
+        return replace(
+            self,
+            acknowledged_event_ids=tuple(
+                item
+                for item in self.acknowledged_event_ids
+                if item not in removed
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -145,6 +393,7 @@ class SessionSnapshot:
     selected_game: GameIdentity | None = None
     rundown_states: tuple[GameRundownState, ...] = ()
     ui_state: SessionUIState = field(default_factory=SessionUIState)
+    change_state: SessionChangeState = field(default_factory=SessionChangeState)
 
     def __post_init__(self):
         if self.schema_version != SESSION_SCHEMA_VERSION:
@@ -186,6 +435,8 @@ class SessionSnapshot:
         )
         if not isinstance(self.ui_state, SessionUIState):
             raise SessionValidationError("ui_state is invalid")
+        if not isinstance(self.change_state, SessionChangeState):
+            raise SessionValidationError("change_state is invalid")
 
     @classmethod
     def new(
@@ -594,8 +845,93 @@ def _ui_from_dict(value: Any) -> SessionUIState:
         selected_player_id=data.get("selected_player_id"),
         fact_scroll_fraction=data.get("fact_scroll_fraction", 0.0),
         rundown_scroll_fraction=data.get("rundown_scroll_fraction", 0.0),
+        what_changed_filter=data.get("what_changed_filter", "All Changes"),
+        what_changed_team_filter=data.get(
+            "what_changed_team_filter", "Both teams"
+        ),
+        what_changed_category_filter=data.get(
+            "what_changed_category_filter", "All categories"
+        ),
+        what_changed_scroll_fraction=data.get(
+            "what_changed_scroll_fraction", 0.0
+        ),
         prior_offline_mode=data.get("prior_offline_mode", False),
     )
+
+
+def _comparison_history_from_dict(value: Any, label: str) -> ComparisonHistorySummary:
+    data = _mapping(value, label)
+    return ComparisonHistorySummary(
+        before_snapshot_id=data.get("before_snapshot_id"),
+        after_snapshot_id=data.get("after_snapshot_id"),
+        detected_at=data.get("detected_at"),
+        blocking_count=_integer(data.get("blocking_count"), f"{label}.blocking_count"),
+        attention_count=_integer(
+            data.get("attention_count"), f"{label}.attention_count"
+        ),
+        info_count=_integer(data.get("info_count"), f"{label}.info_count"),
+    )
+
+
+def _refresh_metadata_from_dict(value: Any) -> RefreshComparisonMetadata | None:
+    if value is None:
+        return None
+    data = _mapping(value, "change_state.refresh_metadata")
+    return RefreshComparisonMetadata(
+        state=data.get("state"),
+        completed_at=data.get("completed_at"),
+        affected_source=data.get("affected_source"),
+        error_summary=data.get("error_summary", ""),
+    )
+
+
+def _change_state_from_dict(value: Any) -> SessionChangeState:
+    if value is None:
+        return SessionChangeState()
+    try:
+        data = _mapping(value, "change_state")
+        raw_acknowledgements = _list(
+            data.get("acknowledged_event_ids", []),
+            "change_state.acknowledged_event_ids",
+            MAX_CHANGE_ACKNOWLEDGEMENTS,
+        )
+        raw_history = _list(
+            data.get("recent_history", []),
+            "change_state.recent_history",
+            MAX_CHANGE_HISTORY,
+        )
+        return SessionChangeState(
+            baseline=(
+                BroadcastSnapshotDigest.from_dict(data["baseline"])
+                if data.get("baseline") is not None
+                else None
+            ),
+            latest_comparison=(
+                ChangeComparison.from_dict(data["latest_comparison"])
+                if data.get("latest_comparison") is not None
+                else None
+            ),
+            acknowledged_event_ids=tuple(raw_acknowledgements),
+            recent_history=tuple(
+                _comparison_history_from_dict(
+                    item, f"change_state.recent_history[{index}]"
+                )
+                for index, item in enumerate(raw_history)
+            ),
+            refresh_metadata=_refresh_metadata_from_dict(
+                data.get("refresh_metadata")
+            ),
+            recovery_warning=data.get("recovery_warning", ""),
+        )
+    except (SessionValidationError, TypeError, ValueError, KeyError):
+        # Phase 6E state is advisory. A damaged feed must not make an otherwise
+        # valid Phase 6D selected game or rundown unrecoverable.
+        return SessionChangeState(
+            recovery_warning=(
+                "Saved What Changed state is unavailable; the valid producer "
+                "session and rundown were recovered."
+            )
+        )
 
 
 def session_from_dict(value: Any) -> SessionSnapshot:
@@ -628,6 +964,7 @@ def session_from_dict(value: Any) -> SessionSnapshot:
         selected_game=_game_from_dict(data.get("selected_game")),
         rundown_states=states,
         ui_state=_ui_from_dict(data.get("ui_state")),
+        change_state=_change_state_from_dict(data.get("change_state")),
     )
 
 
@@ -643,6 +980,30 @@ def _snapshot_payload(snapshot: SessionSnapshot) -> dict[str, Any]:
         ),
         "rundown_states": [state.to_dict() for state in snapshot.rundown_states],
         "ui_state": asdict(snapshot.ui_state),
+        "change_state": {
+            "baseline": (
+                snapshot.change_state.baseline.to_dict()
+                if snapshot.change_state.baseline
+                else None
+            ),
+            "latest_comparison": (
+                snapshot.change_state.latest_comparison.to_dict()
+                if snapshot.change_state.latest_comparison
+                else None
+            ),
+            "acknowledged_event_ids": list(
+                snapshot.change_state.acknowledged_event_ids
+            ),
+            "recent_history": [
+                asdict(item) for item in snapshot.change_state.recent_history
+            ],
+            "refresh_metadata": (
+                asdict(snapshot.change_state.refresh_metadata)
+                if snapshot.change_state.refresh_metadata
+                else None
+            ),
+            "recovery_warning": snapshot.change_state.recovery_warning,
+        },
     }
 
 
