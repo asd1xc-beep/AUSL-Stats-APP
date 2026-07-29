@@ -152,6 +152,7 @@ def aggregate_game_day_readiness(
     offline_mode: bool,
     now: datetime | None = None,
     session_issue: Mapping[str, Any] | None = None,
+    change_issue: Mapping[str, Any] | None = None,
 ) -> GameDayReadiness:
     """Aggregate one exact game's current operational readiness.
 
@@ -543,6 +544,21 @@ def aggregate_game_day_readiness(
                 _text(session_issue.get("detail"))
                 or "Producer-session persistence state is unavailable.",
                 bool(session_issue.get("blocking")),
+            )
+        )
+
+    if change_issue:
+        issue_state = _text(change_issue.get("state")).casefold()
+        if issue_state not in {"warning", "fail", "unavailable"}:
+            issue_state = "unavailable"
+        checks.append(
+            ReadinessCheck(
+                "material_changes",
+                "Material changes reviewed",
+                issue_state,
+                _text(change_issue.get("detail"))
+                or "Material-change review state is unavailable.",
+                bool(change_issue.get("blocking")),
             )
         )
 

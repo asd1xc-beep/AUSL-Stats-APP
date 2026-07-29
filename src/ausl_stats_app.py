@@ -15,6 +15,14 @@ from tkinter import messagebox, ttk
 
 import pandas as pd
 
+from ausl_changes import (
+    BroadcastSnapshotDigest,
+    ChangeComparison,
+    ChangeComparisonContext,
+    ChangeSeverity,
+    build_snapshot_digest,
+    compare_snapshot_digests,
+)
 from ausl_data import (
     SEASONS,
     TEAM_CODES,
@@ -69,6 +77,7 @@ from ausl_session import (
     SessionLoadStatus,
     SessionSnapshot,
     SessionStore,
+    SessionChangeState,
     SessionUIState,
 )
 
@@ -1468,6 +1477,16 @@ class AUSLStatsApp:
         self._fact_build_lock = threading.Lock()
         self._last_fact_copy_event = None
         self._rundown_session = RundownSession()
+        self._change_state = SessionChangeState()
+        self._change_state = SessionChangeState()
+        self._change_build_generation = 0
+        self._change_build_pending = None
+        self._change_build_running = False
+        self._change_build_lock = threading.Lock()
+        self._change_callback_pending = False
+        self._change_status = "Waiting for a validated installed snapshot."
+        self._change_last_error = ""
+        self._next_change_comparison_source = "local_reload"
         self._configure_session_persistence(store=session_store)
         self._main_thread_results = queue.Queue()
         self._main_thread_poll_id = None
@@ -1504,6 +1523,7 @@ class AUSLStatsApp:
         self._session_base_snapshot = loaded.snapshot or SessionSnapshot.new(
             now=self._session_now()
         )
+        self._change_state = self._session_base_snapshot.change_state
         self._session_recovery_visible = loaded.status in {
             SessionLoadStatus.RECOVERED,
             SessionLoadStatus.BACKUP_RECOVERED,
@@ -1637,6 +1657,24 @@ class AUSLStatsApp:
             rundown_scroll_fraction=self._canvas_scroll_fraction(
                 getattr(self, "rundown_canvas", None)
             ),
+            what_changed_filter=(
+                self.what_changed_filter_var.get()
+                if hasattr(self, "what_changed_filter_var")
+                else "All Changes"
+            ),
+            what_changed_team_filter=(
+                self.what_changed_team_filter_var.get()
+                if hasattr(self, "what_changed_team_filter_var")
+                else "Both teams"
+            ),
+            what_changed_category_filter=(
+                self.what_changed_category_filter_var.get()
+                if hasattr(self, "what_changed_category_filter_var")
+                else "All categories"
+            ),
+            what_changed_scroll_fraction=self._canvas_scroll_fraction(
+                getattr(self, "what_changed_canvas", None)
+            ),
             prior_offline_mode=bool(getattr(self, "_offline_mode", False)),
         )
         return SessionSnapshot(
@@ -1648,6 +1686,7 @@ class AUSLStatsApp:
             selected_game=selected_identity,
             rundown_states=self._ensure_rundown_session().states,
             ui_state=ui_state,
+            change_state=getattr(self, "_change_state", SessionChangeState()),
         )
 
     def _schedule_session_autosave(self, reason="session changed"):
@@ -1794,10 +1833,17 @@ class AUSLStatsApp:
                 ("fact_category_filter_var", ui.fact_category_filter),
                 ("fact_template_profile_var", ui.fact_template_profile),
                 ("fact_show_used_var", ui.show_used),
+                ("what_changed_filter_var", ui.what_changed_filter),
+                ("what_changed_team_filter_var", ui.what_changed_team_filter),
+                (
+                    "what_changed_category_filter_var",
+                    ui.what_changed_category_filter,
+                ),
             ):
                 variable = getattr(self, name, None)
                 if variable is not None:
                     variable.set(value)
+            self._restore_change_session_state(snapshot)
             self._select_notebook_text(
                 getattr(self, "main_tabs", None), ui.main_tab
             )
@@ -1807,6 +1853,9 @@ class AUSLStatsApp:
             self._restore_saved_player(ui.selected_player_id)
             self._render_fact_cards()
             self._render_rundown()
+            change_renderer = getattr(self, "_render_change_cards", None)
+            if callable(change_renderer):
+                change_renderer()
             self.refresh_game_day_dashboard()
             self.root.after(
                 0,
@@ -1848,10 +1897,31 @@ class AUSLStatsApp:
             self.selected_player_id = raw_id
         self.render_player(row)
 
+    def _restore_change_session_state(self, snapshot):
+        if not isinstance(snapshot, SessionSnapshot):
+            return False
+        self._change_state = snapshot.change_state
+        ui = snapshot.ui_state
+        for name, value in (
+            ("what_changed_filter_var", ui.what_changed_filter),
+            ("what_changed_team_filter_var", ui.what_changed_team_filter),
+            (
+                "what_changed_category_filter_var",
+                ui.what_changed_category_filter,
+            ),
+        ):
+            variable = getattr(self, name, None)
+            if variable is not None:
+                variable.set(value)
+        if snapshot.change_state.recovery_warning:
+            self._change_status = snapshot.change_state.recovery_warning
+        return True
+
     def _restore_session_scroll_positions(self, ui_state):
         for canvas_name, fraction in (
             ("fact_cards_canvas", ui_state.fact_scroll_fraction),
             ("rundown_canvas", ui_state.rundown_scroll_fraction),
+            ("what_changed_canvas", ui_state.what_changed_scroll_fraction),
         ):
             canvas = getattr(self, canvas_name, None)
             if canvas is not None:
@@ -1902,6 +1972,9 @@ class AUSLStatsApp:
             ("fact_category_filter_var", "All categories"),
             ("fact_template_profile_var", "60 — one line"),
             ("fact_show_used_var", False),
+            ("what_changed_filter_var", "All Changes"),
+            ("what_changed_team_filter_var", "Both teams"),
+            ("what_changed_category_filter_var", "All categories"),
         ):
             variable = getattr(self, name, None)
             if variable is not None:
@@ -1941,6 +2014,12 @@ class AUSLStatsApp:
         if fact_lock is not None:
             with fact_lock:
                 self._fact_build_pending = None
+        if hasattr(self, "_change_build_generation"):
+            self._change_build_generation += 1
+        change_lock = getattr(self, "_change_build_lock", None)
+        if change_lock is not None:
+            with change_lock:
+                self._change_build_pending = None
         self.root.destroy()
 
     def _style(self):
@@ -2167,9 +2246,11 @@ class AUSLStatsApp:
         )
         facts_view = ttk.Frame(self.game_day_views, padding=4)
         rundown_view = ttk.Frame(self.game_day_views, padding=4)
+        changes_view = ttk.Frame(self.game_day_views, padding=4)
         readiness_view = ttk.Frame(self.game_day_views, padding=4)
         self.game_day_views.add(facts_view, text="Air-Ready Facts")
         self.game_day_views.add(rundown_view, text="Rundown")
+        self.game_day_views.add(changes_view, text="What Changed?")
         self.game_day_views.add(readiness_view, text="Readiness Details")
         self.game_day_views.bind(
             "<<NotebookTabChanged>>", self._on_session_view_changed
@@ -2178,6 +2259,7 @@ class AUSLStatsApp:
         readiness_view.rowconfigure(1, weight=1)
         self._build_fact_panel(facts_view)
         self._build_rundown_panel(rundown_view)
+        self._build_change_panel(changes_view)
 
         self.game_day_selected_var = tk.StringVar(
             value="No official game selected."
@@ -2380,6 +2462,130 @@ class AUSLStatsApp:
         self._bind_fact_cards_mousewheel(self.fact_cards_canvas)
         self._bind_fact_cards_mousewheel(self.fact_cards_container)
         self._render_fact_cards()
+
+    def _build_change_panel(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
+        controls = ttk.LabelFrame(parent, text="What Changed?", padding=6)
+        controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        controls.columnconfigure(9, weight=1)
+        self.what_changed_filter_var = tk.StringVar(value="All Changes")
+        self.what_changed_team_filter_var = tk.StringVar(value="Both teams")
+        self.what_changed_category_filter_var = tk.StringVar(
+            value="All categories"
+        )
+        self.what_changed_summary_var = tk.StringVar(
+            value="No completed comparison report."
+        )
+        self.what_changed_status_var = tk.StringVar(
+            value="Waiting for a validated installed snapshot."
+        )
+        for column, (label, variable, values, width) in enumerate(
+            (
+                (
+                    "View",
+                    self.what_changed_filter_var,
+                    (
+                        "All Changes",
+                        "Needs Attention",
+                        "Selected Game",
+                        "Pinned",
+                        "Used",
+                    ),
+                    18,
+                ),
+                (
+                    "Team",
+                    self.what_changed_team_filter_var,
+                    ("Both teams",),
+                    14,
+                ),
+                (
+                    "Category",
+                    self.what_changed_category_filter_var,
+                    ("All categories",),
+                    18,
+                ),
+            )
+        ):
+            base = column * 2
+            ttk.Label(controls, text=f"{label}:").grid(
+                row=0, column=base, sticky="w", padx=(0, 4)
+            )
+            picker = ttk.Combobox(
+                controls,
+                textvariable=variable,
+                values=values,
+                state="readonly",
+                width=width,
+            )
+            picker.grid(row=0, column=base + 1, padx=(0, 10))
+            picker.bind(
+                "<<ComboboxSelected>>", self._on_change_filter_changed
+            )
+            if label == "Team":
+                self.what_changed_team_filter = picker
+            elif label == "Category":
+                self.what_changed_category_filter = picker
+        ttk.Button(
+            controls,
+            text="Acknowledge Visible",
+            command=self.acknowledge_all_filtered_changes,
+        ).grid(row=0, column=6, padx=(0, 8))
+        ttk.Label(
+            controls,
+            textvariable=self.what_changed_summary_var,
+            style="Sub.TLabel",
+        ).grid(row=0, column=9, sticky="e")
+        ttk.Label(
+            controls,
+            textvariable=self.what_changed_status_var,
+            style="Sub.TLabel",
+            wraplength=1050,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=10, sticky="ew", pady=(5, 0))
+
+        cards = ttk.LabelFrame(
+            parent,
+            text="Material differences between validated installed snapshots",
+            padding=6,
+        )
+        cards.grid(row=1, column=0, sticky="nsew")
+        cards.columnconfigure(0, weight=1)
+        cards.rowconfigure(0, weight=1)
+        self.what_changed_canvas = tk.Canvas(
+            cards, highlightthickness=0, height=235
+        )
+        self.what_changed_canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(
+            cards,
+            orient="vertical",
+            command=self.what_changed_canvas.yview,
+        )
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.what_changed_canvas.configure(yscrollcommand=scrollbar.set)
+        self.what_changed_container = ttk.Frame(self.what_changed_canvas)
+        self._change_canvas_window = self.what_changed_canvas.create_window(
+            (0, 0),
+            window=self.what_changed_container,
+            anchor="nw",
+        )
+        self.what_changed_container.bind(
+            "<Configure>",
+            lambda _event: self.what_changed_canvas.configure(
+                scrollregion=self.what_changed_canvas.bbox("all")
+            ),
+        )
+        self.what_changed_canvas.bind(
+            "<Configure>",
+            lambda event: self.what_changed_canvas.itemconfigure(
+                self._change_canvas_window, width=event.width
+            ),
+        )
+        self._bind_change_cards_mousewheel(self.what_changed_canvas)
+        self._bind_change_cards_mousewheel(self.what_changed_container)
+        self._update_change_status_display()
+        self._render_change_cards()
 
     def _build_rundown_panel(self, parent):
         parent.columnconfigure(0, weight=1)
@@ -3038,6 +3244,12 @@ class AUSLStatsApp:
         ):
             self.request_fact_rebuild()
         self.refresh_game_day_dashboard()
+        if hasattr(self, "_change_build_generation"):
+            source = getattr(
+                self, "_next_change_comparison_source", "local_reload"
+            )
+            self._next_change_comparison_source = "local_reload"
+            self.request_change_comparison(affected_source=source)
 
     def _sync_selected_player_after_load(self, previous_selected_id):
         """Rerender one exact selected identity or clear all stale player copy."""
@@ -3131,6 +3343,8 @@ class AUSLStatsApp:
             )
         if hasattr(self, "_rundown_session"):
             self._render_rundown()
+        if hasattr(self, "_change_state"):
+            self._render_change_cards()
         self.refresh_game_day_dashboard()
         self._schedule_session_autosave("custom game context changed")
 
@@ -3186,8 +3400,22 @@ class AUSLStatsApp:
         self._verification_count_cache = {}
         if hasattr(self, "_fact_build_generation"):
             self.request_fact_rebuild()
+        if (
+            hasattr(self, "_change_build_generation")
+            and (
+                getattr(self, "_change_build_running", False)
+                or getattr(self, "_change_callback_pending", False)
+            )
+        ):
+            self.request_change_comparison(
+                affected_source=getattr(
+                    self, "_next_change_comparison_source", "local_reload"
+                )
+            )
         if hasattr(self, "_rundown_session"):
             self._render_rundown()
+        if hasattr(self, "_change_state"):
+            self._render_change_cards()
         self.refresh_game_day_dashboard()
         self._schedule_session_autosave("official game changed")
 
@@ -4017,12 +4245,14 @@ class AUSLStatsApp:
                 "error_summary": None,
             }
         self._refresh_game_day_if_allowed()
+        self._record_change_refresh_outcome("cancelled")
         self._log_event("data_update_cancel_requested", source="official_ausl_core_data")
 
     def _finish_data_update_success(self, data, token):
         if not self._data_update_token_is_current(token):
             return
         try:
+            self._next_change_comparison_source = "official_core_sources"
             self._finish_load(data)
         except Exception as exc:
             self._finish_data_update_error(exc, token)
@@ -4054,6 +4284,10 @@ class AUSLStatsApp:
                 attempt,
             )
         self.refresh_game_day_dashboard()
+        self._record_change_refresh_outcome(
+            "failed",
+            error_summary=f"{type(exc).__name__}: {exc}",
+        )
         self._log_event(
             "data_update_failed",
             source="official_ausl_data",
@@ -4072,6 +4306,7 @@ class AUSLStatsApp:
         if isinstance(getattr(self, "db", None), dict):
             self.db["refresh_attempt"] = load_refresh_attempt()
         self.refresh_game_day_dashboard()
+        self._record_change_refresh_outcome("cancelled")
         self._log_event("data_update_cancelled", source="official_ausl_core_data")
 
     @staticmethod
@@ -4411,6 +4646,686 @@ class AUSLStatsApp:
         if rundown_state is not rundown_before:
             self._schedule_session_autosave("rundown reconciliation changed")
         return True
+
+    def _change_now(self):
+        provider = getattr(self, "_session_now", None)
+        value = provider() if callable(provider) else datetime.now(timezone.utc)
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def _change_comparison_context(self, selected_game_id=None):
+        pinned = []
+        used = []
+        session = getattr(self, "_rundown_session", None)
+        if isinstance(session, RundownSession):
+            for state in session.states:
+                pinned.extend(
+                    (entry.fact_id, entry.evidence_hash)
+                    for entry in state.active_entries
+                )
+                used.extend(
+                    (record.fact_id, record.evidence_hash)
+                    for record in state.used_history
+                )
+        return ChangeComparisonContext(
+            selected_game_id=selected_game_id,
+            pinned_fact_versions=tuple(pinned),
+            used_fact_versions=tuple(used),
+        )
+
+    @staticmethod
+    def _snapshot_facts_for_database(database, locked_lineups):
+        """Build every exact-game canonical fact collection off the UI thread."""
+
+        schedule = database.get("schedule_results", pd.DataFrame())
+        games = official_selected_games(schedule)
+        locked_games = (
+            locked_lineups.get("games", {})
+            if isinstance(locked_lineups, dict)
+            else {}
+        )
+        facts = []
+        for game in games:
+            lineup_lock = (
+                copy.deepcopy(locked_games.get(game.game_id, {}))
+                if isinstance(locked_games, dict)
+                else {}
+            )
+            collection = build_selected_game_facts(
+                database,
+                game,
+                lineup_lock=lineup_lock,
+                media_approval_validator=_canonical_media_review_state,
+                team_snapshot_provider=lambda code, season, data=database: (
+                    official_team_snapshot(code, season, data)
+                ),
+            )
+            if not isinstance(collection, FactCollection) or not collection.available:
+                raise ValueError(
+                    f"Canonical facts unavailable for Game {game.game_id}: "
+                    f"{getattr(collection, 'empty_reason', 'unknown reason')}"
+                )
+            facts.extend(collection.facts)
+        unique = {}
+        for fact in facts:
+            existing = unique.get(fact.fact_id)
+            if existing is not None and existing.evidence_hash != fact.evidence_hash:
+                raise ValueError(
+                    f"Canonical fact identity collision for {fact.fact_id}"
+                )
+            unique[fact.fact_id] = fact
+        return tuple(unique[key] for key in sorted(unique))
+
+    def request_change_comparison(self, *, affected_source="local_reload"):
+        """Queue one local snapshot comparison with one coalesced replacement."""
+
+        if not hasattr(self, "_change_build_generation"):
+            return False
+        database = getattr(self, "db", None)
+        if not isinstance(database, dict) or not database:
+            return False
+        self._change_build_generation += 1
+        generation = self._change_build_generation
+        selected = getattr(self, "selected_game", None)
+        selected_game_id = (
+            selected.game_id if isinstance(selected, SelectedGame) else None
+        )
+        task = {
+            "generation": generation,
+            "database_identity": id(database),
+            "database": dict(database),
+            "locked_lineups": copy.deepcopy(
+                getattr(self, "locked_lineups", {}) or {}
+            ),
+            "selected_game_id": selected_game_id,
+            "baseline": getattr(
+                getattr(self, "_change_state", None), "baseline", None
+            ),
+            "context": self._change_comparison_context(selected_game_id),
+            "affected_source": affected_source,
+        }
+        self._change_status = "Comparing validated installed snapshots…"
+        self._change_last_error = ""
+        self._update_change_status_display()
+        lock = getattr(self, "_change_build_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._change_build_lock = lock
+        with lock:
+            self._change_build_pending = task
+            if getattr(self, "_change_build_running", False):
+                return True
+            self._change_build_running = True
+        self._ensure_main_thread_dispatch()
+        try:
+            threading.Thread(
+                target=self._change_worker_loop,
+                daemon=True,
+            ).start()
+        except Exception:
+            with lock:
+                self._change_build_running = False
+            raise
+        return True
+
+    def _change_worker_loop(self):
+        while True:
+            lock = self._change_build_lock
+            with lock:
+                task = self._change_build_pending
+                self._change_build_pending = None
+                if task is None:
+                    self._change_build_running = False
+                    return
+            try:
+                facts = self._snapshot_facts_for_database(
+                    task["database"], task["locked_lineups"]
+                )
+                digest = build_snapshot_digest(
+                    task["database"],
+                    facts=facts,
+                    locked_lineups=task["locked_lineups"],
+                )
+                comparison = (
+                    compare_snapshot_digests(
+                        task["baseline"],
+                        digest,
+                        context=task["context"],
+                        detected_at=datetime.now(timezone.utc),
+                    )
+                    if isinstance(task["baseline"], BroadcastSnapshotDigest)
+                    else None
+                )
+            except Exception as exc:
+                self._change_callback_pending = True
+                self._post_main_thread(
+                    self._finish_change_comparison_error,
+                    exc,
+                    task["generation"],
+                    task["database_identity"],
+                    task["selected_game_id"],
+                    task["affected_source"],
+                )
+                continue
+            self._change_callback_pending = True
+            self._post_main_thread(
+                self._finish_change_comparison,
+                digest,
+                comparison,
+                task["generation"],
+                task["database_identity"],
+                task["selected_game_id"],
+                task["affected_source"],
+            )
+
+    def _change_result_is_current(
+        self, generation, database_identity, selected_game_id
+    ):
+        current = getattr(self, "selected_game", None)
+        current_game_id = (
+            current.game_id if isinstance(current, SelectedGame) else None
+        )
+        return bool(
+            generation == getattr(self, "_change_build_generation", None)
+            and database_identity == id(getattr(self, "db", None))
+            and selected_game_id == current_game_id
+        )
+
+    def _finish_change_comparison(
+        self,
+        digest,
+        comparison,
+        generation,
+        database_identity,
+        selected_game_id,
+        affected_source,
+    ):
+        if not self._change_result_is_current(
+            generation, database_identity, selected_game_id
+        ):
+            return False
+        self._change_callback_pending = False
+        if not isinstance(digest, BroadcastSnapshotDigest):
+            return False
+        state = getattr(self, "_change_state", SessionChangeState())
+        if state.baseline is None:
+            state = state.establish_first_baseline(
+                digest,
+                completed_at=self._change_now(),
+                affected_source=affected_source,
+            )
+            self._change_status = (
+                "Comparison baseline created from the validated installed "
+                "snapshot; no changes are reported for the first snapshot."
+            )
+        else:
+            if (
+                not isinstance(comparison, ChangeComparison)
+                or comparison.before_snapshot_id != state.baseline.snapshot_id
+                or comparison.after_snapshot_id != digest.snapshot_id
+            ):
+                self._finish_change_comparison_error(
+                    ValueError("Comparison result does not match the active baseline"),
+                    generation,
+                    database_identity,
+                    selected_game_id,
+                    affected_source,
+                )
+                return False
+            state = state.promote(
+                digest, comparison, affected_source=affected_source
+            )
+            count = len(comparison.events)
+            self._change_status = (
+                f"Compared installed snapshots · {count} material "
+                f"change{'s' if count != 1 else ''}."
+            )
+        self._change_state = state
+        self._change_last_error = ""
+        self._update_change_status_display()
+        self._render_change_cards()
+        self._schedule_session_autosave("snapshot comparison completed")
+        self.refresh_game_day_dashboard()
+        return True
+
+    def _finish_change_comparison_error(
+        self,
+        exc,
+        generation,
+        database_identity,
+        selected_game_id,
+        affected_source,
+    ):
+        if not self._change_result_is_current(
+            generation, database_identity, selected_game_id
+        ):
+            return False
+        self._change_callback_pending = False
+        summary = f"{type(exc).__name__}: {exc}"
+        state = getattr(self, "_change_state", SessionChangeState())
+        self._change_state = state.with_refresh_outcome(
+            state="comparison_failed",
+            completed_at=self._change_now(),
+            affected_source=affected_source,
+            error_summary=summary,
+        )
+        self._change_last_error = summary
+        self._change_status = (
+            "What Changed is unavailable for the latest snapshot; the prior "
+            "baseline and report were retained."
+        )
+        self._update_change_status_display()
+        self._render_change_cards()
+        self._schedule_session_autosave("snapshot comparison failed")
+        return True
+
+    def _record_change_refresh_outcome(self, state, *, error_summary=""):
+        if not hasattr(self, "_change_state"):
+            return False
+        self._change_state = self._change_state.with_refresh_outcome(
+            state=state,
+            completed_at=self._change_now(),
+            affected_source="official_core_sources",
+            error_summary=error_summary,
+        )
+        if state == "cancelled":
+            self._change_status = (
+                "Refresh cancelled; no factual comparison was created and the "
+                "prior baseline/report remain installed."
+            )
+        elif state == "failed":
+            self._change_status = (
+                "Refresh failed; no factual comparison was created and the "
+                "prior baseline/report remain installed."
+            )
+        self._update_change_status_display()
+        self._render_change_cards()
+        self._schedule_session_autosave(f"refresh {state}")
+        return True
+
+    def _update_change_status_display(self):
+        variable = getattr(self, "what_changed_status_var", None)
+        if variable is not None:
+            variable.set(getattr(self, "_change_status", ""))
+        summary_var = getattr(self, "what_changed_summary_var", None)
+        comparison = getattr(
+            getattr(self, "_change_state", None), "latest_comparison", None
+        )
+        if summary_var is not None:
+            if isinstance(comparison, ChangeComparison):
+                summary_var.set(
+                    f"{comparison.blocking_count} blocking · "
+                    f"{comparison.attention_count} attention · "
+                    f"{comparison.info_count} informational"
+                )
+            else:
+                summary_var.set("No completed comparison report.")
+
+    def _filtered_change_events(self):
+        comparison = getattr(
+            getattr(self, "_change_state", None), "latest_comparison", None
+        )
+        if not isinstance(comparison, ChangeComparison):
+            return []
+        events = list(comparison.events)
+        selected = getattr(self, "selected_game", None)
+        selected_id = selected.game_id if isinstance(selected, SelectedGame) else None
+        view_filter = (
+            self.what_changed_filter_var.get()
+            if hasattr(self, "what_changed_filter_var")
+            else "All Changes"
+        )
+        if view_filter == "Needs Attention":
+            events = [
+                item
+                for item in events
+                if item.severity
+                in {ChangeSeverity.BLOCKING, ChangeSeverity.ATTENTION}
+            ]
+        elif view_filter == "Selected Game":
+            events = [
+                item
+                for item in events
+                if item.game_id == selected_id
+            ]
+        elif view_filter == "Pinned":
+            events = [item for item in events if item.pinned_impact]
+        elif view_filter == "Used":
+            events = [item for item in events if item.used_impact]
+        team_filter = (
+            self.what_changed_team_filter_var.get()
+            if hasattr(self, "what_changed_team_filter_var")
+            else "Both teams"
+        )
+        if team_filter != "Both teams":
+            events = [item for item in events if item.team_code == team_filter]
+        category_filter = (
+            self.what_changed_category_filter_var.get()
+            if hasattr(self, "what_changed_category_filter_var")
+            else "All categories"
+        )
+        if category_filter != "All categories":
+            normalized = category_filter.lower().replace(" ", "_")
+            events = [item for item in events if item.category == normalized]
+        return events
+
+    def _change_event_by_id(self, event_id):
+        comparison = getattr(
+            getattr(self, "_change_state", None), "latest_comparison", None
+        )
+        if not isinstance(comparison, ChangeComparison):
+            return None
+        return next(
+            (item for item in comparison.events if item.event_id == event_id),
+            None,
+        )
+
+    def _render_change_cards(self):
+        self._update_change_status_display()
+        container = getattr(self, "what_changed_container", None)
+        if container is None:
+            return
+        for child in container.winfo_children():
+            child.destroy()
+        comparison = getattr(
+            getattr(self, "_change_state", None), "latest_comparison", None
+        )
+        if not isinstance(comparison, ChangeComparison):
+            text = getattr(
+                self,
+                "_change_status",
+                (
+                    "No validated comparison is available. The first valid "
+                    "snapshot establishes a baseline without reporting every "
+                    "record as newly added."
+                ),
+            )
+            ttk.Label(
+                container,
+                text=text,
+                style="Sub.TLabel",
+                justify="left",
+                wraplength=1000,
+                padding=12,
+            ).pack(fill="x")
+            self._bind_change_cards_mousewheel(container)
+            return
+        all_events = list(comparison.events)
+        teams = tuple(
+            sorted({item.team_code for item in all_events if item.team_code})
+        )
+        team_picker = getattr(self, "what_changed_team_filter", None)
+        if team_picker is not None:
+            values = ("Both teams", *teams)
+            team_picker.configure(values=values)
+            if self.what_changed_team_filter_var.get() not in values:
+                self.what_changed_team_filter_var.set("Both teams")
+        categories = tuple(
+            sorted({item.category.replace("_", " ").title() for item in all_events})
+        )
+        category_picker = getattr(self, "what_changed_category_filter", None)
+        if category_picker is not None:
+            values = ("All categories", *categories)
+            category_picker.configure(values=values)
+            if self.what_changed_category_filter_var.get() not in values:
+                self.what_changed_category_filter_var.set("All categories")
+        events = self._filtered_change_events()
+        if not events:
+            empty = (
+                "The validated snapshots contain no material broadcast changes."
+                if not all_events
+                else "No changes match the current filters."
+            )
+            ttk.Label(
+                container,
+                text=empty,
+                style="Sub.TLabel",
+                justify="left",
+                wraplength=1000,
+                padding=12,
+            ).pack(fill="x")
+            self._bind_change_cards_mousewheel(container)
+            return
+        acknowledged = set(
+            getattr(self._change_state, "acknowledged_event_ids", ())
+        )
+        severity_label = {
+            ChangeSeverity.BLOCKING: "BLOCKING",
+            ChangeSeverity.ATTENTION: "ATTENTION",
+            ChangeSeverity.INFO: "INFO",
+        }
+        for event in events:
+            is_acknowledged = event.event_id in acknowledged
+            card = ttk.LabelFrame(
+                container,
+                text=(
+                    f"[{severity_label[event.severity]}]"
+                    f"{' [ACKNOWLEDGED]' if is_acknowledged else ''} · "
+                    f"{event.category.replace('_', ' ').upper()}"
+                ),
+                padding=8,
+            )
+            card.pack(fill="x", padx=2, pady=4)
+            ttk.Label(
+                card,
+                text=event.headline,
+                font=("Segoe UI", 11, "bold"),
+                justify="left",
+                wraplength=1000,
+            ).pack(anchor="w", fill="x")
+            ttk.Label(
+                card,
+                text=f"Before: {event.before_summary}",
+                justify="left",
+                wraplength=1000,
+            ).pack(anchor="w", fill="x", pady=(4, 0))
+            ttk.Label(
+                card,
+                text=f"After:  {event.after_summary}",
+                justify="left",
+                wraplength=1000,
+            ).pack(anchor="w", fill="x")
+            impact = []
+            if event.selected_game_impact:
+                impact.append("selected game")
+            if event.pinned_impact:
+                impact.append("pinned rundown")
+            if event.used_impact:
+                impact.append("used-on-air history")
+            if event.readiness_impact:
+                impact.append("readiness")
+            details = (
+                f"Impact: {', '.join(impact)} · " if impact else ""
+            )
+            details += (
+                f"Detected {event.detected_at} · "
+                f"{event.source_summary or 'Installed validated snapshot'}"
+            )
+            ttk.Label(
+                card,
+                text=details,
+                style="Sub.TLabel",
+                justify="left",
+                wraplength=1000,
+            ).pack(anchor="w", fill="x", pady=(4, 0))
+            actions = ttk.Frame(card)
+            actions.pack(fill="x", pady=(7, 0))
+            ttk.Button(
+                actions,
+                text="Unacknowledge" if is_acknowledged else "Acknowledge",
+                command=lambda event_id=event.event_id: self.toggle_change_ack(
+                    event_id
+                ),
+            ).pack(side="left", padx=(0, 5))
+            if event.fact_id:
+                ttk.Button(
+                    actions,
+                    text="Review Current Fact",
+                    command=lambda event_id=event.event_id: (
+                        self.review_change_current_fact(event_id)
+                    ),
+                ).pack(side="left", padx=(0, 5))
+            if event.pinned_impact:
+                ttk.Button(
+                    actions,
+                    text="Review Pinned",
+                    command=lambda event_id=event.event_id: (
+                        self.review_change_pinned(event_id)
+                    ),
+                ).pack(side="left", padx=(0, 5))
+            if event.can_replace_pinned:
+                ttk.Button(
+                    actions,
+                    text="Replace With Latest…",
+                    command=lambda event_id=event.event_id: (
+                        self.replace_pinned_from_change(event_id)
+                    ),
+                ).pack(side="left", padx=(0, 5))
+            ttk.Button(
+                actions,
+                text="Source Details",
+                command=lambda event_id=event.event_id: (
+                    self.show_change_source_details(event_id)
+                ),
+            ).pack(side="left")
+        self._bind_change_cards_mousewheel(container)
+
+    def acknowledge_change(self, event_id):
+        comparison = getattr(
+            getattr(self, "_change_state", None), "latest_comparison", None
+        )
+        if not isinstance(comparison, ChangeComparison) or event_id not in {
+            item.event_id for item in comparison.events
+        }:
+            return False
+        self._change_state = self._change_state.acknowledge((event_id,))
+        self._render_change_cards()
+        self._schedule_session_autosave("change acknowledged")
+        return True
+
+    def toggle_change_ack(self, event_id):
+        if event_id in set(
+            getattr(self._change_state, "acknowledged_event_ids", ())
+        ):
+            self._change_state = self._change_state.clear_acknowledgements(
+                (event_id,)
+            )
+            self._render_change_cards()
+            self._schedule_session_autosave("change acknowledgement cleared")
+            return True
+        return self.acknowledge_change(event_id)
+
+    def acknowledge_all_filtered_changes(self):
+        events = self._filtered_change_events()
+        if not events:
+            return False
+        self._change_state = self._change_state.acknowledge(
+            item.event_id for item in events
+        )
+        self._render_change_cards()
+        self._schedule_session_autosave("filtered changes acknowledged")
+        return True
+
+    def review_change_current_fact(self, event_id):
+        event = self._change_event_by_id(event_id)
+        if event is None or not event.fact_id:
+            return False
+        if event.game_id:
+            candidate = next(
+                (
+                    game
+                    for game in getattr(self, "_official_game_choices", {}).values()
+                    if game.game_id == event.game_id
+                ),
+                None,
+            )
+            if candidate is not None and getattr(
+                getattr(self, "selected_game", None), "game_id", None
+            ) != candidate.game_id:
+                self.on_game_changed(candidate)
+        self._select_notebook_text(
+            getattr(self, "game_day_views", None), "Air-Ready Facts"
+        )
+        if hasattr(self, "fact_status_filter_var"):
+            self.fact_status_filter_var.set("All facts")
+        self._render_fact_cards()
+        return True
+
+    def review_change_pinned(self, event_id):
+        event = self._change_event_by_id(event_id)
+        if event is None or not event.pinned_impact:
+            return False
+        self._select_notebook_text(
+            getattr(self, "game_day_views", None), "Rundown"
+        )
+        return True
+
+    def replace_pinned_from_change(self, event_id):
+        event = self._change_event_by_id(event_id)
+        if event is None or not event.can_replace_pinned:
+            return False
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(selected, SelectedGame):
+            return False
+        state = self._current_rundown_state(create=False)
+        if state is None:
+            return False
+        target_ids = {event.fact_id, event.before_fact_id}
+        entry = next(
+            (
+                item
+                for item in state.active_entries
+                if item.fact_id in target_ids and item.latest_fact is not None
+            ),
+            None,
+        )
+        if entry is None:
+            return False
+        return self.replace_rundown_with_latest(entry.entry_id)
+
+    def show_change_source_details(self, event_id):
+        event = self._change_event_by_id(event_id)
+        if event is None:
+            return False
+        messagebox.showinfo(
+            "What Changed · Source Details",
+            (
+                f"{event.headline}\n\n"
+                f"Before: {event.before_summary}\n"
+                f"After: {event.after_summary}\n\n"
+                f"Source: {event.source_summary or 'Installed validated snapshot'}\n"
+                f"Before snapshot: {event.before_snapshot_id}\n"
+                f"After snapshot: {event.after_snapshot_id}\n"
+                f"Detected: {event.detected_at}\n"
+                f"Status: {event.severity.value.upper()}"
+            ),
+        )
+        return True
+
+    def _on_change_filter_changed(self, _event=None):
+        self._render_change_cards()
+        self._schedule_session_autosave("change filters changed")
+
+    def _on_change_cards_mousewheel(self, event):
+        canvas = getattr(self, "what_changed_canvas", None)
+        if canvas is None:
+            return None
+        units = self._fact_cards_scroll_units(event)
+        if not units:
+            return None
+        try:
+            canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            return None
+        self._schedule_session_autosave("change scroll changed")
+        return "break"
+
+    def _bind_change_cards_mousewheel(self, widget):
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_change_cards_mousewheel)
+        for child in widget.winfo_children():
+            self._bind_change_cards_mousewheel(child)
 
     def _filtered_fact_cards(self):
         collection = getattr(self, "_fact_collection", None)
@@ -5579,6 +6494,55 @@ class AUSLStatsApp:
         self._verification_count_cache = {cache_key: count}
         return count
 
+    def _change_readiness_issue(self):
+        comparison = getattr(
+            getattr(self, "_change_state", None), "latest_comparison", None
+        )
+        selected = getattr(self, "selected_game", None)
+        if not isinstance(comparison, ChangeComparison) or not isinstance(
+            selected, SelectedGame
+        ):
+            return None
+        relevant = [
+            item
+            for item in comparison.events
+            if (
+                item.game_id == selected.game_id
+                or item.pinned_impact
+                or item.category == "source_health"
+            )
+        ]
+        blocking = [
+            item
+            for item in relevant
+            if item.severity is ChangeSeverity.BLOCKING
+            and item.readiness_impact
+        ]
+        if blocking:
+            return {
+                "state": "fail",
+                "blocking": True,
+                "detail": (
+                    f"{len(blocking)} blocking material change(s) affect the "
+                    "selected game, sources, or pinned rundown. Review What Changed."
+                ),
+            }
+        attention = [
+            item
+            for item in relevant
+            if item.severity is ChangeSeverity.ATTENTION
+        ]
+        if attention:
+            return {
+                "state": "warning",
+                "blocking": False,
+                "detail": (
+                    f"{len(attention)} material change(s) need attention for "
+                    "the selected-game workflow. Review What Changed."
+                ),
+            }
+        return None
+
     def _record_packet_generated(
         self,
         path,
@@ -5760,6 +6724,7 @@ class AUSLStatsApp:
             packet=packet,
             offline_mode=bool(getattr(self, "_offline_mode", False)),
             session_issue=self._session_readiness_issue(),
+            change_issue=self._change_readiness_issue(),
         )
         self.game_day_readiness = readiness
 
