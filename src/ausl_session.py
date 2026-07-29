@@ -43,7 +43,7 @@ from ausl_rundown import (
 )
 
 
-SESSION_SCHEMA_VERSION = 2
+SESSION_SCHEMA_VERSION = 3
 SESSION_FILENAME = "producer_session.json"
 SESSION_BACKUP_FILENAME = "producer_session.backup.json"
 SESSION_TEMP_PREFIX = ".producer-session-"
@@ -150,6 +150,46 @@ class SessionUIState:
             if normalized < 0.0 or normalized > 1.0:
                 raise SessionValidationError(f"{name} scroll value must be 0 through 1")
             object.__setattr__(self, name, normalized)
+
+
+@dataclass(frozen=True)
+class SessionComparisonState:
+    left_player_id: str | None = None
+    right_player_id: str | None = None
+    scroll_fraction: float = 0.0
+    recovery_warning: str = ""
+
+    def __post_init__(self):
+        for name in ("left_player_id", "right_player_id"):
+            value = getattr(self, name)
+            if value is not None:
+                normalized = _string(value, name)
+                object.__setattr__(self, name, normalized or None)
+        if (
+            self.left_player_id is not None
+            and self.left_player_id == self.right_player_id
+        ):
+            raise SessionValidationError(
+                "Comparison players must be two different exact identities"
+            )
+        value = self.scroll_fraction
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise SessionValidationError("comparison scroll value must be numeric")
+        normalized = float(value)
+        if normalized < 0.0 or normalized > 1.0:
+            raise SessionValidationError(
+                "comparison scroll value must be 0 through 1"
+            )
+        object.__setattr__(self, "scroll_fraction", normalized)
+        object.__setattr__(
+            self,
+            "recovery_warning",
+            _string(
+                self.recovery_warning,
+                "comparison recovery warning",
+                allow_empty=True,
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -394,6 +434,9 @@ class SessionSnapshot:
     rundown_states: tuple[GameRundownState, ...] = ()
     ui_state: SessionUIState = field(default_factory=SessionUIState)
     change_state: SessionChangeState = field(default_factory=SessionChangeState)
+    comparison_state: SessionComparisonState = field(
+        default_factory=SessionComparisonState
+    )
 
     def __post_init__(self):
         if self.schema_version != SESSION_SCHEMA_VERSION:
@@ -437,6 +480,8 @@ class SessionSnapshot:
             raise SessionValidationError("ui_state is invalid")
         if not isinstance(self.change_state, SessionChangeState):
             raise SessionValidationError("change_state is invalid")
+        if not isinstance(self.comparison_state, SessionComparisonState):
+            raise SessionValidationError("comparison_state is invalid")
 
     @classmethod
     def new(
@@ -934,6 +979,28 @@ def _change_state_from_dict(value: Any) -> SessionChangeState:
         )
 
 
+def _comparison_state_from_dict(value: Any) -> SessionComparisonState:
+    if value is None:
+        return SessionComparisonState()
+    try:
+        data = _mapping(value, "comparison_state")
+        return SessionComparisonState(
+            left_player_id=data.get("left_player_id"),
+            right_player_id=data.get("right_player_id"),
+            scroll_fraction=data.get("scroll_fraction", 0.0),
+            recovery_warning=data.get("recovery_warning", ""),
+        )
+    except (SessionValidationError, TypeError, ValueError):
+        # Comparison is advisory. Invalid compare state cannot make an otherwise
+        # valid selected game, rundown, or What Changed record unrecoverable.
+        return SessionComparisonState(
+            recovery_warning=(
+                "Saved player comparison is unavailable; the valid producer "
+                "session and rundown were recovered."
+            )
+        )
+
+
 def session_from_dict(value: Any) -> SessionSnapshot:
     data = _mapping(value, "session")
     if "schema_version" not in data:
@@ -965,6 +1032,9 @@ def session_from_dict(value: Any) -> SessionSnapshot:
         rundown_states=states,
         ui_state=_ui_from_dict(data.get("ui_state")),
         change_state=_change_state_from_dict(data.get("change_state")),
+        comparison_state=_comparison_state_from_dict(
+            data.get("comparison_state") if version >= 3 else None
+        ),
     )
 
 
@@ -980,6 +1050,7 @@ def _snapshot_payload(snapshot: SessionSnapshot) -> dict[str, Any]:
         ),
         "rundown_states": [state.to_dict() for state in snapshot.rundown_states],
         "ui_state": asdict(snapshot.ui_state),
+        "comparison_state": asdict(snapshot.comparison_state),
         "change_state": {
             "baseline": (
                 snapshot.change_state.baseline.to_dict()

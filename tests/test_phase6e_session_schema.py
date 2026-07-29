@@ -43,7 +43,7 @@ def _state():
     )
 
 
-def test_v1_session_migrates_to_v2_without_losing_phase6d_state():
+def test_v1_session_migrates_to_current_schema_without_losing_phase6d_state():
     original = populated_snapshot()
     payload = json.loads(session_to_json_bytes(original))
     payload["schema_version"] = 1
@@ -55,8 +55,8 @@ def test_v1_session_migrates_to_v2_without_losing_phase6d_state():
 
     restored = session_from_json_bytes(json.dumps(payload).encode("utf-8"))
 
-    assert SESSION_SCHEMA_VERSION == 2
-    assert restored.schema_version == 2
+    assert SESSION_SCHEMA_VERSION == 3
+    assert restored.schema_version == 3
     assert restored.selected_game == original.selected_game
     assert restored.rundown_states == original.rundown_states
     assert restored.ui_state.fact_status_filter == original.ui_state.fact_status_filter

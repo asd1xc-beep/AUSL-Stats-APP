@@ -49,7 +49,7 @@ and has not started.
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6E COMPLETE — 2026-07-28 — PHASE 6F NOT STARTED**
+Status: **PHASE 6F COMPLETE — 2026-07-29 — FULL PHASE 6 REVIEW PENDING**
 
 ## Master improvement list
 
@@ -195,17 +195,25 @@ Status: **PHASE 6E COMPLETE — 2026-07-28 — PHASE 6F NOT STARTED**
 - [x] `SEARCH-003` — Search numbers with or without `#` and include roster status. **P2 · COMPLETE**
   - Examples: `22`, `#22`, `inactive`, and `reserve`.
 
-- [ ] `SEARCH-004` — Add optional quick filters. **P2 · BACKLOG**
+- [x] `SEARCH-004` — Add optional quick filters. **P2 · COMPLETE**
   - Candidate syntax: `team:CHI`, `pos:P`, `status:inactive`, `#22`.
+  - Phase 6F adds one safely parsed AND-combined query with quoted values,
+    validation messages, visible filter chips/count/scope, and no scope-preference
+    mutation.
 
 - [x] `STATE-001` — Rerender or clear the selected player card after data refresh. **P0 · COMPLETE**
   - Clipboard text and `current_broadcast_note` must use the same database version as the visible card.
 
 - [ ] `UI-001` — Add visible scrollbars to long content panels. **P2 · PLANNED**
+  - Phase 6F scope is complete: the primary Player Lookup list and new Compare
+    Players view have visible vertical scrollbars and direct mouse-wheel support.
+    The tracker item remains open pending the requested broader Phase 6 UI review.
 
 - [ ] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · PLANNED**
 
-- [ ] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · BACKLOG**
+- [x] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · COMPLETE**
+  - Phase 6F provides Ctrl+F, Escape, arrows, Enter, double-click, Ctrl+1, and
+    Ctrl+2 for player discovery/comparison without hijacking multiline editors.
 
 ### I. Media-guide accuracy
 
@@ -385,8 +393,11 @@ Required identity regressions:
     `NEEDS ATTENTION`; only all applicable passes produce `READY FOR AIR`.
     There is no force-green control.
 
-- [ ] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · PLANNED**
+- [x] `SEARCH-005` — Add fuzzy/typo-tolerant name matching to search. **P2 · COMPLETE**
   - Edit-distance or phonetic tolerance on player-name queries; must not introduce false-positive collisions between distinct players. A tolerance improvement to `SEARCH-004`, not a new search mode.
+  - Length-aware bounded Damerau-Levenshtein runs only after exact/token/prefix/
+    substring matching. Possible matches are labeled, bounded, deterministic,
+    and never automatically selected.
 
 - [x] `UX-010` — Add a character-count preview on copy actions against common graphics-template widths. **P2 · COMPLETE**
   - Central profiles provide 60-character one-line and 120-character extended
@@ -394,8 +405,12 @@ Required identity regressions:
     rewrite it, and are explicitly labeled guidance rather than graphics-system
     validation.
 
-- [ ] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · PLANNED**
+- [x] `UX-011` — Add a side-by-side player/matchup compare view. **P3 · COMPLETE**
   - Two selected players' stat lines, verified notes, and milestones in parallel columns, each independently source/freshness-labeled. A new screen, not a variant of the existing player card.
+  - Phase 6F uses one neutral aligned metric registry, exact identities,
+    canonical stat formatting/calculation helpers, unavailable-not-zero values,
+    independent fact trust/provenance, source-labeled copy, refresh/game guards,
+    and schema-v3 exact-ID recovery. It makes no winner judgment.
 
 ### M. College Résumé tab
 
@@ -450,6 +465,31 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 6F — Faster discovery and player comparison
+
+- Completion date: 2026-07-29.
+- Starting commit and baseline: latest remote `main`
+  `d7f255b273acfc52f24aea98c544bbb945391f2b`, the merged Phase 6E PR;
+  **695 passed in 23.39 s** with warnings treated as errors.
+- Branch and reviewed functional commits: `agent/phase6f-search-compare`;
+  `14356a1` deterministic indexed discovery; `20745a0` canonical neutral
+  comparison; `846cbfc` keyboard/UI/schema-v3 integration.
+- Automated acceptance: **83 focused/adjacent tests passed in 1.16 s** and
+  **750 complete offline tests passed in 24.17 s**. A broader Phase 6 adjacency
+  matrix passed **432 tests in 7.22 s**. Compileall, pip check,
+  distribution verification, Git LFS materialization, whitespace validation,
+  and tracked/history privacy/secret scans passed.
+- Windows GUI smoke: real Tk source execution at 1120×720 covered exact/typo/
+  structured-filter discovery, keyboard selection, aligned comparison, wheel
+  scrolling, source-labeled copy, local replacement, exact-game rebuild,
+  Local/Offline Mode, all eight tabs, and exact restart recovery with zero
+  network calls.
+- Full policy/design/evidence/limitations:
+  [Phase_6F_Acceptance_Record.md](Phase_6F_Acceptance_Record.md).
+- Verdict: **PHASE 6F COMPLETE — FULL PHASE 6 REVIEW PENDING**.
+  `UI-002`, the broader `UI-001` review, and the full Phase 6 cross-phase review
+  remain open. Phase 7 has not started.
 
 ### Phase 6D — Session persistence and crash recovery
 
