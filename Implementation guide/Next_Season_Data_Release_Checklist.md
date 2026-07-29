@@ -30,12 +30,27 @@ Use this checklist as soon as the new season data begins to appear ahead of pres
 - [ ] Check whether source labels or guide-year naming changed.
 - [ ] Verify team or player context note fields still populate correctly.
 - [ ] Review any enrichment fields that depend on external content.
+- [ ] Revalidate exact TOC identity, printed/PDF page offset, guide date,
+      parser version, warnings, and approval-record hashing for the new guide.
+- [ ] Confirm official game-note rows still carry exact game/player/team/
+      opponent identity, source document/page/date, parser version, normalized
+      content hash, reviewer, and approval timestamp before producer promotion.
+- [ ] Review the centralized split policy for the new competition format.
+      Do not change the 12-PA/9-out defaults without producer acceptance and
+      new regression evidence.
 
 ## 6. Validate the refresh and import pipeline
 - [ ] Run a full refresh or import test with the latest sample data.
+- [ ] Run Quick Refresh and confirm it does not fetch/rewrite optional sources
+      while still reloading validated local PRODUCER_APPROVED rows.
+- [ ] Cancel Full Enrichment Refresh while blocked, queue a replacement, and
+      confirm one coherent final core/optional/manifest snapshot.
 - [ ] Confirm the app still builds season and career stats correctly.
 - [ ] Verify manual notes, snapshots, and lineage data are not overwritten incorrectly.
 - [ ] Check export files or packaged outputs for missing or malformed data.
+- [ ] Build and verify both `core` and explicit `approved-enrichment`
+      distribution profiles. Confirm raw/review/debug/private files remain
+      excluded and the approved manifest hashes/counts match.
 
 ## 7. Check UI and display behavior
 - [ ] Verify labels, source names, and season text still render correctly.
@@ -45,6 +60,8 @@ Use this checklist as soon as the new season data begins to appear ahead of pres
 ## 8. Regression and smoke testing
 - [ ] Re-run import-focused regression tests.
 - [ ] Re-run any data quality or enrichment tests.
+- [ ] Exercise CORE_ONLY, PRODUCER_APPROVED, and DEVELOPER_REVIEW load modes;
+      confirm developer review rows cannot become air-ready.
 - [ ] Compare a small sample of imported rows against the upstream source.
 - [ ] Record any unexpected differences or missing values.
 

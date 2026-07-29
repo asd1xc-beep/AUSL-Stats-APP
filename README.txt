@@ -5,40 +5,35 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5 and Phase 6A through 6F are implemented. The focused Phase 6
-stabilization started from latest remote main
-bca5be6286996da844e0f260ae1e06f1feaf054e and its functional correction is
-55a4af0 (per-fact comparison provenance, Player Lookup expansion, token-level
-typo matching, and apostrophe-safe parsing).
+Phases 1-6 and Phase 7A are implemented and accepted. Phase 7A started from
+remote main 08fd7f09f24a53f3270516c51e6667e9daa35538 and adds typed
+CORE_ONLY, PRODUCER_APPROVED, and DEVELOPER_REVIEW boundaries, the
+producer-facing Full Enrichment Refresh, centralized split reliability, and an
+explicit approved-enrichment distribution profile.
 
-The clean main baseline passed 750 offline tests. The stabilized source passes
-769 tests with warnings treated as errors. The deterministic Windows source-app
-smoke passes at 1120x720 using the checked-in local snapshot through
-exact/typo/filter searches, explicit keyboard selection, two-player comparison,
-visible independent per-fact source/trust blocks, correct lookup expansion,
-wheel scrolling, statistical-source-labeled metrics copy, local snapshot
-replacement, exact-game rebuild, Local/Offline Mode, all eight tabs, clean
-save, and exact restart recovery. No live refresh or internet source was used.
-Compileall, pip check, Git LFS validation, checked-in distribution
-verification, whitespace validation, packaging/privacy checks, and
-tracked/history private-data and secret scans pass.
-The future-season year-generalization patch remains applied once and its
-dedicated regressions pass.
+The clean Phase 7A baseline passed 769 offline tests. The accepted Phase 7A
+source passes 847 tests with warnings treated as errors. The deterministic
+Windows source-app smoke passes at 1120x720 with real Tk and zero network
+calls. It covers approved facts for both selected-game teams, Full Refresh
+cancellation while blocked, an immediately queued replacement refresh,
+coherent replacement database/facts, Local/Offline Mode, and all eight tabs.
+Compileall, pip check, Git LFS validation, core and approved-enrichment
+distribution verification, whitespace validation, packaging/privacy checks,
+and tracked/history private-data and secret scans pass. The future-season
+year-generalization patch remains applied once and its regressions pass.
 
-Truck-hardware smoke testing and producer rehearsal are recorded as completed
-based on the project owner's report. No hardware model, display scaling,
-rehearsal date, or additional observed behavior is asserted here because those
-details were not supplied.
+Truck-hardware smoke testing, producer rehearsal, and Windows display scaling
+at 100%, 125%, and 150% are recorded as completed based on the project owner's
+report. No hardware model, Windows build, rehearsal date, or additional
+observed behavior is asserted here because those details were not supplied.
 
 The project owner reports that the developer-only optional enrichment refresh
 was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Status: PHASE 6 STABILIZATION COMPLETE — DISPLAY SCALING SIGN-OFF PENDING.
-The project owner will separately verify Windows display scaling at 100%,
-125%, and 150%; `UI-002` and full Phase 6 acceptance remain open until that
-sign-off is recorded. Phase 7 has not started. This remains an assisted
+Status: PHASE 7A COMPLETE — PHASE 7B NOT STARTED.
+Phase 7B has not started. This remains an assisted
 broadcast tool, not a candidate for unattended on-air use: cards that do not
 pass exact identity, provenance, freshness, source-health, and approval gates
 stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line copy.
@@ -100,11 +95,16 @@ AUSL roster/stat JSON for every configured season, plus standings and
 schedule context, then builds the validated core workbooks under:
   data\exports
 
-The normal refresh does not fetch, write, or activate split-stat, media-guide,
-official-game-note, or storyline enrichment. A developer-only
-include_enrichment=True option exists for isolated validation work; it is not a
-producer-facing refresh mode and its rows still require explicit review approval
-before any air-ready output may use them.
+Quick Refresh does not fetch or rewrite split-stat, media-guide, or
+official-game-note enrichment. It does reload validated local
+PRODUCER_APPROVED rows after the core transaction.
+
+Click "Full Enrichment Refresh" for a deliberate producer-facing update of
+official splits, schedule-linked game-note PDFs, and the configured media
+guide. Core and every successful optional source promote in one
+rollback-capable transaction. A failed optional source retains its
+last-known-good workbook and reports its own health/fallback state. Quick and
+Full jobs share one serialized coordinator.
 
 AUSL Career totals in this version combine the available AUSL regular-season
 files for every season in the configured season map. They are not full
@@ -332,8 +332,9 @@ editing. Visible scrollbars and mouse-wheel support cover the lookup list and
 comparison view.
 
 LOCAL/OFFLINE MODE
-The visible Local/Offline Mode control appears beside Quick Refresh and in the
-Game Day tab. While enabled it blocks core and manual live refreshes, cancels
+The visible Local/Offline Mode control appears beside the refresh controls and
+in the Game Day tab. While enabled it blocks core, full-enrichment, and manual
+live refreshes, cancels
 their existing tokens, stops and prevents live timers, and ignores abandoned
 network callbacks. Local search, notes, lineups, packet generation, and copy
 actions remain available against the installed last-known-good snapshot.
@@ -342,9 +343,9 @@ Offline Mode defaults off on every fresh launch. Turning it off does not start
 a refresh or live request; the producer chooses when network activity resumes.
 
 STORYLINE / ENRICHMENT DATA
-Optional development refreshes can import official AUSL split stats, the media
-guide for the latest configured season, official game notes, and a storyline
-source registry for isolated review. These are saved under:
+Full Enrichment Refresh can import official AUSL split stats, the media guide
+for the latest configured season, official game notes, and a source registry.
+These are saved locally under:
   data\exports\ausl_batting_splits.xlsx
   data\exports\ausl_pitching_splits.xlsx
   data\exports\ausl_fielding_splits.xlsx
@@ -360,10 +361,20 @@ source registry for isolated review. These are saved under:
 The cached media guide PDF is saved to:
   data\sources\<configured-season>-AUSL-Media-Guide.pdf
 
-The default loader ignores these optional workbooks. Even in explicit
-development mode, a row is excluded from air-ready media, split, and game-note
-output unless it has an explicit passed review state. Raw page chunks are kept
-only for local debugging/search and are excluded from distributable builds.
+The loader has three explicit modes. CORE_ONLY ignores optional workbooks.
+PRODUCER_APPROVED is used by ordinary startup, Quick/Full completion,
+Local/Offline Mode, sessions, and packaged apps; it loads only rows that pass
+complete identity, provenance, approval, freshness, and source-health gates.
+DEVELOPER_REVIEW exposes raw/review material for development but cannot
+promote it to air-ready output by flipping a Boolean. The legacy
+include_enrichment=True flag maps only to DEVELOPER_REVIEW.
+
+Split rows use one centralized policy: exact normalized regularSeason
+aggregates are excluded; hitters require 12 plate appearances and pitchers
+require 9 canonical outs for air-ready eligibility. Smaller valid detailed
+samples remain visible with a SMALL SAMPLE warning and are never promoted.
+Raw page chunks remain developer-only and are excluded from every
+distribution profile.
 
 Official game notes PDFs listed on the AUSL schedule are cached under:
   data\sources\game_notes
@@ -443,7 +454,7 @@ team, position, number, or stat values remain visibly unavailable; they do not
 render as nan or a confident zero.
 
 PRIVACY / CLEAN DISTRIBUTION
-First-milestone distributable builds include only this tested core snapshot
+The default `core` distribution profile contains only this tested snapshot
 allowlist:
   data\exports\ausl_rosters.xlsx
   data\exports\ausl_season_stats.xlsx
@@ -458,10 +469,19 @@ SHA-256 digest, byte count, and validation state for each core workbook and
 the nonprivate latest-attempt record. portable_source_manifest.json is not an
 authoritative live-repository file; it is generated only inside portable
 source release output.
-Distributable builds exclude media-guide, official-game-note, split-stat, and
-storyline enrichment until those later validation gates pass. They also exclude
-manual notes, lineup locks, producer game packets, logs, credentials, caches,
-and debug-only raw exports. Never add data\manual or
+The explicit `approved-enrichment` profile adds only filtered normalized
+producer-approved workbooks and approved_enrichment_manifest.json. That
+manifest binds the approval schema, snapshot/validation timestamp, hashes,
+byte counts, row counts, and provenance columns. Verification re-runs the row
+gates. Missing optional sources produce a verified core_only fallback.
+
+Build either profile from PowerShell:
+  .\Build Shareable AUSL App.ps1 -DistributionProfile core
+  .\Build Shareable AUSL App.ps1 -DistributionProfile approved-enrichment
+
+Both profiles exclude raw/review/debug material, PDFs, manual notes, lineup
+locks, producer game packets, private sessions, logs, credentials,
+environment files, caches, and temporary output. Never add data\manual or
 data\exports\game_packets to a package intended for distribution.
 
 DIAGNOSTIC LOGS
@@ -477,6 +497,9 @@ After first-time setup, run from the project folder:
 
 Also verify the checked-in distributable snapshot:
   .venv\Scripts\python.exe tools\verify_distribution.py data\exports
+
+Verify an explicitly staged approved profile with:
+  .venv\Scripts\python.exe tools\verify_distribution.py --profile approved-enrichment path\to\data\exports
 
 The pytest suite blocks live network access and uses small checked-in fixtures.
 GitHub Actions runs the same offline suite on Python 3.12 for Windows and

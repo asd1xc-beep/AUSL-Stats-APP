@@ -96,6 +96,8 @@ from ausl_comparison import (
     comparison_statistics_context_text,
     comparison_with_sources_text,
 )
+from ausl_enrichment import EnrichmentMode
+from ausl_splits import apply_split_sample_policy
 
 
 CURRENT_YEAR = max(SEASONS)
@@ -1485,6 +1487,7 @@ class AUSLStatsApp:
         self._initial_load_in_flight = False
         self._data_update_in_flight = False
         self._data_update_cancel_token = None
+        self._data_update_mode = None
         self._live_refresh_in_flight = False
         self._live_refresh_cancel_token = None
         self._live_request_generation = 0
@@ -2109,8 +2112,14 @@ class AUSLStatsApp:
         ttk.Label(top, text="AUSL Broadcast Stats", style="Header.TLabel").grid(row=0, column=1, sticky="w", padx=(0, 18))
         self.update_button = ttk.Button(top, text="Quick Refresh (Core)", style="Accent.TButton", command=self.update_data)
         self.update_button.grid(row=0, column=2, padx=4)
+        self.full_update_button = ttk.Button(
+            top,
+            text="Full Enrichment Refresh",
+            command=self.update_enrichment_data,
+        )
+        self.full_update_button.grid(row=0, column=3, padx=4)
         self.cancel_update_button = ttk.Button(top, text="Cancel Refresh", state="disabled", command=self.cancel_data_update)
-        self.cancel_update_button.grid(row=0, column=3, padx=4)
+        self.cancel_update_button.grid(row=0, column=4, padx=4)
         self.offline_mode_var = tk.BooleanVar(value=False)
         self.offline_toggle = ttk.Checkbutton(
             top,
@@ -2119,14 +2128,22 @@ class AUSLStatsApp:
             command=lambda: self.set_local_offline_mode(self.offline_mode_var.get()),
             style="Offline.TCheckbutton",
         )
-        self.offline_toggle.grid(row=0, column=4, padx=(10, 4))
+        self.offline_toggle.grid(row=0, column=5, padx=(10, 4))
         self.status_var = tk.StringVar(value="Loading local database...")
-        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=5, sticky="w", padx=10)
+        ttk.Label(top, textvariable=self.status_var, style="Sub.TLabel").grid(row=0, column=6, sticky="w", padx=10)
         self.data_freshness_var = tk.StringVar(value=self.data_freshness_text)
-        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=5, sticky="w", pady=(4, 0))
+        ttk.Label(top, textvariable=self.data_freshness_var, style="Sub.TLabel").grid(row=1, column=1, columnspan=6, sticky="w", pady=(4, 0))
         self.data_health_var = tk.StringVar(value="Data health: loading...")
         self.data_health_label = ttk.Label(top, textvariable=self.data_health_var, style="Sub.TLabel")
-        self.data_health_label.grid(row=2, column=1, columnspan=5, sticky="w", pady=(2, 0))
+        self.data_health_label.grid(row=2, column=1, columnspan=6, sticky="w", pady=(2, 0))
+        self.enrichment_mode_var = tk.StringVar(
+            value="ENRICHMENT MODE: loading approved local data..."
+        )
+        ttk.Label(
+            top,
+            textvariable=self.enrichment_mode_var,
+            style="Sub.TLabel",
+        ).grid(row=3, column=1, columnspan=6, sticky="w", pady=(2, 0))
         self.offline_banner_var = tk.StringVar(value="")
         ttk.Label(
             top,
@@ -3421,6 +3438,10 @@ class AUSLStatsApp:
             "disabled" if disabled else "normal",
         )
         self._set_button_state(
+            getattr(self, "full_update_button", None),
+            "disabled" if disabled else "normal",
+        )
+        self._set_button_state(
             getattr(self, "cancel_update_button", None),
             "normal" if in_flight else "disabled",
         )
@@ -3489,7 +3510,9 @@ class AUSLStatsApp:
 
         def work():
             try:
-                data = load_database(include_enrichment=False)
+                data = load_database(
+                    enrichment_mode=EnrichmentMode.PRODUCER_APPROVED
+                )
             except Exception as exc:
                 self._post_main_thread(self._finish_initial_load_error, exc)
                 return
@@ -3545,6 +3568,29 @@ class AUSLStatsApp:
             )
         if hasattr(self, "status_var"):
             self.status_var.set(f"Ready — {len(data['roster'])} current players loaded")
+        if hasattr(self, "enrichment_mode_var"):
+            mode = str(
+                data.get("enrichment_mode", EnrichmentMode.CORE_ONLY.value)
+            )
+            counts = data.get("enrichment_counts", {})
+            approved_count = (
+                sum(int(item) for item in counts.values())
+                if isinstance(counts, dict)
+                else 0
+            )
+            if mode == EnrichmentMode.PRODUCER_APPROVED.value:
+                self.enrichment_mode_var.set(
+                    "ENRICHMENT MODE: PRODUCER APPROVED — "
+                    f"{approved_count} gated local rows available"
+                )
+            elif mode == EnrichmentMode.DEVELOPER_REVIEW.value:
+                self.enrichment_mode_var.set(
+                    "ENRICHMENT MODE: DEVELOPER REVIEW — not an air-ready source"
+                )
+            else:
+                self.enrichment_mode_var.set(
+                    "ENRICHMENT MODE: CORE ONLY — optional facts unavailable"
+                )
         self._refresh_manual_note_players()
         self.refresh_game_choices()
         self._restore_pending_session_after_database_load()
@@ -4485,8 +4531,42 @@ class AUSLStatsApp:
             self.request_fact_rebuild()
 
     def update_data(self):
+        self._start_data_update(include_enrichment=False)
+
+    def update_enrichment_data(self):
         if not self.network_requests_permitted(
-            "Quick Refresh (Core)",
+            "Full Enrichment Refresh",
+            status_var=getattr(self, "status_var", None),
+        ):
+            return
+        if not messagebox.askyesno(
+            "Full Enrichment Refresh",
+            "This deliberate refresh downloads official split statistics, "
+            "official game-note PDFs, and the configured media guide after "
+            "refreshing core data.\n\n"
+            "Only rows that pass the complete producer approval gates will "
+            "appear as producer-ready facts. Existing last-known-good optional "
+            "sources remain installed if one source fails.\n\nContinue?",
+        ):
+            self.status_var.set("Full Enrichment Refresh was not started.")
+            return
+        self._start_data_update(
+            include_enrichment=True, network_permission_checked=True
+        )
+
+    def _start_data_update(
+        self,
+        *,
+        include_enrichment: bool,
+        network_permission_checked: bool = False,
+    ):
+        label = (
+            "Full Enrichment Refresh"
+            if include_enrichment
+            else "Quick Refresh (Core)"
+        )
+        if not network_permission_checked and not self.network_requests_permitted(
+            label,
             status_var=getattr(self, "status_var", None),
         ):
             return
@@ -4500,10 +4580,22 @@ class AUSLStatsApp:
         cancel_token = CancelToken()
         self._data_update_cancel_token = cancel_token
         self._data_update_in_flight = True
+        self._data_update_mode = (
+            "full_enrichment" if include_enrichment else "core"
+        )
         self._ensure_main_thread_dispatch()
         self._sync_update_button()
-        self.status_var.set("Updating official AUSL core data...")
-        self._log_event("data_update_started", source="official_ausl_core_data")
+        self.status_var.set(
+            "Starting full enrichment refresh..."
+            if include_enrichment
+            else "Updating official AUSL core data..."
+        )
+        refresh_source = (
+            "optional_enrichment_sources"
+            if include_enrichment
+            else "official_ausl_core_data"
+        )
+        self._log_event("data_update_started", source=refresh_source)
 
         def progress(message):
             self._post_main_thread(
@@ -4512,8 +4604,14 @@ class AUSLStatsApp:
 
         def work():
             try:
-                update_all_data(progress, include_enrichment=False, cancel_token=cancel_token)
-                data = load_database(include_enrichment=False)
+                update_all_data(
+                    progress,
+                    include_enrichment=include_enrichment,
+                    cancel_token=cancel_token,
+                )
+                data = load_database(
+                    enrichment_mode=EnrichmentMode.PRODUCER_APPROVED
+                )
             except RefreshCancelled:
                 self._post_main_thread(self._finish_data_update_cancelled, cancel_token)
                 return
@@ -4548,16 +4646,22 @@ class AUSLStatsApp:
         token = getattr(self, "_data_update_cancel_token", None)
         if token is None:
             return
+        mode = getattr(self, "_data_update_mode", "core")
         token.cancel()
         self._data_update_cancel_token = None
         self._data_update_in_flight = False
+        self._data_update_mode = None
         self._sync_update_button()
         self.status_var.set("Cancelling data update; last-known-good data retained.")
         if isinstance(getattr(self, "db", None), dict):
             self.db["refresh_attempt"] = {
                 "state": "cancelled",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
-                "affected_source": "official_core_sources",
+                "affected_source": (
+                    "optional_enrichment_sources"
+                    if mode == "full_enrichment"
+                    else "official_core_sources"
+                ),
                 "error_summary": None,
             }
         self._refresh_game_day_if_allowed()
@@ -4567,8 +4671,13 @@ class AUSLStatsApp:
     def _finish_data_update_success(self, data, token):
         if not self._data_update_token_is_current(token):
             return
+        mode = getattr(self, "_data_update_mode", "core")
         try:
-            self._next_change_comparison_source = "official_core_sources"
+            self._next_change_comparison_source = (
+                "optional_enrichment_sources"
+                if mode == "full_enrichment"
+                else "official_core_sources"
+            )
             self._finish_load(data)
         except Exception as exc:
             self._finish_data_update_error(exc, token)
@@ -4576,8 +4685,30 @@ class AUSLStatsApp:
         row_count = self._roster_count(data)
         self._data_update_in_flight = False
         self._data_update_cancel_token = None
+        self._data_update_mode = None
         self._sync_update_button()
-        self.status_var.set(f"Update complete — {row_count} current players loaded")
+        if mode == "full_enrichment":
+            counts = data.get("enrichment_counts", {})
+            approved_count = (
+                sum(int(item) for item in counts.values())
+                if isinstance(counts, dict)
+                else 0
+            )
+            self.status_var.set(
+                "Full enrichment refresh complete — "
+                f"{row_count} current players and {approved_count} approved "
+                "enrichment rows loaded"
+            )
+            if hasattr(self, "enrichment_mode_var"):
+                self.enrichment_mode_var.set(
+                    "ENRICHMENT MODE: PRODUCER APPROVED — "
+                    f"{approved_count} gated local rows available"
+                )
+        else:
+            self.status_var.set(
+                f"Update complete — {row_count} current players loaded; "
+                "approved local enrichment reloaded without fetching it"
+            )
         self._log_event(
             "data_update_succeeded",
             source="official_ausl_data",
@@ -4589,6 +4720,7 @@ class AUSLStatsApp:
             return
         self._data_update_in_flight = False
         self._data_update_cancel_token = None
+        self._data_update_mode = None
         self._sync_update_button()
         self.status_var.set(f"Data update failed: {exc}")
         if hasattr(self, "data_health_var"):
@@ -4617,6 +4749,7 @@ class AUSLStatsApp:
             return
         self._data_update_in_flight = False
         self._data_update_cancel_token = None
+        self._data_update_mode = None
         self._sync_update_button()
         self.status_var.set("Data update cancelled; last-known-good data retained.")
         if isinstance(getattr(self, "db", None), dict):
@@ -8766,7 +8899,11 @@ class AUSLStatsApp:
 
     def _best_split_rows(self, player_id, is_pitcher, year=CURRENT_YEAR, limit=4):
         key = "pitching_splits" if is_pitcher else "batting_splits"
-        frame = _air_ready_enrichment_rows(self.db.get(key, pd.DataFrame()))
+        category = "pitching" if is_pitcher else "batting"
+        frame = apply_split_sample_policy(
+            _air_ready_enrichment_rows(self.db.get(key, pd.DataFrame())),
+            category=category,
+        )
         if frame.empty or "player_id" not in frame:
             return []
         rows = frame[
@@ -8785,11 +8922,19 @@ class AUSLStatsApp:
                 - pd.to_numeric(rows.get("earnedRunAverage", 99), errors="coerce").fillna(99)
                 - pd.to_numeric(rows["_canonical_whip"], errors="coerce").fillna(3)
             )
-            rows = rows[pd.to_numeric(rows["_innings_outs"], errors="coerce").fillna(0) >= 3]
         else:
             rows["_score"] = pd.to_numeric(rows.get("opsPercentage", 0), errors="coerce").fillna(0) * 1000 + pd.to_numeric(rows.get("runsBattedIn", 0), errors="coerce").fillna(0)
-            rows = rows[pd.to_numeric(rows.get("plateAppearances", 0), errors="coerce").fillna(0) >= 6]
-        return [row for _, row in rows.sort_values("_score", ascending=False).head(limit).iterrows()]
+        rows["_air_ready_sort"] = rows["split_air_ready"].astype(bool)
+        return [
+            row
+            for _, row in rows.sort_values(
+                ["_air_ready_sort", "_score"],
+                ascending=[False, False],
+                kind="stable",
+            )
+            .head(limit)
+            .iterrows()
+        ]
 
     def _best_split_lines(self, player_id, is_pitcher, year=CURRENT_YEAR):
         rows = self._best_split_rows(player_id, is_pitcher, year)
@@ -8799,16 +8944,21 @@ class AUSLStatsApp:
             ]
         lines = []
         for row in rows:
+            sample_warning = (
+                ""
+                if bool(row.get("split_air_ready"))
+                else " [SMALL SAMPLE — VERIFY; NOT AIR-READY]"
+            )
             if is_pitcher:
                 whip = canonical_pitching_whip(row)
                 lines.append(
-                    f"- {value(row, 'split_label')}: {_format_innings_value(value(row, 'inningsPitched', None))} IP | "
+                    f"- {value(row, 'split_label')}{sample_warning}: {_format_innings_value(value(row, 'inningsPitched', None))} IP | "
                     f"{decimal(row, 'earnedRunAverage', 2)} ERA | {whole(row, 'strikeOuts')} SO | {_format_decimal_value(whip)} WHIP"
                 )
             else:
                 plate_appearances = whole(row, "plateAppearances")
                 lines.append(
-                    f"- {value(row, 'split_label')}: {plate_appearances} PA | "
+                    f"- {value(row, 'split_label')}{sample_warning}: {plate_appearances} PA | "
                     f"{rate(row, 'battingAverage')} AVG | {rate(row, 'opsPercentage')} OPS | "
                     f"{whole(row, 'runsBattedIn')} RBI | sample size: {plate_appearances} PA"
                 )

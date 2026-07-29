@@ -9,6 +9,9 @@ import zipfile
 from pathlib import Path
 
 
+_DETERMINISTIC_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
+
+
 def create_portable_zip(
     source: Path,
     destination: Path,
@@ -39,10 +42,14 @@ def create_portable_zip(
             allowZip64=True,
         ) as archive:
             for path in files:
-                archive.write(
-                    path,
-                    arcname=path.relative_to(source).as_posix(),
+                info = zipfile.ZipInfo(
+                    path.relative_to(source).as_posix(),
+                    date_time=_DETERMINISTIC_ZIP_TIMESTAMP,
                 )
+                info.compress_type = compression
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                archive.writestr(info, path.read_bytes())
         os.replace(temporary_path, destination)
     finally:
         temporary_path.unlink(missing_ok=True)

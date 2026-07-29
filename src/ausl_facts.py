@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import pandas as pd
 
 from ausl_data import normalize_roster_status
+from ausl_splits import apply_split_sample_policy, innings_to_outs as split_innings_to_outs
 
 
 class FactCategory(str, Enum):
@@ -513,6 +514,14 @@ def _source_health(database: Mapping[str, Any], source: str) -> str:
     manifest = database.get("manifest")
     entries = manifest.get("source_health") if isinstance(manifest, Mapping) else {}
     entry = entries.get(source) if isinstance(entries, Mapping) else None
+    if (
+        entry is None
+        and source == "media_guide"
+        and isinstance(entries, Mapping)
+    ):
+        # Read legacy Phase 6 fixtures/manifests, but all new snapshots use
+        # the canonical ``media_guide`` key emitted by ausl_data.
+        entry = entries.get("official_media_guide")
     status = _text(entry.get("status") if isinstance(entry, Mapping) else "").lower()
     if status not in {"green", "yellow", "red"}:
         return "unknown"
@@ -545,6 +554,9 @@ def _source_trust(
         affected = _text(attempt.get("affected_source"))
         affected_matches = affected == source or (
             affected == "official_core_sources" and source in _CORE_SOURCES
+        ) or (
+            affected == "optional_enrichment_sources"
+            and source in {"official_game_notes", "media_guide", "split_stats"}
         )
         if affected_matches and state is VerificationState.VERIFIED:
             state = VerificationState.VERIFY
@@ -915,6 +927,150 @@ def _official_stats_facts(
     return facts
 
 
+def _split_stat_facts(
+    database: Mapping[str, Any],
+    selected_game: Any,
+    roster: pd.DataFrame,
+    snapshot: str,
+) -> list[BroadcastFact]:
+    """Adapt detailed official splits through the shared sample-size policy."""
+
+    if database.get("enrichment_enabled") is not True:
+        return []
+    season = int(_field(selected_game, "season"))
+    game_id = _identifier(_field(selected_game, "game_id"))
+    team_names = _selected_team_names(selected_game)
+    team_codes = set(team_names)
+    health_state, health, health_warning = _source_trust(
+        database, "split_stats"
+    )
+    facts: list[BroadcastFact] = []
+    for key, category, is_pitcher in (
+        ("batting_splits", "batting", False),
+        ("pitching_splits", "pitching", True),
+    ):
+        frame = apply_split_sample_policy(
+            database.get(key, pd.DataFrame()), category=category
+        )
+        if frame.empty:
+            continue
+        for _, row in frame.iterrows():
+            player_id = _identifier(row.get("player_id"))
+            matches = roster[roster["_player_id"].eq(player_id)]
+            if len(matches) != 1:
+                continue
+            player = matches.iloc[0]
+            team_code = player["_team_code"]
+            if team_code not in team_codes:
+                continue
+            row_season = _number(row.get("season"), integer=True)
+            if row_season != season:
+                continue
+            split_key = _text(row.get("split_key"))
+            split_label = _text(row.get("split_label"))
+            source_name = _text(row.get("source_name"))
+            source_url = _text(row.get("source_url"))
+            imported_at = _text(row.get("imported_at"))
+            if not all((split_key, split_label, source_name, source_url, imported_at)):
+                continue
+            name = _text(player.get("player_name"))
+            eligible = bool(row.get("split_air_ready"))
+            if is_pitcher:
+                outs = split_innings_to_outs(row.get("inningsPitched"))
+                strikeouts = _number(row.get("strikeOuts"), integer=True)
+                era = _number(row.get("earnedRunAverage"))
+                if outs is None or strikeouts is None or era is None:
+                    continue
+                innings = f"{outs // 3}.{outs % 3}"
+                air_copy = (
+                    f"{name} has a {era:.2f} ERA with {strikeouts} strikeouts "
+                    f"in {innings} innings over the {split_label.lower()} split."
+                )
+                sample_evidence = ("sample_outs", outs)
+            else:
+                plate_appearances = _number(
+                    row.get("plateAppearances"), integer=True
+                )
+                hits = _number(row.get("hits"), integer=True)
+                average = _number(row.get("battingAverage"))
+                if (
+                    plate_appearances is None
+                    or hits is None
+                    or average is None
+                ):
+                    continue
+                air_copy = (
+                    f"{name} is batting {average:.3f} with {hits} hits in "
+                    f"{plate_appearances} plate appearances over the "
+                    f"{split_label.lower()} split."
+                )
+                sample_evidence = ("sample_plate_appearances", plate_appearances)
+            if eligible and health_state is VerificationState.VERIFIED:
+                state = VerificationState.VERIFIED
+                warning = ""
+            elif health_state is VerificationState.STALE:
+                state = VerificationState.STALE
+                warning = health_warning
+            elif health_state is VerificationState.UNAVAILABLE:
+                state = VerificationState.UNAVAILABLE
+                warning = health_warning
+            else:
+                state = VerificationState.VERIFY
+                warning = (
+                    "SMALL SAMPLE: below the configured producer split threshold; "
+                    "not air-ready."
+                    if not eligible
+                    else health_warning
+                    or "Split source approval is incomplete."
+                )
+            record_identity = (
+                f"split:{season}:{player_id}:{category}:{split_key}"
+            )
+            facts.append(
+                _fact(
+                    category=FactCategory.RECENT_TREND,
+                    subject_type=FactSubjectType.PLAYER,
+                    subject_id=player_id,
+                    season=season,
+                    game_id=game_id,
+                    source_record_identity=record_identity,
+                    concept_key=f"official-split:{category}:{split_key}",
+                    headline=f"{name.upper()} — {split_label.upper()}",
+                    air_copy=air_copy,
+                    supporting_context=(
+                        f"Official detailed split. "
+                        f"{'Meets' if eligible else 'Below'} the configured sample threshold."
+                    ),
+                    subject_display_name=name,
+                    team_code=team_code,
+                    team_display_name=team_names.get(team_code) or team_code,
+                    opponent_context=f"Game {game_id}",
+                    provenance=(
+                        SourceProvenance(
+                            source_name,
+                            source_url,
+                            source_date=imported_at,
+                            snapshot_timestamp=snapshot,
+                            parser_version="phase7a-split-policy-v1",
+                            source_record_id=record_identity,
+                        ),
+                    ),
+                    verification_state=state,
+                    source_health=health,
+                    warning_reason=warning,
+                    producer_confirmation_required=state
+                    is not VerificationState.VERIFIED,
+                    evidence=(
+                        ("split_key", split_key),
+                        ("split_label", split_label),
+                        sample_evidence,
+                        ("sample_eligible", eligible),
+                    ),
+                )
+            )
+    return facts
+
+
 def _category(raw: Any) -> FactCategory:
     mapping = {
         "availability": FactCategory.AVAILABILITY,
@@ -1000,6 +1156,15 @@ def _official_note_facts(
         )
         raw_state = _text(row.get("verification_state")).upper()
         approved = _bool_false(row.get("needs_review"))
+        enrichment_mode = _text(database.get("enrichment_mode")).casefold()
+        if enrichment_mode == "producer_approved":
+            approved = (
+                approved
+                and row.get("producer_approved") is True
+                and row.get("producer_air_ready") is True
+            )
+        elif enrichment_mode == "developer_review":
+            approved = False
         if (
             raw_state == "VERIFIED"
             and approved
@@ -1349,7 +1514,7 @@ def _media_facts(
     game_id = _identifier(_field(selected_game, "game_id"))
     team_names = _selected_team_names(selected_game)
     source_state, source_health, source_warning = _source_trust(
-        database, "official_media_guide"
+        database, "media_guide"
     )
     facts = []
     for _, row in frame.sort_index(kind="stable").iterrows():
@@ -1395,6 +1560,15 @@ def _media_facts(
             and approval_id
             and not warning_value
         )
+        enrichment_mode = _text(database.get("enrichment_mode")).casefold()
+        if enrichment_mode == "producer_approved":
+            complete = (
+                complete
+                and row.get("producer_approved") is True
+                and row.get("producer_air_ready") is True
+            )
+        elif enrichment_mode == "developer_review":
+            approval_state = "VERIFY"
         if (
             approval_state == "VERIFIED"
             and complete
@@ -1567,6 +1741,7 @@ def build_selected_game_facts(
         )
     facts = [
         *_official_stats_facts(database, selected_game, roster, snapshot),
+        *_split_stat_facts(database, selected_game, roster, snapshot),
         *_lineup_facts(
             database, selected_game, roster, lineup_lock, snapshot
         ),

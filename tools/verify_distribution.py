@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import re
 import sys
@@ -11,6 +12,14 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable, Iterable
+
+import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from ausl_enrichment import approved_enrichment_frames
 
 
 _FORBIDDEN_PATHS = {
@@ -64,6 +73,31 @@ _CORE_EXPORTS = _CORE_WORKBOOKS | {
 _DISTRIBUTION_MANIFEST = "distribution_manifest.json"
 _CORE_VALIDATION_STATE = "validated_phase_1_core"
 _ALLOWED_DISTRIBUTION_EXPORT_NAMES = _CORE_EXPORTS | {_DISTRIBUTION_MANIFEST}
+_APPROVED_ENRICHMENT_MANIFEST = "approved_enrichment_manifest.json"
+_APPROVED_ENRICHMENT_WORKBOOKS = {
+    "ausl_batting_splits.xlsx": ("batting_splits", "batting_splits"),
+    "ausl_pitching_splits.xlsx": ("pitching_splits", "pitching_splits"),
+    "ausl_fielding_splits.xlsx": ("fielding_splits", "fielding_splits"),
+    "ausl_media_guide_players.xlsx": (
+        "media_players",
+        "player_bio_enrichment",
+    ),
+    "ausl_media_guide_teams.xlsx": ("media_teams", "team_media_guide"),
+    "ausl_media_guide_notes.xlsx": ("media_notes", "media_guide_notes"),
+    "clean_media_guide_notes.xlsx": (
+        "clean_media_notes",
+        "clean_media_guide_notes",
+    ),
+    "official_game_notes.xlsx": (
+        "official_game_notes",
+        "official_game_notes",
+    ),
+}
+_APPROVED_DISTRIBUTION_EXPORT_NAMES = (
+    _ALLOWED_DISTRIBUTION_EXPORT_NAMES
+    | set(_APPROVED_ENRICHMENT_WORKBOOKS)
+    | {_APPROVED_ENRICHMENT_MANIFEST}
+)
 _SECRET_DATA_SUFFIXES = {".cfg", ".db", ".ini", ".json", ".pickle", ".sqlite", ".txt", ".yaml", ".yml"}
 _SECRET_STEM = re.compile(
     r"^(?:client[-_]?secret|credentials?|oauth[-_]?token|refresh[-_]?token)(?:[-_].*)?$",
@@ -83,7 +117,7 @@ def _contains_sequence(parts: tuple[str, ...], sequence: tuple[str, ...]) -> boo
     return any(parts[index : index + width] == sequence for index in range(len(parts) - width + 1))
 
 
-def _policy_reason(entry_name: str) -> str | None:
+def _policy_reason(entry_name: str, *, profile: str = "core") -> str | None:
     normalized = entry_name.replace("\\", "/")
     pure_path = PurePosixPath(normalized)
     parts = tuple(part.casefold() for part in pure_path.parts if part not in ("", ".", "/"))
@@ -107,12 +141,21 @@ def _policy_reason(entry_name: str) -> str | None:
         return "private producer session"
     if name in _FORBIDDEN_NAMES:
         return _FORBIDDEN_NAMES[name]
-    if name in _UNVERIFIED_ENRICHMENT_NAMES:
+    approved_name = (
+        profile == "approved-enrichment"
+        and name in _APPROVED_ENRICHMENT_WORKBOOKS
+    )
+    if name in _UNVERIFIED_ENRICHMENT_NAMES and not approved_name:
         return "unverified enrichment excluded from Phase 1"
     for index in range(len(parts) - 1):
         if parts[index : index + 2] == ("data", "exports"):
             export_parts = parts[index + 2 :]
-            if len(export_parts) != 1 or export_parts[0] not in _ALLOWED_DISTRIBUTION_EXPORT_NAMES:
+            allowed = (
+                _APPROVED_DISTRIBUTION_EXPORT_NAMES
+                if profile == "approved-enrichment"
+                else _ALLOWED_DISTRIBUTION_EXPORT_NAMES
+            )
+            if len(export_parts) != 1 or export_parts[0] not in allowed:
                 return "file is outside the Phase 1 distributable allowlist"
     if name == ".env" or name.startswith(".env."):
         return "environment/credential file"
@@ -293,9 +336,303 @@ def _manifest_violations(
     return violations
 
 
-def scan_distribution(target: Path | str) -> list[Violation]:
+def _approved_manifest_violations(
+    target: Path,
+    entries: Iterable[str],
+    read_entry: Callable[[str], bytes],
+) -> list[Violation]:
+    """Validate the explicit Phase 7A producer-approved profile."""
+
+    entries_by_key: dict[str, str] = {}
+    core_directories: set[str] = set()
+    for entry in entries:
+        normalized = _normalized_entry(entry)
+        if normalized.endswith("/"):
+            continue
+        pure_path = PurePosixPath(normalized)
+        entries_by_key[normalized.casefold()] = entry
+        if pure_path.name.casefold() in _CORE_WORKBOOKS:
+            core_directories.add(pure_path.parent.as_posix())
+
+    violations: list[Violation] = []
+    for directory in sorted(core_directories):
+        prefix = "" if directory == "." else f"{directory}/"
+        manifest_entry = f"{prefix}{_APPROVED_ENRICHMENT_MANIFEST}"
+        manifest_source = entries_by_key.get(manifest_entry.casefold())
+        if manifest_source is None:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment manifest is missing",
+                )
+            )
+            continue
+        try:
+            manifest_bytes = read_entry(manifest_source)
+            manifest = json.loads(manifest_bytes.decode("utf-8-sig"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    f"approved-enrichment manifest is unreadable: {exc}",
+                )
+            )
+            continue
+        if b"\r\n" in manifest_bytes or not manifest_bytes.endswith(b"\n"):
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment manifest must use deterministic UTF-8/LF output",
+                )
+            )
+        if not isinstance(manifest, dict):
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment manifest root must be an object",
+                )
+            )
+            continue
+        if manifest.get("profile") != "approved-enrichment":
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment profile identity is invalid",
+                )
+            )
+        if manifest.get("approval_schema_version") != 1:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment approval schema is unsupported",
+                )
+            )
+        update_entry = f"{prefix}update_manifest.json"
+        update_source = entries_by_key.get(update_entry.casefold())
+        roster_entry = f"{prefix}ausl_rosters.xlsx"
+        roster_source = entries_by_key.get(roster_entry.casefold())
+        if update_source is None or roster_source is None:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment verification requires core roster and update manifest",
+                )
+            )
+            continue
+        try:
+            update_manifest = json.loads(
+                read_entry(update_source).decode("utf-8-sig")
+            )
+            with pd.ExcelFile(
+                io.BytesIO(read_entry(roster_source))
+            ) as roster_book:
+                roster_sheets = sorted(
+                    (
+                        name
+                        for name in roster_book.sheet_names
+                        if name.startswith("roster_")
+                        and name.removeprefix("roster_").isdigit()
+                    ),
+                    key=lambda name: int(name.removeprefix("roster_")),
+                )
+                if not roster_sheets:
+                    raise ValueError("no season roster sheet")
+                roster = pd.read_excel(
+                    roster_book, sheet_name=roster_sheets[-1]
+                )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    f"approved-enrichment core identity data is unreadable: {exc}",
+                )
+            )
+            continue
+        snapshot = (
+            update_manifest.get("updated_at")
+            if isinstance(update_manifest, dict)
+            else None
+        )
+        if (
+            not isinstance(snapshot, str)
+            or manifest.get("snapshot_updated_at") != snapshot
+            or manifest.get("validation_timestamp") != snapshot
+        ):
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment snapshot or validation timestamp is invalid",
+                )
+            )
+
+        records_payload = manifest.get("files")
+        records = {}
+        if isinstance(records_payload, list):
+            for record in records_payload:
+                if (
+                    isinstance(record, dict)
+                    and isinstance(record.get("name"), str)
+                ):
+                    records[record["name"]] = record
+        else:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment files must be an array",
+                )
+            )
+        packaged_frames: dict[str, pd.DataFrame] = {}
+        for filename, (key, sheet) in _APPROVED_ENRICHMENT_WORKBOOKS.items():
+            file_entry = f"{prefix}{filename}"
+            source_entry = entries_by_key.get(file_entry.casefold())
+            record = records.get(filename)
+            if source_entry is None:
+                if record is not None:
+                    violations.append(
+                        Violation(
+                            target,
+                            manifest_entry,
+                            f"approved manifest lists missing file: {filename}",
+                        )
+                    )
+                continue
+            if record is None:
+                violations.append(
+                    Violation(
+                        target,
+                        file_entry,
+                        "approved workbook is absent from approval manifest",
+                    )
+                )
+                continue
+            try:
+                payload = read_entry(source_entry)
+                frame = pd.read_excel(io.BytesIO(payload), sheet_name=sheet)
+            except (OSError, ValueError) as exc:
+                violations.append(
+                    Violation(
+                        target,
+                        file_entry,
+                        f"approved workbook is unreadable: {exc}",
+                    )
+                )
+                continue
+            actual_hash = hashlib.sha256(payload).hexdigest()
+            if record.get("sha256") != actual_hash:
+                violations.append(
+                    Violation(
+                        target,
+                        file_entry,
+                        "approved-enrichment manifest hash mismatch",
+                    )
+                )
+            if record.get("bytes") != len(payload):
+                violations.append(
+                    Violation(
+                        target,
+                        file_entry,
+                        "approved-enrichment manifest byte count mismatch",
+                    )
+                )
+            if (
+                record.get("row_count") != len(frame)
+                or record.get("validation")
+                != "producer_approved_phase_7a"
+            ):
+                violations.append(
+                    Violation(
+                        target,
+                        file_entry,
+                        "approved-enrichment manifest row validation is invalid",
+                    )
+                )
+            packaged_frames[key] = frame
+
+        unexpected_records = set(records).difference(
+            _APPROVED_ENRICHMENT_WORKBOOKS
+        )
+        for filename in sorted(unexpected_records):
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    f"approved manifest lists a non-approved file: {filename}",
+                )
+            )
+        try:
+            revalidated = approved_enrichment_frames(
+                packaged_frames,
+                roster=roster,
+                manifest=update_manifest,
+            )
+        except Exception as exc:  # fail closed on any gate implementation error
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    f"approved-enrichment gates could not be evaluated: {type(exc).__name__}",
+                )
+            )
+            continue
+        for key, frame in packaged_frames.items():
+            filtered = revalidated.get(key, pd.DataFrame())
+            if len(filtered) != len(frame) or (
+                "producer_approved" not in frame.columns
+                or not frame["producer_approved"].astype(bool).all()
+            ):
+                filename = next(
+                    name
+                    for name, (candidate, _sheet) in _APPROVED_ENRICHMENT_WORKBOOKS.items()
+                    if candidate == key
+                )
+                violations.append(
+                    Violation(
+                        target,
+                        f"{prefix}{filename}",
+                        "one or more rows fail the approved-enrichment approval gate",
+                    )
+                )
+        declared_counts = manifest.get("row_counts")
+        actual_counts = {
+            key: int(len(frame)) for key, frame in packaged_frames.items()
+        }
+        if declared_counts != actual_counts:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment row counts do not match packaged workbooks",
+                )
+            )
+        expected_fallback = "core_only" if not packaged_frames else "none"
+        if manifest.get("fallback") != expected_fallback:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment fallback state is invalid",
+                )
+            )
+    return violations
+
+
+def scan_distribution(
+    target: Path | str, *, profile: str = "core"
+) -> list[Violation]:
     """Return every forbidden entry in a package directory or ZIP archive."""
 
+    if profile not in {"core", "approved-enrichment"}:
+        raise ValueError(f"Unsupported distribution profile: {profile}")
     target_path = Path(target)
     if not target_path.exists():
         raise FileNotFoundError(target_path)
@@ -307,16 +644,26 @@ def scan_distribution(target: Path | str) -> list[Violation]:
             return target_path.joinpath(*PurePosixPath(normalized).parts).read_bytes()
 
         manifest_violations = _manifest_violations(target_path, entries, read_entry)
+        if profile == "approved-enrichment":
+            manifest_violations.extend(
+                _approved_manifest_violations(target_path, entries, read_entry)
+            )
     elif target_path.suffix.casefold() == ".zip":
         with zipfile.ZipFile(target_path) as archive:
             entries = [info.filename for info in archive.infolist()]
             manifest_violations = _manifest_violations(target_path, entries, archive.read)
+            if profile == "approved-enrichment":
+                manifest_violations.extend(
+                    _approved_manifest_violations(
+                        target_path, entries, archive.read
+                    )
+                )
     else:
         raise ValueError(f"Unsupported distribution target: {target_path}")
 
     violations = []
     for entry in entries:
-        reason = _policy_reason(entry)
+        reason = _policy_reason(entry, profile=profile)
         if reason:
             violations.append(Violation(target_path, entry, reason))
     violations.extend(manifest_violations)
@@ -328,12 +675,18 @@ def main(argv: list[str] | None = None) -> int:
         description="Verify that AUSL distributables exclude producer-local data, logs, caches, and credentials."
     )
     parser.add_argument("targets", nargs="+", type=Path, help="Package directories or ZIP archives to inspect")
+    parser.add_argument(
+        "--profile",
+        choices=("core", "approved-enrichment"),
+        default="core",
+        help="Distribution allowlist and validation profile.",
+    )
     args = parser.parse_args(argv)
 
     all_violations: list[Violation] = []
     for target in args.targets:
         try:
-            violations = scan_distribution(target)
+            violations = scan_distribution(target, profile=args.profile)
         except (FileNotFoundError, OSError, ValueError, zipfile.BadZipFile) as exc:
             print(f"ERROR: could not verify {target}: {exc}", file=sys.stderr)
             return 2

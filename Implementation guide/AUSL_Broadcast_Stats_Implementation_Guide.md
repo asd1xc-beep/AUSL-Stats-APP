@@ -4,9 +4,10 @@ Version: 1.2
 
 Roadmap updated: 2026-07-29
 
-Prepared from: GitHub `main` at
-`bca5be6286996da844e0f260ae1e06f1feaf054e` (through Phase 6F and the
-project-owner Phase 7 roadmap update)
+Prepared from: accepted Phase 6 GitHub `main` at
+`08fd7f09f24a53f3270516c51e6667e9daa35538`, then updated through the
+reviewed Phase 7A implementation commits on
+`agent/phase7a-producer-enrichment`.
 
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 
@@ -79,9 +80,10 @@ Codex should establish these source-of-truth rules before changing presentation 
 ## 5. Recommended implementation sequence
 
 Roadmap note (2026-07-29): Phases 6A–6F are complete on the reviewed `main`
-branch. A focused independent-review stabilization pass and the project
-owner's 100%/125%/150% Windows display-scaling sign-off remain required before
-the full Phase 6 acceptance record can be closed. Phase 7 has not started.
+branch. The focused stabilization pass merged in PR #11, and the project owner
+reported that 100%/125%/150% Windows display scaling, truck-hardware smoke,
+and producer rehearsal passed. The full Phase 6 acceptance record is closed.
+Phase 7A is complete. Phase 7B has not started.
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -830,8 +832,9 @@ Search should support player name/aliases, team, number, position, roster
 status, typo tolerance, and lightweight quick filters. Add side-by-side player
 comparison only after collision-safe identity behavior is tested.
 
-Implementation status (2026-07-29): complete; the full Phase 6 acceptance
-review and project-owner display-scaling sign-off remain pending.
+Implementation status (2026-07-29): complete. The full Phase 6 acceptance
+review and project-owner display-scaling sign-off are recorded in
+`Phase_6_Full_Acceptance_Record.md`.
 
 `src/ausl_search.py` owns one immutable local roster index per installed
 database and a nonexecuting parser for quoted quick filters. Filters apply
@@ -894,6 +897,32 @@ an ordered set of reviewable units, not one large rewrite.
 
 Objective: let an ordinary producer use validated enrichment without exposing
 developer-only, ambiguous, stale, or unapproved material.
+
+Implementation status (2026-07-29): complete on
+`agent/phase7a-producer-enrichment`. The detailed evidence is in
+`Phase_7A_Acceptance_Record.md`. Phase 7B has not started.
+
+`src/ausl_enrichment.py` defines the typed CORE_ONLY, PRODUCER_APPROVED, and
+DEVELOPER_REVIEW modes and the defensive row gates. Ordinary startup and
+Quick/Full completion use PRODUCER_APPROVED. The review mode cannot promote a
+row by changing one Boolean.
+
+`src/ausl_splits.py` owns the shared fail-closed split policy: exact normalized
+regularSeason aggregates are excluded; default qualification is 12 hitter
+plate appearances or 9 canonical pitcher outs; valid smaller samples remain
+visible as SMALL SAMPLE but are not air-ready.
+
+Quick and Full jobs serialize before fetching or staging. Core plus every
+successful optional workbook then stage and promote in the same rollback-safe
+transaction. Failed optional sources retain last-known-good files and honest
+health. Full Refresh is deliberate and producer-facing; Local/Offline Mode
+blocks it before confirmation or worker creation.
+
+The default distribution profile remains `core`. The explicit
+`approved-enrichment` profile includes only revalidated producer workbooks and
+an approval manifest with snapshot, approval schema, hashes, byte/row counts,
+and provenance columns. Raw/review/debug/private material remains forbidden,
+and deterministic ZIP output is portable across platforms.
 
 Work:
 
@@ -1350,19 +1379,15 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-1. Finish the focused Phase 6 stabilization pass without weakening exact
-   identity, fact provenance, privacy, offline, session, refresh, or
-   last-known-good safeguards.
-2. Wait for the project owner's Windows display-scaling sign-off at 100%,
-   125%, and 150%; do not infer or pre-mark `UI-002`.
-3. Record the full Phase 6 acceptance only after stabilization and scaling
-   sign-off are both complete.
-4. Then begin Phase 7A with failing-first tests for split qualification and
-   negative enrichment gates.
-5. Add the producer-facing Full Enrichment Refresh only after its cancellation,
-   per-source failure, last-known-good, approval, and packaging tests pass.
-6. Stop after Phase 7A acceptance. Review its trust boundaries before creating
-   the Phase 7B college schema.
+1. Review the accepted Phase 7A trust boundary and draft PR evidence.
+2. Keep the default core distribution unchanged; use the explicit
+   `approved-enrichment` profile only when approved optional rows are intended.
+3. Retain official-note manual approval and media exact-identity approval
+   before producer promotion.
+4. Stop after Phase 7A. Phase 7B is **NOT STARTED**.
+5. Begin Phase 7B only in a separate pass after the owner accepts this Phase 7A
+   boundary; define the college schema and provenance rules before collecting
+   or displaying college data.
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College

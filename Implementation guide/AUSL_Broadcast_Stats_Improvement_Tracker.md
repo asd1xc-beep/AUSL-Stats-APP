@@ -2,9 +2,9 @@
 
 Last updated: 2026-07-29
 
-Project source reviewed: GitHub `main` at
-`bca5be6286996da844e0f260ae1e06f1feaf054e` (through Phase 6F and the
-project-owner roadmap update)
+Project source reviewed: accepted Phase 6 GitHub `main` at
+`08fd7f09f24a53f3270516c51e6667e9daa35538`, then the reviewed Phase 7A
+commits on `agent/phase7a-producer-enrichment`.
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -36,23 +36,23 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 6 — Full Phase 6 acceptance review
+### Milestone 7A — Producer-facing approved enrichment
 
-Phase 6F completed on 2026-07-29. The current implementation unit is the
-focused Phase 6 stabilization pass identified by the independent full-phase
-review: restore the Phase 6F acceptance status, correct per-fact comparison
-provenance, fix Player Lookup expansion, and harden partial-name typo and
-apostrophe handling.
+Phase 6F completed on 2026-07-29. The stabilization changes merged in PR #11
+at `08fd7f09f24a53f3270516c51e6667e9daa35538`. Windows scaling at 100%,
+125%, and 150%, truck-hardware smoke, and producer rehearsal are recorded as
+**project-owner reported** complete; no unsupplied hardware or behavior detail
+is inferred. The full Phase 6 acceptance is closed.
 
-After stabilization, the project owner will separately test Windows display
-scaling at 100%, 125%, and 150%. Phase 6 remains unaccepted until that
-project-owner sign-off and the full acceptance record are complete. Phase 7
-has not started.
+Phase 7A now completes centralized split reliability, typed enrichment load
+modes, producer-facing Full Enrichment Refresh, strict media/note approval
+gates, last-known-good source handling, and the explicit approved-enrichment
+distribution profile. Phase 7B is **NOT STARTED**.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6 STABILIZATION COMPLETE — DISPLAY SCALING SIGN-OFF PENDING**
+Status: **PHASE 7A COMPLETE — PHASE 7B NOT STARTED**
 
 ## Approved next roadmap
 
@@ -63,9 +63,9 @@ be reused by the college layer.
 
 | Order | Implementation unit | Outcome | Start gate |
 |---|---|---|---|
-| 1 | Phase 6 stabilization | Close the four independent-review findings without starting Phase 7 | Current pass |
-| 2 | Phase 6 acceptance | Owner scaling sign-off and final full-phase acceptance record | Stabilization complete |
-| 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Phase 6 accepted; split reliability complete |
+| 1 | Phase 6 stabilization | Close the four independent-review findings without starting Phase 7 | Complete |
+| 2 | Phase 6 acceptance | Owner scaling sign-off and final full-phase acceptance record | Complete |
+| 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Complete |
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Phase 7A trust boundaries stable |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Phase 7B specification accepted |
 | 6 | Phase 7D | Add the separate College Résumé tab | Pilot data and producer review accepted |
@@ -175,13 +175,13 @@ requirement or a P0/P1 reliability issue changes the order.
   - ERA/WHIP: `0.88`, `1.00`.
   - Missing is `—`/`N/A`, never a fabricated zero.
 
-- [ ] `SPLIT-001` — Exclude `regularSeason` aggregate rows from the best situational-split list. **P1 · NEXT — PHASE 7A PREREQUISITE**
+- [x] `SPLIT-001` — Exclude `regularSeason` aggregate rows from the best situational-split list. **P1 · COMPLETE — PHASE 7A**
 
-- [ ] `SPLIT-002` — Establish configurable sample thresholds and reliability labels. **P1 · NEXT — PHASE 7A PREREQUISITE**
-  - Initial review target: hitter at least 10–12 PA; pitcher at least 3 IP or a batters-faced threshold.
+- [x] `SPLIT-002` — Establish configurable sample thresholds and reliability labels. **P1 · COMPLETE — PHASE 7A**
+  - Default policy: hitter at least 12 PA; pitcher at least 9 canonical outs.
   - Always show sample size.
 
-- [ ] `SPLIT-003` — Keep small samples available in detail without promoting them as top storylines. **P2 · NEXT — PHASE 7A PREREQUISITE**
+- [x] `SPLIT-003` — Keep small samples available in detail without promoting them as top storylines. **P2 · COMPLETE — PHASE 7A**
 
 ### G. Exact game identity and lineup workflow
 
@@ -226,15 +226,15 @@ requirement or a P0/P1 reliability issue changes the order.
 - [x] `STATE-001` — Rerender or clear the selected player card after data refresh. **P0 · COMPLETE**
   - Clipboard text and `current_broadcast_note` must use the same database version as the visible card.
 
-- [ ] `UI-001` — Add visible scrollbars to long content panels. **P2 · IN PROGRESS — PHASE 6 ACCEPTANCE**
+- [x] `UI-001` — Add visible scrollbars to long content panels. **P2 · COMPLETE — PHASE 6 ACCEPTED**
   - Player Lookup and Compare Players have visible vertical scrolling, and the
     comparison surface supports the mouse wheel. Broader cross-tab manual
     confirmation remains part of the full Phase 6 acceptance review.
 
-- [ ] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · BLOCKED — OWNER SCALING SIGN-OFF**
-  - The automated 1120×720 Windows smoke passes. The project owner will
-    separately confirm 100%, 125%, and 150% scaling; this pass does not infer
-    that result.
+- [x] `UI-002` — Verify minimum window size and Windows scaling at 100%, 125%, and 150%. **P1 · COMPLETE — OWNER REPORTED**
+  - The automated 1120×720 Windows smoke passes. The project owner reports
+    that 100%, 125%, and 150% scaling passed; no additional display or hardware
+    detail is inferred.
 
 - [x] `UI-003` — Add keyboard navigation for search and primary game workflow. **P2 · COMPLETE**
   - Ctrl+F, Escape, arrows, Enter, Ctrl+1, and Ctrl+2 preserve explicit player
@@ -444,22 +444,22 @@ Only enrichment that passes the existing canonical identity, approval,
 freshness, and source-health gates may leave developer mode. Raw parser output,
 debug exports, ambiguous identities, and unapproved rows remain excluded.
 
-- [ ] `ENRICH-001` — Add a producer-facing `Full Enrichment Refresh` workflow. **P1 · PLANNED — PHASE 7A**
+- [x] `ENRICH-001` — Add a producer-facing `Full Enrichment Refresh` workflow. **P1 · COMPLETE — PHASE 7A**
   - Require deliberate opt-in, per-source progress and health, cancellation,
     Local/Offline Mode enforcement, and last-known-good retention.
   - A failed or cancelled source must not replace its prior validated snapshot.
 
-- [ ] `ENRICH-002` — Promote approved media-guide facts to ordinary producer mode. **P0 · PLANNED — PHASE 7A**
+- [x] `ENRICH-002` — Promote approved media-guide facts to ordinary producer mode. **P0 · COMPLETE — PHASE 7A**
   - Reuse the canonical approval transaction, exact player/team identity,
     printed/PDF provenance, guide date, reviewer, approval timestamp, and
     unresolved-warning gates.
 
-- [ ] `ENRICH-003` — Promote approved official game-note facts to ordinary producer mode. **P0 · PLANNED — PHASE 7A**
+- [x] `ENRICH-003` — Promote approved official game-note facts to ordinary producer mode. **P0 · COMPLETE — PHASE 7A**
   - Require exact official game ID, subject/team identity, source document,
     page/location, publication/effective date, parser version, freshness, and
     approval state. Ambiguous or wrong-game rows remain unavailable.
 
-- [ ] `ENRICH-004` — Define and verify an enrichment-capable distribution profile. **P1 · PLANNED — PHASE 7A**
+- [x] `ENRICH-004` — Define and verify an enrichment-capable distribution profile. **P1 · COMPLETE — PHASE 7A**
   - Package only validated approved outputs and their manifests.
   - Continue excluding raw/debug artifacts, unapproved review queues, caches,
     manual notes, lineup locks, private session state, and producer exports.
@@ -526,7 +526,38 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 
 Fill in one record when a milestone or major item is completed.
 
-### Phase 6 full acceptance — PENDING
+### Phase 7A — Producer-facing approved enrichment
+
+- Completion date: 2026-07-29.
+- Starting commit and branch: remote `main`
+  `08fd7f09f24a53f3270516c51e6667e9daa35538`;
+  `agent/phase7a-producer-enrichment`.
+- Reviewed implementation commits: `c23ab52`, `8a34785`, and `85b0db9`.
+- Completed tracker scope: `SPLIT-001`, `SPLIT-002`, `SPLIT-003`,
+  `ENRICH-001`, `ENRICH-002`, `ENRICH-003`, and `ENRICH-004`.
+- Typed load boundary: ordinary producer paths use `PRODUCER_APPROVED`;
+  `CORE_ONLY` excludes optional sources; `DEVELOPER_REVIEW` cannot promote
+  review rows.
+- Split boundary: exact aggregate exclusion, 12-PA/9-out defaults, and
+  visible non-air-ready `SMALL SAMPLE` detail.
+- Refresh boundary: deliberate Full Enrichment action, Quick/Full
+  serialization, complete transactional staging, cancellation guards,
+  per-source health, and last-known-good fallback.
+- Distribution boundary: unchanged default `core` profile plus explicit,
+  deterministic, row-revalidated `approved-enrichment`.
+- Focused tests passed **76 tests in 6.01 s**; the complete offline suite
+  passed **847 tests** with warnings as errors. Compilation, dependency,
+  distribution, LFS, whitespace, privacy, and tracked/history secret checks
+  passed.
+- Windows source/real-Tk smoke passed at 1120×720 on
+  `Windows-10-10.0.19045-SP0`, Python 3.12.10, with approved facts for both
+  teams, cancel/queue replacement, coherent final facts/database, all eight
+  tabs, Local/Offline Mode, no stale dialogs, and zero network calls.
+- Detailed evidence:
+  `Implementation guide/Phase_7A_Acceptance_Record.md`.
+- Phase 7B is **NOT STARTED**.
+
+### Phase 6 full acceptance — COMPLETE
 
 - [x] Phase 6F focused tests and full offline regression pass.
 - [x] Collision-safe fuzzy search and quick-filter identity tests pass.
@@ -534,15 +565,20 @@ Fill in one record when a milestone or major item is completed.
   verification labels for both players.
 - [x] Keyboard and scroll reachability pass at the normal automated minimum
   1120×720 window.
-- [ ] Windows 100%, 125%, and 150% scaling pass on target truck hardware.
+- [x] Windows 100%, 125%, and 150% scaling pass, project-owner reported.
 - [x] Privacy and distribution verification exclude all producer-private,
   raw/debug, and unapproved enrichment artifacts.
 - [x] Offline startup, Local/Offline Mode, refresh cancellation,
   last-known-good recovery, session restore, and What Changed remain stable.
-- [ ] Producer workflow smoke covers game selection, player search, fact copy,
+- [x] Producer workflow smoke covers game selection, player search, fact copy,
   pin/rundown, used-on-air, comparison, packet export, and recovery.
-- [ ] Completion report records commands, counts, hardware/environment,
+- [x] Completion report records commands, counts, hardware/environment,
   screenshots or observations, known limitations, and the accepted commit.
+- [x] Truck-hardware smoke and producer rehearsal are project-owner reported
+  complete. No unsupplied hardware, date, scaling behavior, or rehearsal
+  details are recorded.
+- Detailed evidence:
+  `Implementation guide/Phase_6_Full_Acceptance_Record.md`.
 
 ### Phase 6F — Faster discovery and player comparison
 
@@ -555,8 +591,10 @@ Fill in one record when a milestone or major item is completed.
   neutral comparison model; `846cbfc` integrated Player Lookup, Compare
   Players, keyboard workflow, schema-v3 recovery, and the real-Tk smoke.
   `c5e10d1` recorded the detailed acceptance evidence.
-- Completed tracker scope: `SEARCH-004`, `SEARCH-005`, `UI-003`, `UX-011`, and
-  the Player Lookup/Compare Players portion of `UI-001`. `UI-002` remains open.
+- Completed tracker scope at that delivery: `SEARCH-004`, `SEARCH-005`,
+  `UI-003`, `UX-011`, and the Player Lookup/Compare Players portion of
+  `UI-001`. `UI-001` and `UI-002` were subsequently accepted in the full
+  Phase 6 record.
 - Search behavior: exact full name, exact approved alias, exact name token,
   prefix, substring, then conservative possible-typo matching. Filters apply
   before ranking. Selected-game relevance and active status are tie-breakers
@@ -579,10 +617,10 @@ Fill in one record when a milestone or major item is completed.
   two-player comparison, wheel scrolling, source-labeled copy, local database
   replacement, exact-game rebuilding, Local/Offline Mode, all eight tabs,
   clean save, and exact restart restore.
-- Remaining limitations: the full Phase 6 cross-phase review and
-  project-owner 100%/125%/150% scaling sign-off remain pending. Alias matching
-  uses only explicit approved aliases; typo tolerance remains conservative,
-  comparison copy history remains memory-only, and Phase 7 has not started.
+- Remaining Phase 6F design limitations: alias matching uses only explicit
+  approved aliases; typo tolerance remains conservative, and comparison copy
+  history remains memory-only. The cross-phase review and project-owner
+  scaling sign-off were subsequently accepted; Phase 7A is now complete.
 - Detailed evidence source:
   `Implementation guide/Phase_6F_Acceptance_Record.md`.
 

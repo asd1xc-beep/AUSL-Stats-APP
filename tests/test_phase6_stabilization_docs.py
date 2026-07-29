@@ -6,20 +6,22 @@ GUIDE = ROOT / "Implementation guide" / "AUSL_Broadcast_Stats_Implementation_Gui
 TRACKER = ROOT / "Implementation guide" / "AUSL_Broadcast_Stats_Improvement_Tracker.md"
 
 
-def test_tracker_records_phase6f_completion_without_closing_scaling():
+def test_tracker_records_owner_reported_phase6_scaling_acceptance():
     text = TRACKER.read_text(encoding="utf-8")
 
     assert "- [x] `SEARCH-004`" in text
     assert "- [x] `SEARCH-005`" in text
     assert "- [x] `UI-003`" in text
     assert "- [x] `UX-011`" in text
-    assert "- [ ] `UI-002`" in text
+    assert "- [x] `UI-001`" in text
+    assert "- [x] `UI-002`" in text
     assert "Phase 6F completed on 2026-07-29" in text
-    assert "full Phase 6 acceptance review" in text
+    assert "project-owner reported" in text
+    assert "100%, 125%, and 150%" in text
     assert "Phase 7A" in text and "Phase 7E" in text
 
 
-def test_guide_next_work_order_no_longer_instructs_phase6f_implementation():
+def test_guide_next_work_order_stops_after_phase7a():
     text = GUIDE.read_text(encoding="utf-8")
     phase6f = text.index("#### 6F. Faster search and player comparison")
     phase7 = text.index("### Phase 7", phase6f)
@@ -28,7 +30,7 @@ def test_guide_next_work_order_no_longer_instructs_phase6f_implementation():
 
     assert "Implementation status (2026-07-29): complete" in phase6f_section
     assert "Complete Phase 6F" not in next_work
-    assert "stabilization pass" in next_work
-    assert "scaling sign-off" in next_work
-    assert "full Phase 6 acceptance" in next_work
-    assert "then begin phase 7a" in next_work.casefold()
+    assert "Phase 7A" in next_work
+    assert "Phase 7B" in next_work
+    assert "not started" in next_work.casefold()
+    assert "Stop after Phase 7A" in next_work
