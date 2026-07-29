@@ -161,7 +161,7 @@ Complete final offline suite:
 
 `python -W error -m pytest -q`
 
-- **769 passed in 22.73 s**
+- **769 passed in 24.46 s**
 
 Release-integrity commands:
 
@@ -175,6 +175,12 @@ Release-integrity commands:
 - Tracked/history private-path and credential-pattern scans — zero matches.
 
 All automated tests were network-independent.
+
+The first Ubuntu CI run completed 768 tests but failed the lookup layout
+assertion because that unit test opened a real Tk root without a display
+server. The assertion now exercises `_build_lookup()` through headless widget
+fakes, while the real-Tk layout and viewport behavior remains covered by the
+Windows GUI smoke below.
 
 ## Windows GUI smoke
 
