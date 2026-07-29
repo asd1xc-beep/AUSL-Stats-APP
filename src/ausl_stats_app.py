@@ -78,7 +78,21 @@ from ausl_session import (
     SessionSnapshot,
     SessionStore,
     SessionChangeState,
+    SessionComparisonState,
     SessionUIState,
+)
+from ausl_search import (
+    MatchType,
+    PlayerSearchIndex,
+    SearchScope,
+    parse_player_query,
+    search_player_index,
+)
+from ausl_comparison import (
+    ComparisonBuildError,
+    ComparisonCopyRecord,
+    build_player_comparison,
+    comparison_with_sources_text,
 )
 
 
@@ -1447,8 +1461,16 @@ class AUSLStatsApp:
         self._official_game_choices = {}
         self._search_view = None
         self._search_team = None
+        self._player_search_index = None
+        self._player_search_response = None
+        self._highlighted_player_id = None
         self.selected_player_id = None
         self.search_rows = []
+        self.comparison_left_player_id = None
+        self.comparison_right_player_id = None
+        self._current_comparison = None
+        self._last_comparison_copy_record = None
+        self._comparison_restore_warning = ""
         self.live_game = None
         self.live_box = None
         self.live_health = LiveFeedHealth(
@@ -1687,6 +1709,20 @@ class AUSLStatsApp:
             rundown_states=self._ensure_rundown_session().states,
             ui_state=ui_state,
             change_state=getattr(self, "_change_state", SessionChangeState()),
+            comparison_state=SessionComparisonState(
+                left_player_id=_manual_note_identifier(
+                    getattr(self, "comparison_left_player_id", None)
+                )
+                or None,
+                right_player_id=_manual_note_identifier(
+                    getattr(self, "comparison_right_player_id", None)
+                )
+                or None,
+                scroll_fraction=self._canvas_scroll_fraction(
+                    getattr(self, "comparison_canvas", None)
+                ),
+                recovery_warning=getattr(self, "_comparison_restore_warning", ""),
+            ),
         )
 
     def _schedule_session_autosave(self, reason="session changed"):
@@ -1844,6 +1880,11 @@ class AUSLStatsApp:
                 if variable is not None:
                     variable.set(value)
             self._restore_change_session_state(snapshot)
+            comparison_state = snapshot.comparison_state
+            self.comparison_left_player_id = comparison_state.left_player_id
+            self.comparison_right_player_id = comparison_state.right_player_id
+            self._comparison_restore_warning = comparison_state.recovery_warning
+            self._rebuild_comparison()
             self._select_notebook_text(
                 getattr(self, "main_tabs", None), ui.main_tab
             )
@@ -1859,7 +1900,9 @@ class AUSLStatsApp:
             self.refresh_game_day_dashboard()
             self.root.after(
                 0,
-                lambda state=ui: self._restore_session_scroll_positions(state),
+                lambda state=ui, comparison=comparison_state: (
+                    self._restore_session_scroll_positions(state, comparison)
+                ),
             )
             self._session_recovery_visible = (
                 self._session_load_result.status
@@ -1917,11 +1960,22 @@ class AUSLStatsApp:
             self._change_status = snapshot.change_state.recovery_warning
         return True
 
-    def _restore_session_scroll_positions(self, ui_state):
+    def _restore_session_scroll_positions(
+        self, ui_state, comparison_state=None
+    ):
+        comparison_fraction = (
+            comparison_state.scroll_fraction
+            if isinstance(comparison_state, SessionComparisonState)
+            else 0.0
+        )
         for canvas_name, fraction in (
             ("fact_cards_canvas", ui_state.fact_scroll_fraction),
             ("rundown_canvas", ui_state.rundown_scroll_fraction),
             ("what_changed_canvas", ui_state.what_changed_scroll_fraction),
+            (
+                "comparison_canvas",
+                comparison_fraction,
+            ),
         ):
             canvas = getattr(self, canvas_name, None)
             if canvas is not None:
@@ -1964,8 +2018,13 @@ class AUSLStatsApp:
             return False
         self._rundown_session = RundownSession()
         self._last_fact_copy_event = None
+        self._last_comparison_copy_record = None
         self.current_broadcast_note = ""
         self._clear_selected_player()
+        self.comparison_left_player_id = None
+        self.comparison_right_player_id = None
+        self._current_comparison = None
+        self._comparison_restore_warning = ""
         for name, value in (
             ("fact_status_filter_var", "Air Ready"),
             ("fact_team_filter_var", "Both teams"),
@@ -1980,6 +2039,7 @@ class AUSLStatsApp:
             if variable is not None:
                 variable.set(value)
         self._restore_session_scroll_positions(SessionUIState())
+        self._rebuild_comparison()
         self._session_restore_game_unresolved = False
         self._session_recovery_visible = False
         self._display_session_recovery_notice()
@@ -2142,6 +2202,7 @@ class AUSLStatsApp:
         lineups = ttk.Frame(self.main_tabs, padding=8)
         manual = ttk.Frame(self.main_tabs, padding=8)
         live = ttk.Frame(self.main_tabs, padding=8)
+        comparison = ttk.Frame(self.main_tabs, padding=8)
         self.main_tabs.add(game_day, text="Game Day")
         self.main_tabs.add(lookup, text="Player Lookup")
         self.main_tabs.add(team_totals, text="Team Totals")
@@ -2149,11 +2210,13 @@ class AUSLStatsApp:
         self.main_tabs.add(lineups, text="Lineup Lock")
         self.main_tabs.add(manual, text="Manual Notes")
         self.main_tabs.add(live, text="Live Game")
+        self.main_tabs.add(comparison, text="Compare Players")
         self.main_tabs.bind(
             "<<NotebookTabChanged>>", self._on_session_view_changed
         )
         self._build_game_day(game_day)
         self._build_lookup(lookup)
+        self._build_comparison(comparison)
         self._build_team_totals(team_totals)
         self._build_producer_prep(producer)
         self._build_lineup_lock(lineups)
@@ -2171,7 +2234,7 @@ class AUSLStatsApp:
     def _build_game_day(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
-        parent.rowconfigure(1, weight=1)
+        parent.rowconfigure(2, weight=1)
 
         status = ttk.Frame(parent)
         status.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
@@ -2700,21 +2763,39 @@ class AUSLStatsApp:
         parent.rowconfigure(1, weight=1)
         search = ttk.Frame(parent)
         search.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        ttk.Label(search, text="Player, team, position, or #number:").pack(side="left")
+        ttk.Label(search, text="Find player or filter:").pack(side="left")
         self.search_var = tk.StringVar()
-        entry = ttk.Entry(search, textvariable=self.search_var, width=36)
-        entry.pack(side="left", padx=8)
-        entry.bind("<KeyRelease>", lambda _e: self.search())
-        entry.bind("<Return>", lambda _e: self.search())
+        self.search_entry = ttk.Entry(search, textvariable=self.search_var, width=42)
+        self.search_entry.pack(side="left", padx=8)
+        self.search_entry.bind("<KeyRelease>", self._on_search_key_release)
+        self.search_entry.bind("<Return>", self._activate_highlighted_result)
+        self.search_entry.bind("<Down>", self._move_search_highlight)
+        self.search_entry.bind("<Up>", self._move_search_highlight)
         ttk.Button(search, text="Search", command=self.search).pack(side="left")
+        ttk.Button(search, text="Clear", command=self.clear_search).pack(
+            side="left", padx=(5, 0)
+        )
         ttk.Button(search, text="All Players", command=self.show_all).pack(side="left", padx=5)
         self.search_scope_var = tk.StringVar(value="Showing: selected game teams")
         ttk.Label(search, textvariable=self.search_scope_var, style="Sub.TLabel").pack(
             side="left", padx=10
         )
 
+        self.search_feedback_var = tk.StringVar(
+            value=(
+                "Filters: team:CHI · pos:P · status:inactive · #22 · "
+                'name:"Rachel Garcia"'
+            )
+        )
+        ttk.Label(
+            parent,
+            textvariable=self.search_feedback_var,
+            style="Sub.TLabel",
+            wraplength=1320,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
+
         left = ttk.LabelFrame(parent, text="Players", padding=6)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
+        left.grid(row=2, column=0, sticky="nsew", padx=(0, 6))
         left.rowconfigure(0, weight=1)
         left.columnconfigure(0, weight=1)
         self.results = tk.Listbox(left, font=("Consolas", 11), activestyle="none")
@@ -2722,10 +2803,12 @@ class AUSLStatsApp:
         scroll = ttk.Scrollbar(left, orient="vertical", command=self.results.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.results.configure(yscrollcommand=scroll.set)
-        self.results.bind("<<ListboxSelect>>", self.select_result)
+        self.results.bind("<<ListboxSelect>>", self._on_result_highlight)
+        self.results.bind("<Double-Button-1>", self._activate_highlighted_result)
+        self.results.bind("<Return>", self._activate_highlighted_result)
 
         right = ttk.LabelFrame(parent, text="Broadcast Player Card", padding=10)
-        right.grid(row=1, column=1, sticky="nsew")
+        right.grid(row=2, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
         right.rowconfigure(4, weight=1)
         self.player_title = tk.StringVar(value="Select a player")
@@ -2741,6 +2824,16 @@ class AUSLStatsApp:
             ("Copy Announcer Note", "announcer_note"),
         ]:
             ttk.Button(buttons, text=label, command=lambda k=kind: self.copy_gfx(k)).pack(side="left", padx=(0, 5))
+        ttk.Button(
+            buttons,
+            text="Compare Left",
+            command=lambda: self.assign_comparison_player("left"),
+        ).pack(side="left", padx=(8, 5))
+        ttk.Button(
+            buttons,
+            text="Compare Right",
+            command=lambda: self.assign_comparison_player("right"),
+        ).pack(side="left", padx=(0, 5))
         self.copy_status = tk.StringVar()
         ttk.Label(right, textvariable=self.copy_status, style="Sub.TLabel").grid(row=3, column=0, sticky="w")
         self.stat_tabs = ttk.Notebook(right)
@@ -2762,6 +2855,234 @@ class AUSLStatsApp:
             text.configure(state="disabled")
             self.stat_tabs.add(frame, text=label)
             self.stat_texts[key] = text
+
+        self.root.bind_all("<Control-f>", self._focus_player_search, add="+")
+        self.root.bind_all("<Escape>", self._clear_search_shortcut, add="+")
+        self.root.bind_all("<Control-Key-1>", self._comparison_left_shortcut, add="+")
+        self.root.bind_all("<Control-Key-2>", self._comparison_right_shortcut, add="+")
+
+    def _build_comparison(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(2, weight=1)
+        controls = ttk.LabelFrame(parent, text="Player Comparison", padding=8)
+        controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        controls.columnconfigure(1, weight=1)
+        controls.columnconfigure(4, weight=1)
+        self.comparison_left_var = tk.StringVar(value="Left: choose a player")
+        self.comparison_right_var = tk.StringVar(value="Right: choose a player")
+        ttk.Label(controls, textvariable=self.comparison_left_var).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=(0, 10)
+        )
+        ttk.Label(controls, textvariable=self.comparison_right_var).grid(
+            row=0, column=3, columnspan=2, sticky="w", padx=(10, 0)
+        )
+        ttk.Button(
+            controls, text="Clear Left", command=lambda: self.clear_comparison_side("left")
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Button(
+            controls, text="Clear Right", command=lambda: self.clear_comparison_side("right")
+        ).grid(row=1, column=3, sticky="w", pady=(6, 0))
+        ttk.Button(controls, text="Swap", command=self.swap_comparison_players).grid(
+            row=1, column=2, padx=12, pady=(6, 0)
+        )
+        ttk.Button(
+            controls,
+            text="Copy Comparison + Sources",
+            command=self.copy_comparison_with_sources,
+        ).grid(row=1, column=4, sticky="e", pady=(6, 0))
+
+        self.comparison_status_var = tk.StringVar(
+            value=(
+                "Choose two exact player identities from Player Lookup. "
+                "Comparison is neutral and does not select a winner."
+            )
+        )
+        ttk.Label(
+            parent,
+            textvariable=self.comparison_status_var,
+            style="Sub.TLabel",
+            wraplength=1320,
+        ).grid(row=1, column=0, sticky="w", pady=(0, 6))
+
+        holder = ttk.Frame(parent)
+        holder.grid(row=2, column=0, sticky="nsew")
+        holder.rowconfigure(0, weight=1)
+        holder.columnconfigure(0, weight=1)
+        self.comparison_canvas = tk.Canvas(holder, highlightthickness=0)
+        comparison_scroll = ttk.Scrollbar(
+            holder, orient="vertical", command=self.comparison_canvas.yview
+        )
+        self.comparison_canvas.configure(yscrollcommand=comparison_scroll.set)
+        self.comparison_canvas.grid(row=0, column=0, sticky="nsew")
+        comparison_scroll.grid(row=0, column=1, sticky="ns")
+        self.comparison_container = ttk.Frame(self.comparison_canvas, padding=6)
+        self._comparison_canvas_window = self.comparison_canvas.create_window(
+            (0, 0), window=self.comparison_container, anchor="nw"
+        )
+        self.comparison_container.bind(
+            "<Configure>",
+            lambda _event: self.comparison_canvas.configure(
+                scrollregion=self.comparison_canvas.bbox("all")
+            ),
+        )
+        self.comparison_canvas.bind(
+            "<Configure>",
+            lambda event: self.comparison_canvas.itemconfigure(
+                self._comparison_canvas_window, width=event.width
+            ),
+        )
+        self._bind_comparison_mousewheel(self.comparison_canvas)
+        self._bind_comparison_mousewheel(self.comparison_container)
+        self._render_comparison()
+
+    def _on_comparison_mousewheel(self, event):
+        canvas = getattr(self, "comparison_canvas", None)
+        if canvas is None:
+            return None
+        if getattr(event, "num", None) == 4:
+            units = -3
+        elif getattr(event, "num", None) == 5:
+            units = 3
+        else:
+            delta = getattr(event, "delta", 0)
+            if not delta:
+                return None
+            units = -max(1, abs(int(delta)) // 120) if delta > 0 else max(
+                1, abs(int(delta)) // 120
+            )
+        try:
+            canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            return None
+        return "break"
+
+    def _bind_comparison_mousewheel(self, widget):
+        if widget is None:
+            return
+        try:
+            widget.bind("<MouseWheel>", self._on_comparison_mousewheel, add="+")
+            widget.bind("<Button-4>", self._on_comparison_mousewheel, add="+")
+            widget.bind("<Button-5>", self._on_comparison_mousewheel, add="+")
+            children = widget.winfo_children()
+        except (tk.TclError, AttributeError):
+            return
+        for child in children:
+            self._bind_comparison_mousewheel(child)
+
+    def _render_comparison(self):
+        container = getattr(self, "comparison_container", None)
+        if container is None:
+            return
+        for child in container.winfo_children():
+            child.destroy()
+        comparison = getattr(self, "_current_comparison", None)
+        if comparison is None:
+            message = getattr(self, "_comparison_restore_warning", "") or (
+                "Choose a left and right player from Player Lookup. "
+                "Use Compare Left / Compare Right or Ctrl+1 / Ctrl+2."
+            )
+            ttk.Label(
+                container,
+                text=message,
+                style="Sub.TLabel",
+                wraplength=1200,
+                justify="left",
+            ).grid(row=0, column=0, sticky="w", padx=8, pady=12)
+            self._bind_comparison_mousewheel(container)
+            return
+
+        container.columnconfigure(1, weight=1)
+        container.columnconfigure(2, weight=1)
+        ttk.Label(container, text="Metric", style="Sub.TLabel").grid(
+            row=0, column=0, sticky="w", padx=6, pady=(0, 6)
+        )
+        for column, player in ((1, comparison.left), (2, comparison.right)):
+            number = f"#{player.jersey_number}" if player.jersey_number else "#—"
+            ttk.Label(
+                container,
+                text=(
+                    f"{player.player_name}\n{player.team_code} · {number} · "
+                    f"{player.position} · {player.roster_status}"
+                ),
+                style="Player.TLabel",
+                justify="left",
+            ).grid(row=0, column=column, sticky="w", padx=10, pady=(0, 6))
+        row_number = 1
+        for section in comparison.sections:
+            if not any(row.left.available or row.right.available for row in section.rows):
+                continue
+            ttk.Separator(container).grid(
+                row=row_number, column=0, columnspan=3, sticky="ew", pady=(8, 4)
+            )
+            row_number += 1
+            label = (
+                f"{comparison.season} {section.label}"
+                if section.section.value.startswith("season_")
+                else section.label
+            )
+            ttk.Label(container, text=label, style="Section.TLabel").grid(
+                row=row_number, column=0, columnspan=3, sticky="w", padx=6
+            )
+            row_number += 1
+            for metric_row in section.rows:
+                ttk.Label(container, text=metric_row.metric.label).grid(
+                    row=row_number, column=0, sticky="w", padx=12, pady=2
+                )
+                for column, metric_value in (
+                    (1, metric_row.left),
+                    (2, metric_row.right),
+                ):
+                    ttk.Label(
+                        container,
+                        text=(
+                            metric_value.display_value
+                            if metric_value.available
+                            else "—  Unavailable"
+                        ),
+                    ).grid(row=row_number, column=column, sticky="w", padx=10, pady=2)
+                row_number += 1
+        for column, player in ((1, comparison.left), (2, comparison.right)):
+            details = []
+            details.extend(player.warnings)
+            details.extend(
+                f"[VERIFIED] {fact.air_copy}" for fact in player.verified_facts
+            )
+            details.extend(
+                f"[{fact.verification_state.value}] {fact.air_copy}"
+                for fact in player.review_facts
+            )
+            if not details:
+                details.append("No exact-game canonical facts available for this player.")
+            ttk.Label(
+                container,
+                text="\n".join(details),
+                style="Sub.TLabel",
+                wraplength=500,
+                justify="left",
+            ).grid(row=row_number, column=column, sticky="nw", padx=10, pady=(12, 4))
+        ttk.Label(container, text="Fact context").grid(
+            row=row_number, column=0, sticky="nw", padx=6, pady=(12, 4)
+        )
+        row_number += 1
+        source_text = (
+            (
+                f"Selected game context: Game {comparison.selected_game_id}\n"
+                if comparison.selected_game_id
+                else "Selected game context: Unavailable\n"
+            )
+            + f"Source: {comparison.source_name}\n"
+            f"Data snapshot: {comparison.snapshot_timestamp or 'Unavailable'}"
+        )
+        if comparison.fact_context_warning:
+            source_text += f"\n{comparison.fact_context_warning}"
+        ttk.Label(
+            container,
+            text=source_text,
+            style="Sub.TLabel",
+            wraplength=1100,
+            justify="left",
+        ).grid(row=row_number, column=0, columnspan=3, sticky="w", padx=6, pady=(8, 12))
+        self._bind_comparison_mousewheel(container)
 
     def _build_producer_prep(self, parent):
         controls = ttk.LabelFrame(parent, text="Producer Prep Assistant", padding=8)
@@ -3214,6 +3535,7 @@ class AUSLStatsApp:
     def _finish_load(self, data):
         previous_selected_id = getattr(self, "selected_player_id", None)
         self.db = data
+        self._rebuild_player_search_index()
         self._verification_count_cache = {}
         fact_generation_after_invalidate = None
         if hasattr(self, "_fact_build_generation"):
@@ -3234,6 +3556,7 @@ class AUSLStatsApp:
         self.refresh_game_choices()
         self._restore_pending_session_after_database_load()
         self._sync_selected_player_after_load(previous_selected_id)
+        self._rebuild_comparison()
         self.show_all()
         self.render_team_totals()
         self.render_producer_prep()
@@ -4481,6 +4804,7 @@ class AUSLStatsApp:
         render = getattr(self, "_render_fact_cards", None)
         if callable(render):
             render()
+        self._rebuild_comparison()
 
     def request_fact_rebuild(self):
         """Queue a bounded, local-only fact rebuild for the current game."""
@@ -4491,6 +4815,7 @@ class AUSLStatsApp:
         self._fact_build_generation += 1
         generation = self._fact_build_generation
         self._fact_collection = None
+        self._rebuild_comparison()
         if not isinstance(selected, SelectedGame):
             if hasattr(self, "fact_panel_status_var"):
                 self.fact_panel_status_var.set(
@@ -4601,6 +4926,7 @@ class AUSLStatsApp:
                 self._last_fact_copy_event = None
                 self.current_broadcast_note = ""
         self._fact_collection = collection
+        self._rebuild_comparison()
         rundown_state = self._current_rundown_state(create=False)
         rundown_before = rundown_state
         if rundown_state is not None:
@@ -6916,42 +7242,376 @@ class AUSLStatsApp:
         self._search_team = None
         self.search()
 
+    def _rebuild_player_search_index(self):
+        roster = self.db.get("roster", pd.DataFrame()) if self.db else pd.DataFrame()
+        manifest = self.db.get("manifest", {}) if self.db else {}
+        snapshot = ""
+        if isinstance(manifest, dict):
+            snapshot = str(
+                manifest.get("snapshot_id")
+                or manifest.get("snapshot_identity")
+                or manifest.get("updated_at")
+                or ""
+            )
+        self._player_search_index = PlayerSearchIndex.build(
+            roster,
+            snapshot_identity=f"{snapshot}:{id(self.db)}",
+        )
+        self._player_search_response = None
+        self._highlighted_player_id = None
+        return self._player_search_index
+
+    def _ensure_player_search_index(self):
+        index = getattr(self, "_player_search_index", None)
+        if not isinstance(index, PlayerSearchIndex):
+            index = self._rebuild_player_search_index()
+        return index
+
     def search(self):
+        """Render one canonical indexed search without selecting a player."""
+
         if not self.db:
             return
-        frame = self.db["roster"].copy()
         view = getattr(self, "_search_view", None)
-        if view == "team":
-            frame = frame[frame["team"].eq(getattr(self, "_search_team", None))]
-            scope_label = f"Showing: {getattr(self, '_search_team', '')} roster"
-        elif view == "all":
-            scope_label = "Showing: all players"
-        elif self.scope_var.get():
-            frame = frame[frame["team_code"].isin(self.game_codes())]
-            scope_label = "Showing: selected game teams"
-        else:
-            scope_label = "Showing: all players"
         query = self.search_var.get().strip()
-        frame = filter_roster_search(frame, query)
+        if view == "team":
+            team = getattr(self, "_search_team", "")
+            parsed_query = parse_player_query(f'team:"{team}" {query}'.strip())
+            scope = SearchScope.ALL_PLAYERS
+        elif view == "all":
+            parsed_query = parse_player_query(query)
+            scope = SearchScope.ALL_PLAYERS
+        else:
+            parsed_query = parse_player_query(query)
+            scope = (
+                SearchScope.SELECTED_GAME
+                if self.scope_var.get()
+                else SearchScope.ALL_PLAYERS
+            )
+        response = search_player_index(
+            self._ensure_player_search_index(),
+            parsed_query,
+            scope=scope,
+            selected_team_codes=self.game_codes(),
+        )
+        self._player_search_response = response
         if hasattr(self, "search_scope_var"):
+            if view == "team":
+                scope_label = f"Showing: {getattr(self, '_search_team', '')} roster"
+            elif view == "all" or scope is SearchScope.ALL_PLAYERS:
+                scope_label = "Showing: all players"
+            else:
+                scope_label = "Showing: selected game teams"
             self.search_scope_var.set(scope_label)
-        frame = frame.sort_values(["team_code", "last_name", "first_name"])
-        self.search_rows = [row for _, row in frame.iterrows()]
+        roster = self.db.get("roster", pd.DataFrame())
+        by_id = {}
+        if isinstance(roster, pd.DataFrame) and "player_id" in roster:
+            for _, row in roster.iterrows():
+                by_id[_manual_note_identifier(row.get("player_id"))] = row
+        self.search_rows = [
+            by_id[result.record.player_id]
+            for result in response.results
+            if result.record.player_id in by_id
+        ]
         self.results.delete(0, "end")
-        for row in self.search_rows:
-            flag = "" if self.is_active_roster(row) else " !"
-            self.results.insert("end", self.roster_list_text(row) + flag)
-        if not self.search_rows and re.fullmatch(r"#?\s*\d+", query):
-            self.results.insert("end", f"No matching number — {scope_label.lower()}")
+        for result in response.results:
+            possible = (
+                " · POSSIBLE TYPO"
+                if result.match_type is MatchType.FUZZY
+                else ""
+            )
+            self.results.insert(
+                "end",
+                f"{result.display_text} · {result.match_reason}{possible}",
+            )
+        if not response.results:
+            self.results.insert("end", response.empty_message)
+        self._highlighted_player_id = None
+        if hasattr(self, "search_feedback_var"):
+            if response.parsed.issues:
+                message = " · ".join(issue.message for issue in response.parsed.issues)
+            else:
+                message = (
+                    f"{response.total_matches} match"
+                    f"{'es' if response.total_matches != 1 else ''}"
+                )
+                message += f" · Scope: {response.effective_scope}"
+                if response.truncated:
+                    message += f"; showing first {len(response.results)}"
+                filters = []
+                for label, item in (
+                    ("TEAM", response.parsed.team_code),
+                    ("POS", response.parsed.position),
+                    ("STATUS", response.parsed.roster_status),
+                    ("NUMBER", response.parsed.jersey_number),
+                    ("NAME", response.parsed.name_text),
+                ):
+                    if item:
+                        filters.append(f"{label}: {item}")
+                if filters:
+                    message += " · " + " · ".join(filters)
+                if response.is_possible_typo:
+                    message += " · Possible typo matches require explicit selection."
+                if response.empty_message:
+                    message += f" · {response.empty_message}"
+            self.search_feedback_var.set(message)
+
+    def clear_search(self):
+        self.search_var.set("")
+        self._search_view = None
+        self._search_team = None
+        self.search()
+        entry = getattr(self, "search_entry", None)
+        if entry is not None:
+            try:
+                entry.focus_set()
+            except tk.TclError:
+                pass
+
+    def _on_search_key_release(self, event=None):
+        if getattr(event, "keysym", "") in {"Return", "Up", "Down", "Escape"}:
+            return None
+        self.search()
+        return None
+
+    def _on_result_highlight(self, _event=None):
+        selected = self.results.curselection()
+        response = getattr(self, "_player_search_response", None)
+        if (
+            not selected
+            or response is None
+            or selected[0] >= len(response.results)
+        ):
+            self._highlighted_player_id = None
+            return
+        self._highlighted_player_id = response.results[selected[0]].record.player_id
+
+    def _move_search_highlight(self, event):
+        response = getattr(self, "_player_search_response", None)
+        if response is None or not response.results:
+            return "break"
+        selected = self.results.curselection()
+        current = selected[0] if selected else (-1 if event.keysym == "Down" else 1)
+        step = 1 if event.keysym == "Down" else -1
+        target = max(0, min(len(response.results) - 1, current + step))
+        self.results.selection_clear(0, "end")
+        self.results.selection_set(target)
+        self.results.activate(target)
+        self.results.see(target)
+        self._on_result_highlight()
+        return "break"
+
+    def _activate_highlighted_result(self, _event=None):
+        self.select_result()
+        return "break"
 
     def select_result(self, _event=None):
         selected = self.results.curselection()
         if not selected or selected[0] >= len(self.search_rows):
             return
         row = self.search_rows[selected[0]]
-        self.selected_player_id = int(row["player_id"])
+        raw_id = row["player_id"]
+        try:
+            self.selected_player_id = int(raw_id)
+        except (TypeError, ValueError):
+            self.selected_player_id = raw_id
+        self._highlighted_player_id = _manual_note_identifier(raw_id)
         self.render_player(row)
         self._schedule_session_autosave("selected player changed")
+
+    @staticmethod
+    def _shortcut_allowed(event):
+        widget = getattr(event, "widget", None)
+        return not isinstance(widget, tk.Text)
+
+    def _focus_player_search(self, event=None):
+        if event is not None and not self._shortcut_allowed(event):
+            return None
+        self._select_notebook_text(getattr(self, "main_tabs", None), "Player Lookup")
+        entry = getattr(self, "search_entry", None)
+        if entry is not None:
+            try:
+                entry.focus_set()
+                entry.selection_range(0, "end")
+            except tk.TclError:
+                pass
+        return "break"
+
+    def _clear_search_shortcut(self, event=None):
+        if event is not None and not self._shortcut_allowed(event):
+            return None
+        entry = getattr(self, "search_entry", None)
+        if entry is None:
+            return None
+        try:
+            focused = self.root.focus_get()
+        except tk.TclError:
+            focused = None
+        if focused not in {entry, getattr(self, "results", None)}:
+            return None
+        self.clear_search()
+        return "break"
+
+    def _comparison_shortcut(self, side, event=None):
+        if event is not None and not self._shortcut_allowed(event):
+            return None
+        self.assign_comparison_player(side)
+        return "break"
+
+    def _comparison_left_shortcut(self, event=None):
+        return self._comparison_shortcut("left", event)
+
+    def _comparison_right_shortcut(self, event=None):
+        return self._comparison_shortcut("right", event)
+
+    def _comparison_candidate_player_id(self):
+        highlighted = getattr(self, "_highlighted_player_id", None)
+        if highlighted:
+            return highlighted
+        selected = getattr(self, "selected_player_id", None)
+        return _manual_note_identifier(selected) or None
+
+    def assign_comparison_player(self, side):
+        if side not in {"left", "right"}:
+            raise ValueError("Comparison side must be left or right")
+        player_id = self._comparison_candidate_player_id()
+        if not player_id:
+            if hasattr(self, "comparison_status_var"):
+                self.comparison_status_var.set(
+                    "Highlight or explicitly select a player before assigning a side."
+                )
+            return False
+        other = (
+            getattr(self, "comparison_right_player_id", None)
+            if side == "left"
+            else getattr(self, "comparison_left_player_id", None)
+        )
+        if _manual_note_identifier(other) == player_id:
+            if hasattr(self, "comparison_status_var"):
+                self.comparison_status_var.set(
+                    "Choose two different exact player identities."
+                )
+            return False
+        setattr(self, f"comparison_{side}_player_id", player_id)
+        self._comparison_restore_warning = ""
+        self._rebuild_comparison()
+        self._select_notebook_text(
+            getattr(self, "main_tabs", None), "Compare Players"
+        )
+        self._schedule_session_autosave(f"comparison {side} player changed")
+        return True
+
+    def clear_comparison_side(self, side):
+        if side not in {"left", "right"}:
+            raise ValueError("Comparison side must be left or right")
+        setattr(self, f"comparison_{side}_player_id", None)
+        self._current_comparison = None
+        self._last_comparison_copy_record = None
+        self._rebuild_comparison()
+        self._schedule_session_autosave(f"comparison {side} player cleared")
+
+    def swap_comparison_players(self):
+        left = getattr(self, "comparison_left_player_id", None)
+        right = getattr(self, "comparison_right_player_id", None)
+        self.comparison_left_player_id = right
+        self.comparison_right_player_id = left
+        self._last_comparison_copy_record = None
+        self._rebuild_comparison()
+        self._schedule_session_autosave("comparison players swapped")
+
+    def _comparison_player_label(self, player_id, side):
+        if not player_id:
+            return f"{side.title()}: choose a player"
+        roster = self.db.get("roster", pd.DataFrame()) if self.db else pd.DataFrame()
+        if not isinstance(roster, pd.DataFrame) or "player_id" not in roster:
+            return f"{side.title()}: Player {player_id} unavailable"
+        matches = roster[
+            roster["player_id"].map(_manual_note_identifier).eq(
+                _manual_note_identifier(player_id)
+            )
+        ]
+        if len(matches) != 1:
+            return f"{side.title()}: Player {player_id} unavailable"
+        row = matches.iloc[0]
+        return (
+            f"{side.title()}: {_optional_text(row, 'player_name') or 'Name unavailable'} "
+            f"({_optional_text(row, 'team_code') or 'UNASSIGNED'})"
+        )
+
+    def _rebuild_comparison(self):
+        left = _manual_note_identifier(
+            getattr(self, "comparison_left_player_id", None)
+        )
+        right = _manual_note_identifier(
+            getattr(self, "comparison_right_player_id", None)
+        )
+        if hasattr(self, "comparison_left_var"):
+            self.comparison_left_var.set(self._comparison_player_label(left, "left"))
+        if hasattr(self, "comparison_right_var"):
+            self.comparison_right_var.set(self._comparison_player_label(right, "right"))
+        self._last_comparison_copy_record = None
+        if not left or not right:
+            self._current_comparison = None
+            if hasattr(self, "comparison_status_var"):
+                self.comparison_status_var.set(
+                    "Choose two exact player identities. Missing values remain unavailable."
+                )
+            self._render_comparison()
+            return False
+        selected_game = getattr(self, "selected_game", None)
+        game_id = (
+            selected_game.game_id
+            if isinstance(selected_game, SelectedGame)
+            else None
+        )
+        try:
+            self._current_comparison = build_player_comparison(
+                self.db,
+                left,
+                right,
+                season=CURRENT_YEAR,
+                selected_game_id=game_id,
+                facts=getattr(self, "_fact_collection", None),
+            )
+        except ComparisonBuildError as exc:
+            self._current_comparison = None
+            self._comparison_restore_warning = (
+                f"Saved comparison is unavailable: {exc}. "
+                "No replacement player was guessed."
+            )
+            if hasattr(self, "comparison_status_var"):
+                self.comparison_status_var.set(self._comparison_restore_warning)
+            self._render_comparison()
+            return False
+        if hasattr(self, "comparison_status_var"):
+            self.comparison_status_var.set(
+                "Aligned official AUSL season/career values. "
+                "No winner or performance judgment is applied."
+            )
+        self._render_comparison()
+        return True
+
+    def copy_comparison_with_sources(self):
+        comparison = getattr(self, "_current_comparison", None)
+        if comparison is None:
+            if hasattr(self, "comparison_status_var"):
+                self.comparison_status_var.set(
+                    "Choose two available players before copying a comparison."
+                )
+            return False
+        text = comparison_with_sources_text(comparison)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self._last_comparison_copy_record = ComparisonCopyRecord.create(
+            comparison,
+            text=text,
+            copied_at=datetime.now(timezone.utc),
+        )
+        if hasattr(self, "comparison_status_var"):
+            self.comparison_status_var.set(
+                "Comparison copied with both player identities, source, and freshness."
+            )
+        return True
 
     def stat_row(self, key):
         frame = self.db.get(key, pd.DataFrame())
