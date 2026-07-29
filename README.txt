@@ -5,20 +5,18 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-5 and Phase 6A through 6E are complete. Phase 6E started from the
-latest remote main b00027b (the merged Phase 6D pull request). Its reviewed
-functional commits are 4fc2736 (typed deterministic digests/events and
-failing-first tests), aafd8f4 (explicit producer-session schema-v2 migration),
-c8d05f3 (material source adapters and severity policies), e989434 (Game Day
-What Changed workflow, worker guards, acknowledgement, and readiness impact),
-and f3c7076 (checked-in snapshot integration and persistence bounds).
+Phases 1-5 and Phase 6A through 6F are implemented. Phase 6F started from
+latest remote main d7f255b (the merged Phase 6E pull request). Its reviewed
+functional commits are 14356a1 (deterministic indexed player discovery),
+20745a0 (canonical neutral comparison model), and 846cbfc (keyboard-first
+lookup/comparison UI plus schema-v3 recovery).
 
-The clean baseline passed 654 offline tests. The completed Phase 6E source
-passes 695 tests with warnings treated as errors. The deterministic Windows
-source-app smoke passes at 1280x820 using the checked-in local snapshot and an
-in-memory changed-snapshot fixture through baseline creation, roster/schedule/
-source/fact differences, pinned and used impact, acknowledgement, filters,
-repeat-game switching, Local/Offline Mode, all existing tabs, clean save, and
+The clean Phase 6E baseline passed 695 offline tests. The completed Phase 6F
+source passes 750 tests with warnings treated as errors. The deterministic
+Windows source-app smoke passes at 1120x720 using the checked-in local snapshot
+through exact/typo/filter searches, explicit keyboard selection, two-player
+comparison, wheel scrolling, source-labeled copy, local snapshot replacement,
+exact-game rebuild, Local/Offline Mode, all eight tabs, clean save, and exact
 restart recovery. No live refresh or internet source was used. Compileall, pip
 check, Git LFS validation, checked-in distribution verification, whitespace
 validation, and tracked/history secret scans pass.
@@ -35,8 +33,8 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Phase 6F has not started. Phase 6E does not add fuzzy search or player
-comparison. This remains an
+Phase 6 implementation is complete, but the requested full Phase 6
+cross-phase review remains pending. Phase 7 has not started. This remains an
 assisted broadcast tool, not a candidate for unattended on-air use: cards that
 do not pass exact identity, provenance, freshness, source-health, and approval
 gates stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line
@@ -230,10 +228,11 @@ Phase 6D saves producer working state under the current user's private
 application-data directory, outside the repository and install folder:
   %LOCALAPPDATA%\AUSL Broadcast Stats\producer_session.json
 
-The versioned JSON contains primitives only. It can retain the exact selected
+The versioned schema-v3 JSON contains primitives only. It can retain the exact selected
 official game identity, canonical per-game rundown and used history, Game Day
-view and filters, unique selected player identity, and normalized fact/rundown
-scroll positions. It deliberately does not persist clipboard contents,
+view and filters, unique selected player identity, exact left/right comparison
+player IDs, and normalized fact/rundown/change/comparison scroll positions. It
+deliberately does not persist clipboard contents or comparison copy records,
 workers, timers, locks, credentials, network responses, or an enabled
 Local/Offline Mode.
 
@@ -284,10 +283,40 @@ the existing confirmed Replace With Latest path remain explicit.
 Digest creation and comparison are local/network-free and run in one bounded
 worker with one coalesced replacement. Late generation, database, or selected-
 game results cannot promote a baseline. Failed/cancelled refreshes and failed
-comparisons retain the prior baseline/report. The schema-v2 private producer
+comparisons retain the prior baseline/report. The schema-v3 private producer
 session atomically stores the baseline, latest complete result,
 acknowledgements, five compact history summaries, refresh outcome metadata,
 and normalized change-panel filters/scroll position.
+
+PLAYER DISCOVERY AND COMPARISON
+Player Lookup uses one reusable local roster index per installed database. It
+supports exact names, explicitly approved aliases, team, position, roster
+status, jersey number, free text, and AND-combined filters such as:
+  team:CHI pos:P status:active #22
+  team:"Chicago Bandits" name:"Rachel Garcia"
+
+Ranking is deterministic: exact full name, approved alias, exact name token,
+prefix, substring, then conservative typo candidates. A possible typo is
+visibly labeled and never auto-selects a player. Explicit team filters override
+the selected-game scope for that query only; the saved scope preference is not
+mutated. Unknown or malformed filters show a safe explanation.
+
+The Compare Players tab accepts two different exact roster identities. It
+aligns current-season and AUSL-career batting, pitching, and fielding values
+through one metric registry and the existing canonical WHIP/innings rules.
+Missing values stay Unavailable; two-way players keep both roles; inactive,
+reserve, unknown-status, or teamless players retain warnings. The view makes no
+winner or "better player" judgment. Exact-game canonical facts are kept
+independent by player, with their original trust state.
+
+Copy Comparison + Sources includes both identities, selected-game context,
+source, snapshot freshness, and an explicit verify-before-air status. Its
+in-memory copy record is not persisted. Ctrl+F focuses Player Lookup, arrow
+keys move the result highlight, Enter explicitly opens that identity, Escape
+clears the search, and Ctrl+1/Ctrl+2 assign the highlighted or selected player
+to the comparison sides. These shortcuts do not intercept multiline note
+editing. Visible scrollbars and mouse-wheel support cover the lookup list and
+comparison view.
 
 LOCAL/OFFLINE MODE
 The visible Local/Offline Mode control appears beside Quick Refresh and in the

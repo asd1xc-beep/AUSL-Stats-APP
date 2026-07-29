@@ -812,7 +812,39 @@ Search should support player name/aliases, team, number, position, roster
 status, typo tolerance, and lightweight quick filters. Add side-by-side player
 comparison only after collision-safe identity behavior is tested.
 
-Implementation status: not started.
+Implementation status (2026-07-29): complete; full Phase 6 cross-phase review
+is still pending. `src/ausl_search.py` owns one local roster index per installed
+database, a nonexecuting quoted query parser, canonical team/position/status/
+number filters, explicit approved-alias support, deterministic match reasons,
+selected-game/all-player scope, out-of-scope explanations, bounded output, and
+conservative length-aware Damerau-Levenshtein typo candidates. Ranking is exact
+full name, exact approved alias, exact name token, prefix, substring, then
+fuzzy. Filters apply first. Fuzzy results are visibly possible matches and
+never auto-select.
+
+Player Lookup renders parsed filters, validation messages, result counts,
+effective scope, match reason, and exact roster identity. Highlighting is
+separate from selection; Enter/double-click explicitly opens the player.
+Ctrl+F, Escape, arrows, Enter, Ctrl+1, and Ctrl+2 support the primary workflow
+without taking over multiline note editors. The lookup list retains its visible
+scrollbar.
+
+`src/ausl_comparison.py` owns a GUI-free, neutral, aligned comparison model and
+one ordered metric registry for current-season and AUSL-career batting,
+pitching, and fielding. It reuses canonical WHIP/innings rules, preserves exact
+player/team/game identity, independently scopes canonical facts, labels
+missing values unavailable, retains roster warnings and two-way roles, and
+contains no winner or better-player field. The new Compare Players tab has a
+visible scrollbar and mouse-wheel navigation. Source-labeled copy records both
+identities, database identity, exact game context, copy time, and text in
+memory only.
+
+Producer-session schema version 3 explicitly migrates versions 1 and 2. It
+persists only exact left/right player IDs and normalized comparison scroll
+position; comparison rows and copy records are rebuilt locally. Missing player
+IDs stay visibly unavailable and are never guessed. Corrupt comparison state
+is discarded without losing valid selected-game, rundown, or What Changed
+state.
 
 #### Cross-cutting readability and accessibility
 
