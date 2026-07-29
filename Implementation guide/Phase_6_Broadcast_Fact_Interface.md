@@ -3,8 +3,9 @@
 Phase 6A established this boundary. Phase 6B implements it in
 `src/ausl_facts.py` and renders the resulting immutable values in Game Day.
 Phase 6C consumes the same immutable values in `src/ausl_rundown.py` for a
-session-only pinned rundown, read-time estimate, and used-on-air state. It
-still does not persist or recover that session across application restarts.
+pinned rundown, read-time estimate, and used-on-air state. Phase 6D persists
+and recovers those exact canonical snapshots through `src/ausl_session.py`;
+it does not reconstruct a fact from visible text or weaken reconciliation.
 
 ## Required fact input
 
@@ -56,7 +57,7 @@ They must be regenerated after a game or database change. Phase 6A's pure
 aggregator remains the single owner of overall `READY FOR AIR`,
 `NEEDS ATTENTION`, and `NOT READY`.
 
-## Rundown consumption and deferred storage
+## Rundown consumption and private session storage
 
 Phase 6C pins the complete canonical fact value, stable fact ID, evidence hash,
 provenance, and trust state; it never reconstructs a fact from a label. The
@@ -66,8 +67,17 @@ schema version for later serialization. Stable fact ID suppresses ordinary
 rerenders within the same game while the used evidence hash preserves the
 version actually aired.
 
-Phase 6C intentionally writes no session state. Atomic persistence, autosave,
-crash recovery, restart restoration, and persisted scroll position belong to
-Phase 6D. The only Phase 6C disk output is an explicit producer-requested
-plain-text rundown export under the private, Git-ignored,
-distribution-forbidden game-packet directory.
+Phase 6D serializes the complete canonical pinned and used snapshots, stable
+fact IDs, evidence hashes, provenance, trust/reconciliation state, exact-game
+order, target, and timestamps into versioned primitive-only JSON. Loading
+reconstructs the typed models and recalculates fact/version identity; a stored
+hash or game mismatch fails closed. Restored pins then pass through Phase 6C's
+existing current/changed/downgraded/missing-evidence reconciliation.
+
+The private per-user session also retains exact selected-game identity, safe
+Game Day filters/views, one uniquely resolved player identity, and normalized
+fact/rundown scroll. It does not persist clipboard/copy events, workers,
+timers, locks, credentials, network state, or enabled Offline Mode. Session
+files and recovery archives are outside the repository, Git-ignored by name,
+and distribution-forbidden. The explicit producer-requested plain-text
+rundown export remains separately under the private game-packet directory.

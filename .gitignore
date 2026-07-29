@@ -19,6 +19,7 @@ htmlcov/
 *.spec
 data/exports/game_packets/
 data/manual/
+producer_session*.json
 logs/
 .env
 .env.*

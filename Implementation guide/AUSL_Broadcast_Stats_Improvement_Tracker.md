@@ -32,24 +32,24 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 6 — Pinned rundown and on-air workflow (Phase 6C)
+### Milestone 6 — Session persistence and crash recovery (Phase 6D)
 
-Target outcome for the current phase: let a producer retain canonical
-selected-game facts in a trustworthy ordered rundown, budget exact air copy
-against a break target, and suppress concepts already used during that exact
-game without losing their evidence version or provenance.
+Target outcome for the current phase: preserve the producer's exact canonical
+selected-game/rundown working state across clean restarts and crashes without
+weakening Phase 6A–6C identity, reconciliation, privacy, or readiness gates.
 
-Current implementation unit: Phase 6C. `UX-003`, `UX-006`, and `UX-007` are
-`[x]` COMPLETE with one session-only exact-game rundown model, canonical fact
-snapshots, dense ordering, safe reconciliation, centralized 140-WPM timing,
-game-local break targets, stable-ID used suppression and Undo, a Game Day
-Rundown view, and exclusive producer-private text export. Phase 6D through 6F
-remain `PLANNED`/`BACKLOG` and have not started.
+Current implementation unit: Phase 6D. `UX-008` is `[x]` COMPLETE with a
+versioned primitive-only schema, per-user private storage, serialized
+debounced autosave, same-directory atomic replacement, validated backup,
+corrupt/incompatible quarantine, clean-versus-crash lifecycle, exact schedule
+restore, canonical rundown reconciliation, normalized UI restore, visible
+save failure, and archive-before-clear Start Fresh. Phase 6E and 6F remain
+`PLANNED`/`BACKLOG` and have not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 6C COMPLETE — 2026-07-28 — PHASE 6D THROUGH 6F NOT STARTED**
+Status: **PHASE 6D COMPLETE — 2026-07-28 — PHASE 6E AND 6F NOT STARTED**
 
 ## Master improvement list
 
@@ -354,8 +354,17 @@ Required identity regressions:
     Undo Used provide history and deterministic recovery without promoting
     verification.
 
-- [ ] `UX-008` — Add session/crash recovery for producer working state. **P1 · PLANNED**
+- [x] `UX-008` — Add session/crash recovery for producer working state. **P1 · COMPLETE**
   - Autosave and restore selected game, pinned/used-fact queue, and scroll position. Distinct from lineup-lock and manual-note storage, which are already atomic-written; this protects in-progress prep, not source data.
+  - Schema v1 persists canonical primitives under the current user's private
+    application-data directory. One 500 ms debounced timer covers exact game,
+    rundown/use/order/target/reconciliation, Game Day view/filters, unique
+    player selection, and normalized fact/rundown scroll. Atomic saves retain
+    one validated backup; corrupt/future/oversized state is quarantined and
+    fails closed. Exact game/team/season identity is never guessed. Clean
+    resume, crash recovery, save failure, and Start Fresh are visibly
+    distinct; Offline Mode, clipboard state, workers, timers, locks,
+    credentials, and network state are not restored.
 
 - [x] `UX-009` — Add a "Ready for Air" readiness indicator and pregame checklist. **P2 · COMPLETE**
   - Roll up data health, lineup-lock state, and verification count into one status; checklist covers rosters confirmed, lineups locked, packet generated, live feed connected. Extends `UX-001`.
@@ -430,6 +439,90 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 6D — Session persistence and crash recovery
+
+- Completion date: 2026-07-28.
+- Starting commit and baseline: latest remote `main`
+  `e9e65dc5dd6363749ff08d0a88483e3bd23c1dcd`, the merged Phase 6C PR;
+  **611 passed in 19.63 s** from a clean Git LFS worktree with warnings
+  treated as errors.
+- Branch and reviewed functional commits:
+  `agent/phase6d-session-recovery`; `0b2816f` adds the v1 schema, canonical
+  rundown reconstruction, atomic store, backup/quarantine, and its
+  failing-first tests; `f19ffda` integrates autosave/restore/recovery UI,
+  readiness/privacy behavior, isolated prior-phase smokes, and the Phase 6D
+  real-Tk acceptance harness. The documentation commit and final branch head
+  are reported in the Phase 6D PR and completion report.
+- Schema and storage: `src/ausl_session.py` owns the primitive-only schema and
+  one validation/migration entrypoint. It reconstructs `BroadcastFact`,
+  provenance, pinned entries, used history, and exact-game state through
+  canonical typed models and rechecks fact/evidence identity. It rejects
+  missing required fields, future schemas, malformed timestamps/types,
+  duplicate/cross-game state, unsafe limits, and invalid queue/timestamp
+  invariants. Storage is under `%LOCALAPPDATA%\AUSL Broadcast Stats` on
+  Windows, with injected XDG/home fallbacks for tests.
+- Atomicity and recovery: one store lock and monotonic generation prevent an
+  older same-process save from replacing a newer one. JSON is deterministic
+  UTF-8/LF. A same-directory temp is flushed/fsynced and atomically replaced;
+  the previous validated current file becomes the backup. Failures preserve
+  the current bytes and clean only owned temp files. Corrupt/incompatible
+  bytes are preserved in exclusive timestamped quarantine copies; valid
+  backup fallback is explicit. Start Fresh archives validated current or
+  backup bytes exclusively before any runtime clear.
+- Autosave and lifecycle: one 500 ms Tk debounce covers official game,
+  pinned/used/order/target/reconcile changes, filters/views, selected player,
+  and normalized scroll. Status visibly distinguishes Saving, Saved, and
+  persistent SESSION NOT SAVED. Shutdown cancels the debounce and synchronously
+  flushes `closed_cleanly`; a persisted `active` lifecycle opens as crash
+  recovery. No worker or network request is created by session handling.
+- Restore safety: saved game ID, season, away code, and home code must match
+  one current schedule row. Mismatch remains a blocking readiness/recovery
+  issue, is not autosaved as an automatic default guess, and preserves the
+  unresolved saved identity through close. Unique player identity is required.
+  Facts/rundown/used versions restore canonically and the existing Phase 6C
+  reconciliation handles current/changed/downgraded/missing evidence.
+  Offline Mode always starts off. Clipboard/copy events, workers, timers,
+  locks, credentials, and network state are not serialized.
+- UI and privacy: Game Day shows a recovery notice with Review, Dismiss, and
+  Start Fresh. Save failure contributes a workflow warning without changing
+  source health; unresolved saved-game identity blocks readiness. Session
+  filenames are Git-ignored and explicitly rejected by distribution
+  verification. Smoke harnesses from Phases 5–6C now inject temporary session
+  locations so fixtures cannot contaminate a real producer session.
+- Failing-first evidence: the initial schema/storage files produced two
+  collection errors because `ausl_session` did not exist. The UI/readiness
+  slice then produced 13 expected failures before autosave/restore methods and
+  readiness input existed. A later adversarial slice produced five failures
+  for internal timestamp/membership validation, corrupt-current backup
+  archive, and three distribution privacy filenames. Each slice passed after
+  the corresponding narrow implementation.
+- Automated acceptance:
+  - Phase 6D schema/storage/UI plus readiness/Phase 6A/6C/privacy matrix —
+    **149 passed in 4.26 s**;
+  - complete offline warnings-as-errors suite — **654 passed in 21.54 s**;
+  - `compileall`, `pip check`, checked-in core distribution verification,
+    Git LFS pointer/materialization checks, whitespace validation, and
+    tracked-file/history secret scans passed.
+- Windows GUI smoke: deterministic source/real-Tk execution on
+  `Windows-10-10.0.19045-SP0`, Python 3.12.10, at `1120x720`, using the
+  checked-in local snapshot and isolated private state. It created an exact
+  game/player/rundown/used state, saved active, closed cleanly, resumed,
+  verified Offline Mode and copy events were not restored, deliberately
+  terminated uncleanly, reopened with the recovery notice, reviewed the
+  recovered rundown, injected a visible disk-full save failure, archived and
+  started fresh, opened all seven tabs, made zero network calls, and closed
+  normally. A separate Windows graphics-capture inspection was attempted but
+  the helper returned `SetIsBorderRequired failed: No such interface
+  supported (0x80004002)` twice; no coordinates were guessed. Real Tk widget
+  mapping/state assertions and the full scripted interaction passed.
+- Known limitations and deferred work: this is local single-user persistence,
+  not shared/cloud synchronization. One validated backup and timestamped
+  quarantine/start-fresh archives are retained; no cleanup UI is added.
+  Source workbook refresh remains a separate atomic system. Phase 6E What
+  Changed and Phase 6F fuzzy search/comparison have not started. The existing
+  cooperative `urllib` cancellation limitation remains unrelated and
+  unchanged.
 
 ### Phase 6C — Pinned rundown and on-air workflow
 

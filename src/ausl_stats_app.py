@@ -9,7 +9,7 @@ import queue
 import re
 import threading
 import tkinter as tk
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from tkinter import messagebox, ttk
 
@@ -60,6 +60,16 @@ from ausl_rundown import (
     estimate_read_time_seconds,
     render_rundown_export,
     write_rundown_export_exclusive,
+)
+from ausl_session import (
+    SESSION_SCHEMA_VERSION,
+    GameIdentity,
+    SessionLifecycle,
+    SessionLoadResult,
+    SessionLoadStatus,
+    SessionSnapshot,
+    SessionStore,
+    SessionUIState,
 )
 
 
@@ -1410,7 +1420,9 @@ def official_team_snapshot(team_code, season, database):
 class AUSLStatsApp:
     FACT_PANEL_SCROLLABLE = True
 
-    def __init__(self, root: tk.Tk, logger=None):
+    SESSION_AUTOSAVE_DELAY_MS = 500
+
+    def __init__(self, root: tk.Tk, logger=None, session_store=None):
         self.root = root
         self.logger = logger
         self.root.title("AUSL Broadcast Stats Lookup")
@@ -1456,13 +1468,454 @@ class AUSLStatsApp:
         self._fact_build_lock = threading.Lock()
         self._last_fact_copy_event = None
         self._rundown_session = RundownSession()
+        self._configure_session_persistence(store=session_store)
         self._main_thread_results = queue.Queue()
         self._main_thread_poll_id = None
         self.locked_lineups = self.load_locked_lineups()
         self._style()
         self._build()
+        self._session_ui_ready = True
+        self._apply_session_load_status()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._load_initial()
+
+    def _configure_session_persistence(self, *, store=None, now_provider=None):
+        """Load only validated private state; database-aware restore happens later."""
+
+        self._session_store = store or SessionStore()
+        self._session_now = now_provider or (lambda: datetime.now(timezone.utc))
+        self._session_autosave_id = None
+        self._session_save_generation = 0
+        self._session_save_error = ""
+        self._session_restore_game_unresolved = False
+        self._session_restore_in_progress = False
+        self._session_ui_ready = hasattr(self, "main_tabs")
+        self._session_recovery_visible = False
+        try:
+            loaded = self._session_store.load()
+        except Exception as exc:
+            loaded = SessionLoadResult(
+                SessionLoadStatus.UNAVAILABLE,
+                None,
+                f"Producer session could not be loaded: {type(exc).__name__}: {exc}",
+            )
+        self._session_load_result = loaded
+        self._pending_session_snapshot = loaded.snapshot
+        self._session_base_snapshot = loaded.snapshot or SessionSnapshot.new(
+            now=self._session_now()
+        )
+        self._session_recovery_visible = loaded.status in {
+            SessionLoadStatus.RECOVERED,
+            SessionLoadStatus.BACKUP_RECOVERED,
+            SessionLoadStatus.UNAVAILABLE,
+        }
+        self._apply_session_load_status()
+
+    def _apply_session_load_status(self):
+        loaded = getattr(self, "_session_load_result", None)
+        if not isinstance(loaded, SessionLoadResult):
+            return
+        status_var = getattr(self, "session_status_var", None)
+        if status_var is not None:
+            if loaded.status is SessionLoadStatus.EMPTY:
+                status_var.set("Session autosave ready — private per-user storage.")
+            elif loaded.status is SessionLoadStatus.RESUME:
+                status_var.set(f"Session resumed — {loaded.message}")
+            elif loaded.status in {
+                SessionLoadStatus.RECOVERED,
+                SessionLoadStatus.BACKUP_RECOVERED,
+            }:
+                status_var.set(f"SESSION RECOVERED — {loaded.message}")
+            else:
+                status_var.set(f"SESSION RECOVERY WARNING — {loaded.message}")
+        if hasattr(self, "rundown_session_var"):
+            self.rundown_session_var.set(
+                "AUTOSAVED — private producer session; exact facts and provenance retained."
+            )
+        self._display_session_recovery_notice()
+
+    def _display_session_recovery_notice(self):
+        loaded = getattr(self, "_session_load_result", None)
+        notice_var = getattr(self, "session_recovery_var", None)
+        if notice_var is not None and isinstance(loaded, SessionLoadResult):
+            notice_var.set(loaded.message)
+        frame = getattr(self, "session_recovery_frame", None)
+        if frame is not None:
+            try:
+                if getattr(self, "_session_recovery_visible", False):
+                    frame.grid()
+                else:
+                    frame.grid_remove()
+            except tk.TclError:
+                pass
+
+    @staticmethod
+    def _notebook_selected_text(notebook, default):
+        if notebook is None:
+            return default
+        try:
+            selected = notebook.select()
+            return str(notebook.tab(selected, "text") or default)
+        except (tk.TclError, TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _canvas_scroll_fraction(canvas):
+        if canvas is None:
+            return 0.0
+        try:
+            view = canvas.yview()
+            return max(0.0, min(1.0, float(view[0])))
+        except (tk.TclError, TypeError, ValueError, IndexError):
+            return 0.0
+
+    def _capture_session_snapshot(self, *, lifecycle=SessionLifecycle.ACTIVE):
+        base = getattr(self, "_session_base_snapshot", None)
+        if not isinstance(base, SessionSnapshot):
+            base = SessionSnapshot.new(now=self._session_now())
+        now = self._session_now()
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        now = max(now.astimezone(timezone.utc), base.created_at, base.updated_at)
+        selected = getattr(self, "selected_game", None)
+        if (
+            getattr(self, "_session_restore_game_unresolved", False)
+            and base.selected_game is not None
+        ):
+            selected_identity = base.selected_game
+        else:
+            selected_identity = (
+                GameIdentity(
+                    game_id=selected.game_id,
+                    season=selected.season,
+                    away_team_code=selected.away_team_code,
+                    home_team_code=selected.home_team_code,
+                )
+                if isinstance(selected, SelectedGame)
+                else None
+            )
+        ui_state = SessionUIState(
+            main_tab=self._notebook_selected_text(
+                getattr(self, "main_tabs", None), "Game Day"
+            ),
+            game_day_view=self._notebook_selected_text(
+                getattr(self, "game_day_views", None), "Readiness Details"
+            ),
+            fact_status_filter=(
+                self.fact_status_filter_var.get()
+                if hasattr(self, "fact_status_filter_var")
+                else "Air Ready"
+            ),
+            fact_team_filter=(
+                self.fact_team_filter_var.get()
+                if hasattr(self, "fact_team_filter_var")
+                else "Both teams"
+            ),
+            fact_category_filter=(
+                self.fact_category_filter_var.get()
+                if hasattr(self, "fact_category_filter_var")
+                else "All categories"
+            ),
+            fact_template_profile=(
+                self.fact_template_profile_var.get()
+                if hasattr(self, "fact_template_profile_var")
+                else "60 — one line"
+            ),
+            show_used=(
+                bool(self.fact_show_used_var.get())
+                if hasattr(self, "fact_show_used_var")
+                else False
+            ),
+            selected_player_id=(
+                str(self.selected_player_id)
+                if getattr(self, "selected_player_id", None) is not None
+                else None
+            ),
+            fact_scroll_fraction=self._canvas_scroll_fraction(
+                getattr(self, "fact_cards_canvas", None)
+            ),
+            rundown_scroll_fraction=self._canvas_scroll_fraction(
+                getattr(self, "rundown_canvas", None)
+            ),
+            prior_offline_mode=bool(getattr(self, "_offline_mode", False)),
+        )
+        return SessionSnapshot(
+            schema_version=SESSION_SCHEMA_VERSION,
+            session_id=base.session_id,
+            created_at=base.created_at,
+            updated_at=now,
+            lifecycle=lifecycle,
+            selected_game=selected_identity,
+            rundown_states=self._ensure_rundown_session().states,
+            ui_state=ui_state,
+        )
+
+    def _schedule_session_autosave(self, reason="session changed"):
+        if (
+            not hasattr(self, "_session_store")
+            or not getattr(self, "_session_ui_ready", False)
+            or getattr(self, "_session_restore_in_progress", False)
+            or getattr(self, "_session_restore_game_unresolved", False)
+        ):
+            return False
+        self._session_save_generation += 1
+        generation = self._session_save_generation
+        previous = getattr(self, "_session_autosave_id", None)
+        if previous is not None:
+            try:
+                self.root.after_cancel(previous)
+            except (tk.TclError, ValueError):
+                pass
+        if hasattr(self, "session_status_var"):
+            self.session_status_var.set(f"Saving session… {reason}")
+        self._session_autosave_id = self.root.after(
+            self.SESSION_AUTOSAVE_DELAY_MS,
+            lambda current=generation: self._run_session_autosave(current),
+        )
+        return True
+
+    def _run_session_autosave(self, generation):
+        if generation != getattr(self, "_session_save_generation", None):
+            return False
+        self._session_autosave_id = None
+        return self._flush_session_save(
+            lifecycle=SessionLifecycle.ACTIVE,
+            generation=generation,
+        )
+
+    def _flush_session_save(self, *, lifecycle, generation=None):
+        if not hasattr(self, "_session_store"):
+            return False
+        if generation is None:
+            self._session_save_generation += 1
+            generation = self._session_save_generation
+        try:
+            snapshot = self._capture_session_snapshot(lifecycle=lifecycle)
+            result = self._session_store.save(snapshot, generation=generation)
+        except Exception as exc:
+            result = None
+            error = f"{type(exc).__name__}: {exc}"
+        else:
+            if result.superseded:
+                return False
+            error = result.error if not result.saved else ""
+        if error:
+            self._session_save_error = error
+            if hasattr(self, "session_status_var"):
+                self.session_status_var.set(
+                    f"SESSION NOT SAVED — {error}. Working state remains in memory."
+                )
+            self._log_event(
+                "session_save_failed",
+                error_type=error.split(":", 1)[0],
+                generation=generation,
+            )
+            self.refresh_game_day_dashboard()
+            return False
+        self._session_base_snapshot = snapshot
+        self._session_save_error = ""
+        if hasattr(self, "session_status_var"):
+            timestamp = snapshot.updated_at.strftime("%H:%M:%S UTC")
+            self.session_status_var.set(f"Session saved — {timestamp}")
+        self.refresh_game_day_dashboard()
+        return True
+
+    def _session_readiness_issue(self):
+        if getattr(self, "_session_restore_game_unresolved", False):
+            return {
+                "state": "fail",
+                "blocking": True,
+                "detail": (
+                    "Saved official game identity does not match the installed "
+                    "schedule; it was not guessed or restored."
+                ),
+            }
+        error = getattr(self, "_session_save_error", "")
+        if error:
+            return {
+                "state": "warning",
+                "blocking": False,
+                "detail": f"Producer session is not saved: {error}",
+            }
+        return None
+
+    def _select_notebook_text(self, notebook, label):
+        if notebook is None:
+            return False
+        try:
+            for tab_id in notebook.tabs():
+                if str(notebook.tab(tab_id, "text")) == label:
+                    notebook.select(tab_id)
+                    return True
+        except (tk.TclError, TypeError, ValueError):
+            pass
+        return False
+
+    def _restore_pending_session_after_database_load(self):
+        snapshot = getattr(self, "_pending_session_snapshot", None)
+        if not isinstance(snapshot, SessionSnapshot):
+            return False
+        pending_timer = getattr(self, "_session_autosave_id", None)
+        if pending_timer is not None:
+            try:
+                self.root.after_cancel(pending_timer)
+            except (tk.TclError, ValueError):
+                pass
+            self._session_autosave_id = None
+            self._session_save_generation += 1
+        self._session_restore_in_progress = True
+        try:
+            self._ensure_rundown_session().restore_states(snapshot.rundown_states)
+            saved_game = snapshot.selected_game
+            matched = None
+            if saved_game is not None:
+                for candidate in getattr(self, "_official_game_choices", {}).values():
+                    if (
+                        candidate.game_id == saved_game.game_id
+                        and candidate.season == saved_game.season
+                        and candidate.away_team_code == saved_game.away_team_code
+                        and candidate.home_team_code == saved_game.home_team_code
+                    ):
+                        matched = candidate
+                        break
+                self._session_restore_game_unresolved = matched is None
+                if (
+                    matched is not None
+                    and getattr(getattr(self, "selected_game", None), "game_id", None)
+                    != matched.game_id
+                ):
+                    self.on_game_changed(matched)
+            else:
+                self._session_restore_game_unresolved = False
+            ui = snapshot.ui_state
+            for name, value in (
+                ("fact_status_filter_var", ui.fact_status_filter),
+                ("fact_team_filter_var", ui.fact_team_filter),
+                ("fact_category_filter_var", ui.fact_category_filter),
+                ("fact_template_profile_var", ui.fact_template_profile),
+                ("fact_show_used_var", ui.show_used),
+            ):
+                variable = getattr(self, name, None)
+                if variable is not None:
+                    variable.set(value)
+            self._select_notebook_text(
+                getattr(self, "main_tabs", None), ui.main_tab
+            )
+            self._select_notebook_text(
+                getattr(self, "game_day_views", None), ui.game_day_view
+            )
+            self._restore_saved_player(ui.selected_player_id)
+            self._render_fact_cards()
+            self._render_rundown()
+            self.refresh_game_day_dashboard()
+            self.root.after(
+                0,
+                lambda state=ui: self._restore_session_scroll_positions(state),
+            )
+            self._session_recovery_visible = (
+                self._session_load_result.status
+                in {
+                    SessionLoadStatus.RECOVERED,
+                    SessionLoadStatus.BACKUP_RECOVERED,
+                }
+            )
+            self._display_session_recovery_notice()
+            self._apply_session_load_status()
+        finally:
+            self._pending_session_snapshot = None
+            self._session_restore_in_progress = False
+        return True
+
+    def _restore_saved_player(self, player_id):
+        if player_id is None:
+            return
+        roster = self.db.get("roster", pd.DataFrame()) if self.db else pd.DataFrame()
+        if not isinstance(roster, pd.DataFrame) or "player_id" not in roster.columns:
+            self._clear_selected_player()
+            return
+        identity = _manual_note_identifier(player_id)
+        matches = roster[
+            roster["player_id"].map(_manual_note_identifier).eq(identity)
+        ]
+        if len(matches) != 1:
+            self._clear_selected_player()
+            return
+        row = matches.iloc[0]
+        raw_id = row["player_id"]
+        try:
+            self.selected_player_id = int(raw_id)
+        except (TypeError, ValueError):
+            self.selected_player_id = raw_id
+        self.render_player(row)
+
+    def _restore_session_scroll_positions(self, ui_state):
+        for canvas_name, fraction in (
+            ("fact_cards_canvas", ui_state.fact_scroll_fraction),
+            ("rundown_canvas", ui_state.rundown_scroll_fraction),
+        ):
+            canvas = getattr(self, canvas_name, None)
+            if canvas is not None:
+                try:
+                    canvas.yview_moveto(fraction)
+                except tk.TclError:
+                    pass
+
+    def review_recovered_session(self):
+        self._select_notebook_text(getattr(self, "main_tabs", None), "Game Day")
+        self._select_notebook_text(
+            getattr(self, "game_day_views", None), "Rundown"
+        )
+
+    def dismiss_session_recovery(self):
+        self._session_recovery_visible = False
+        self._display_session_recovery_notice()
+
+    def start_fresh_session(self, *, confirmed=None):
+        if confirmed is None:
+            confirmed = messagebox.askyesno(
+                "Start Fresh",
+                (
+                    "Archive the saved recovery session, then clear the pinned "
+                    "rundown, used history, player selection, filters, and scroll "
+                    "positions? The selected official game and installed data "
+                    "will remain unchanged."
+                ),
+            )
+        if not confirmed:
+            return False
+        try:
+            archive = self._session_store.archive_current_for_start_fresh()
+        except Exception as exc:
+            if hasattr(self, "session_status_var"):
+                self.session_status_var.set(
+                    f"SESSION NOT CLEARED — recovery archive failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            return False
+        self._rundown_session = RundownSession()
+        self._last_fact_copy_event = None
+        self.current_broadcast_note = ""
+        self._clear_selected_player()
+        for name, value in (
+            ("fact_status_filter_var", "Air Ready"),
+            ("fact_team_filter_var", "Both teams"),
+            ("fact_category_filter_var", "All categories"),
+            ("fact_template_profile_var", "60 — one line"),
+            ("fact_show_used_var", False),
+        ):
+            variable = getattr(self, name, None)
+            if variable is not None:
+                variable.set(value)
+        self._restore_session_scroll_positions(SessionUIState())
+        self._session_restore_game_unresolved = False
+        self._session_recovery_visible = False
+        self._display_session_recovery_notice()
+        self._session_base_snapshot = SessionSnapshot.new(now=self._session_now())
+        saved = self._flush_session_save(lifecycle=SessionLifecycle.ACTIVE)
+        if saved and hasattr(self, "session_status_var"):
+            self.session_status_var.set(f"Started fresh — recovery archived at {archive}")
+        self._refresh_rundown_views()
+        return saved
 
     def _on_close(self):
         """Cancel any in-flight refresh/live jobs before closing.
@@ -1471,6 +1924,14 @@ class AUSLStatsApp:
         shutdown either way, but cancelling first stops wasted retries and
         keeps behavior consistent with an explicit cancel action.
         """
+        pending_save = getattr(self, "_session_autosave_id", None)
+        if pending_save is not None:
+            try:
+                self.root.after_cancel(pending_save)
+            except (tk.TclError, ValueError):
+                pass
+            self._session_autosave_id = None
+        self._flush_session_save(lifecycle=SessionLifecycle.CLOSED_CLEANLY)
         self.cancel_data_update()
         self.cancel_live_refresh()
         self._cancel_live_timer()
@@ -1531,6 +1992,14 @@ class AUSLStatsApp:
             textvariable=self.offline_banner_var,
             style="OfflineBanner.TLabel",
         ).grid(row=3, column=1, columnspan=5, sticky="w", pady=(2, 0))
+        self.session_status_var = tk.StringVar(
+            value="Session autosave is initializing."
+        )
+        ttk.Label(
+            top,
+            textvariable=self.session_status_var,
+            style="Sub.TLabel",
+        ).grid(row=4, column=1, columnspan=5, sticky="w", pady=(2, 0))
         top.columnconfigure(5, weight=1)
 
         game = ttk.LabelFrame(self.root, text="Game Setup", padding=8)
@@ -1601,6 +2070,9 @@ class AUSLStatsApp:
         self.main_tabs.add(lineups, text="Lineup Lock")
         self.main_tabs.add(manual, text="Manual Notes")
         self.main_tabs.add(live, text="Live Game")
+        self.main_tabs.bind(
+            "<<NotebookTabChanged>>", self._on_session_view_changed
+        )
         self._build_game_day(game_day)
         self._build_lookup(lookup)
         self._build_team_totals(team_totals)
@@ -1655,6 +2127,37 @@ class AUSLStatsApp:
             style="Offline.TCheckbutton",
         ).grid(row=0, column=3, padx=(12, 0))
 
+        self.session_recovery_frame = ttk.LabelFrame(
+            status, text="Session Recovery", padding=6
+        )
+        self.session_recovery_frame.grid(
+            row=1, column=0, columnspan=4, sticky="ew", pady=(7, 0)
+        )
+        self.session_recovery_frame.columnconfigure(0, weight=1)
+        self.session_recovery_var = tk.StringVar(value="")
+        ttk.Label(
+            self.session_recovery_frame,
+            textvariable=self.session_recovery_var,
+            justify="left",
+            wraplength=900,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Button(
+            self.session_recovery_frame,
+            text="Review",
+            command=self.review_recovered_session,
+        ).grid(row=0, column=1, padx=4)
+        ttk.Button(
+            self.session_recovery_frame,
+            text="Dismiss",
+            command=self.dismiss_session_recovery,
+        ).grid(row=0, column=2, padx=4)
+        ttk.Button(
+            self.session_recovery_frame,
+            text="Start Fresh",
+            command=self.start_fresh_session,
+        ).grid(row=0, column=3, padx=(4, 0))
+        self.session_recovery_frame.grid_remove()
+
         self.game_day_views = ttk.Notebook(parent)
         self.game_day_views.grid(
             row=1,
@@ -1668,6 +2171,9 @@ class AUSLStatsApp:
         self.game_day_views.add(facts_view, text="Air-Ready Facts")
         self.game_day_views.add(rundown_view, text="Rundown")
         self.game_day_views.add(readiness_view, text="Readiness Details")
+        self.game_day_views.bind(
+            "<<NotebookTabChanged>>", self._on_session_view_changed
+        )
         readiness_view.columnconfigure(0, weight=1)
         readiness_view.rowconfigure(1, weight=1)
         self._build_fact_panel(facts_view)
@@ -1823,7 +2329,7 @@ class AUSLStatsApp:
                 width=width,
             )
             picker.pack(side="left", padx=(0, 10))
-            picker.bind("<<ComboboxSelected>>", lambda _event: self._render_fact_cards())
+            picker.bind("<<ComboboxSelected>>", self._on_fact_filter_changed)
             if label == "Team":
                 self.fact_team_filter = picker
             elif label == "Category":
@@ -1832,7 +2338,7 @@ class AUSLStatsApp:
             controls,
             text="Show Used",
             variable=self.fact_show_used_var,
-            command=self._render_fact_cards,
+            command=self._on_fact_filter_changed,
         ).pack(side="left", padx=(0, 10))
         ttk.Label(
             controls,
@@ -1849,7 +2355,7 @@ class AUSLStatsApp:
         fact_scroll = ttk.Scrollbar(
             panel,
             orient="vertical",
-            command=self.fact_cards_canvas.yview,
+            command=self._scroll_fact_cards,
         )
         fact_scroll.grid(row=1, column=1, sticky="ns")
         self.fact_cards_canvas.configure(yscrollcommand=fact_scroll.set)
@@ -1890,7 +2396,7 @@ class AUSLStatsApp:
             value="Select an official game to start a session rundown."
         )
         self.rundown_session_var = tk.StringVar(
-            value="SESSION ONLY — not saved after the app closes (Phase 6D)."
+            value="AUTOSAVE INITIALIZING — private producer session."
         )
         ttk.Label(controls, text="Break target:").grid(
             row=0, column=0, sticky="w"
@@ -1948,7 +2454,7 @@ class AUSLStatsApp:
         rundown_scroll = ttk.Scrollbar(
             panel,
             orient="vertical",
-            command=self.rundown_canvas.yview,
+            command=self._scroll_rundown,
         )
         rundown_scroll.grid(row=0, column=1, sticky="ns")
         self.rundown_canvas.configure(yscrollcommand=rundown_scroll.set)
@@ -2520,6 +3026,7 @@ class AUSLStatsApp:
             self.status_var.set(f"Ready — {len(data['roster'])} current players loaded")
         self._refresh_manual_note_players()
         self.refresh_game_choices()
+        self._restore_pending_session_after_database_load()
         self._sync_selected_player_after_load(previous_selected_id)
         self.show_all()
         self.render_team_totals()
@@ -2586,6 +3093,7 @@ class AUSLStatsApp:
         label = self.game_choice_var.get() if hasattr(self, "game_choice_var") else ""
         selected = getattr(self, "_official_game_choices", {}).get(label)
         if selected is not None:
+            self._session_restore_game_unresolved = False
             self.on_game_changed(selected)
 
     def _on_custom_team_selected(self, _event=None):
@@ -2624,6 +3132,7 @@ class AUSLStatsApp:
         if hasattr(self, "_rundown_session"):
             self._render_rundown()
         self.refresh_game_day_dashboard()
+        self._schedule_session_autosave("custom game context changed")
 
     def _selected_player_in_team_codes(self, team_codes):
         player_id = getattr(self, "selected_player_id", None)
@@ -2680,6 +3189,7 @@ class AUSLStatsApp:
         if hasattr(self, "_rundown_session"):
             self._render_rundown()
         self.refresh_game_day_dashboard()
+        self._schedule_session_autosave("official game changed")
 
     def _clear_selected_player(self):
         self.selected_player_id = None
@@ -3857,8 +4367,9 @@ class AUSLStatsApp:
                 self.current_broadcast_note = ""
         self._fact_collection = collection
         rundown_state = self._current_rundown_state(create=False)
+        rundown_before = rundown_state
         if rundown_state is not None:
-            self._ensure_rundown_session().reconcile(
+            rundown_state = self._ensure_rundown_session().reconcile(
                 selected.game_id,
                 collection.facts,
             )
@@ -3897,6 +4408,8 @@ class AUSLStatsApp:
         self._render_fact_cards()
         self._render_rundown()
         self.refresh_game_day_dashboard()
+        if rundown_state is not rundown_before:
+            self._schedule_session_autosave("rundown reconciliation changed")
         return True
 
     def _filtered_fact_cards(self):
@@ -4212,7 +4725,18 @@ class AUSLStatsApp:
             canvas.yview_scroll(units, "units")
         except tk.TclError:
             return None
+        self._schedule_session_autosave("fact-card scroll changed")
         return "break"
+
+    def _scroll_fact_cards(self, *arguments):
+        canvas = getattr(self, "fact_cards_canvas", None)
+        if canvas is None:
+            return
+        try:
+            canvas.yview(*arguments)
+        except tk.TclError:
+            return
+        self._schedule_session_autosave("fact-card scroll changed")
 
     def _bind_fact_cards_mousewheel(self, widget):
         """Bind wheel scrolling to the canvas and every rendered card widget."""
@@ -4231,7 +4755,25 @@ class AUSLStatsApp:
             canvas.yview_scroll(units, "units")
         except tk.TclError:
             return None
+        self._schedule_session_autosave("rundown scroll changed")
         return "break"
+
+    def _scroll_rundown(self, *arguments):
+        canvas = getattr(self, "rundown_canvas", None)
+        if canvas is None:
+            return
+        try:
+            canvas.yview(*arguments)
+        except tk.TclError:
+            return
+        self._schedule_session_autosave("rundown scroll changed")
+
+    def _on_fact_filter_changed(self, _event=None):
+        self._render_fact_cards()
+        self._schedule_session_autosave("fact filters changed")
+
+    def _on_session_view_changed(self, _event=None):
+        self._schedule_session_autosave("selected view changed")
 
     def _bind_rundown_mousewheel(self, widget):
         for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
@@ -4269,6 +4811,7 @@ class AUSLStatsApp:
         refresh_dashboard = getattr(self, "refresh_game_day_dashboard", None)
         if callable(refresh_dashboard):
             refresh_dashboard()
+        self._schedule_session_autosave("rundown changed")
 
     def pin_fact_to_rundown(self, fact_id, *, now=None):
         selected = getattr(self, "selected_game", None)
@@ -4828,8 +5371,8 @@ class AUSLStatsApp:
             self.rundown_budget_var.set(budget_for_state(state).label)
         if hasattr(self, "rundown_session_var"):
             self.rundown_session_var.set(
-                f"SESSION ONLY · Game {state.game_id} · revision {state.revision} · "
-                "not saved after close (Phase 6D)."
+                f"AUTOSAVED · Game {state.game_id} · revision {state.revision} · "
+                "private per-user session."
             )
         container.columnconfigure(0, weight=1)
         sections = (
@@ -5216,6 +5759,7 @@ class AUSLStatsApp:
             verification_count=self._scoped_verification_count(),
             packet=packet,
             offline_mode=bool(getattr(self, "_offline_mode", False)),
+            session_issue=self._session_readiness_issue(),
         )
         self.game_day_readiness = readiness
 
@@ -5442,6 +5986,7 @@ class AUSLStatsApp:
         row = self.search_rows[selected[0]]
         self.selected_player_id = int(row["player_id"])
         self.render_player(row)
+        self._schedule_session_autosave("selected player changed")
 
     def stat_row(self, key):
         frame = self.db.get(key, pd.DataFrame())

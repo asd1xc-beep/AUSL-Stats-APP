@@ -193,6 +193,12 @@ def test_portable_source_manifest_exists_only_in_generated_release_output(tmp_pa
         ("credentials.json", "credential"),
         ("client_secret-prod.json", "credential"),
         ("oauth_token.json", "token"),
+        ("producer_session.json", "producer session"),
+        ("producer_session.backup.json", "producer session"),
+        (
+            "producer_session.start-fresh-20260728T141516000000Z.json",
+            "producer session",
+        ),
     ],
 )
 def test_package_directory_rejects_private_or_cached_entries(tmp_path, entry, expected_reason):

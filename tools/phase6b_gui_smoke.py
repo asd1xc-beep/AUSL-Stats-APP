@@ -13,6 +13,7 @@ import copy
 import json
 import platform
 import sys
+import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -25,6 +26,7 @@ import tkinter as tk  # noqa: E402
 
 from ausl_data import empty_locked_lineup_store, load_database  # noqa: E402
 from ausl_facts import FactCategory, FactCollection  # noqa: E402
+from ausl_session import SessionStore  # noqa: E402
 import ausl_stats_app  # noqa: E402
 
 
@@ -62,9 +64,13 @@ def main():
     ausl_stats_app.AUSLStatsApp.load_locked_lineups = (
         lambda self: empty_locked_lineup_store()
     )
+    temporary = tempfile.TemporaryDirectory(prefix="ausl-phase6b-session-")
     root = tk.Tk()
     try:
-        app = ausl_stats_app.AUSLStatsApp(root)
+        app = ausl_stats_app.AUSLStatsApp(
+            root,
+            session_store=SessionStore(Path(temporary.name)),
+        )
         root.title("AUSL Phase 6B Smoke")
         root.geometry("1120x720")
         root.update()
@@ -229,6 +235,7 @@ def main():
                 root.destroy()
         except tk.TclError:
             pass
+        temporary.cleanup()
 
 
 if __name__ == "__main__":
