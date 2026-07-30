@@ -1510,10 +1510,13 @@ class AUSLStatsApp:
         self._change_build_pending = None
         self._change_build_running = False
         self._change_build_lock = threading.Lock()
+        self._change_active_source = None
         self._change_callback_pending = False
         self._change_status = "Waiting for a validated installed snapshot."
         self._change_last_error = ""
         self._next_change_comparison_source = "local_reload"
+        self._pending_change_comparison_source = None
+        self._change_restart_timer_id = None
         self._configure_session_persistence(store=session_store)
         self._main_thread_results = queue.Queue()
         self._main_thread_poll_id = None
@@ -3483,6 +3486,8 @@ class AUSLStatsApp:
             or getattr(self, "_data_update_in_flight", False)
             or getattr(self, "_live_refresh_in_flight", False)
             or getattr(self, "_fact_build_running", False)
+            or getattr(self, "_change_build_running", False)
+            or getattr(self, "_change_callback_pending", False)
         ):
             self._ensure_main_thread_dispatch()
 
@@ -3551,6 +3556,15 @@ class AUSLStatsApp:
     def _finish_load(self, data):
         previous_selected_id = getattr(self, "selected_player_id", None)
         self.db = data
+        if hasattr(self, "_change_build_generation"):
+            # Supersede any comparison still walking the replaced database.
+            # The replacement comparison starts only after its selected-game
+            # facts have been accepted and rendered on the main thread.
+            self._change_build_generation += 1
+            self._pending_change_comparison_source = getattr(
+                self, "_next_change_comparison_source", "local_reload"
+            )
+            self._next_change_comparison_source = "local_reload"
         self._rebuild_player_search_index()
         self._verification_count_cache = {}
         fact_generation_after_invalidate = None
@@ -3607,11 +3621,9 @@ class AUSLStatsApp:
             self.request_fact_rebuild()
         self.refresh_game_day_dashboard()
         if hasattr(self, "_change_build_generation"):
-            source = getattr(
-                self, "_next_change_comparison_source", "local_reload"
-            )
-            self._next_change_comparison_source = "local_reload"
-            self.request_change_comparison(affected_source=source)
+            selected = getattr(self, "selected_game", None)
+            if not isinstance(selected, SelectedGame):
+                self._start_deferred_change_comparison()
 
     def _sync_selected_player_after_load(self, previous_selected_id):
         """Rerender one exact selected identity or clear all stale player copy."""
@@ -3764,6 +3776,7 @@ class AUSLStatsApp:
             self.request_fact_rebuild()
         if (
             hasattr(self, "_change_build_generation")
+            and not getattr(self, "_pending_change_comparison_source", None)
             and (
                 getattr(self, "_change_build_running", False)
                 or getattr(self, "_change_callback_pending", False)
@@ -5097,6 +5110,45 @@ class AUSLStatsApp:
         self.refresh_game_day_dashboard()
         if rundown_state is not rundown_before:
             self._schedule_session_autosave("rundown reconciliation changed")
+        self._start_deferred_change_comparison()
+        return True
+
+    def _start_deferred_change_comparison(self):
+        source = getattr(self, "_pending_change_comparison_source", None)
+        if not source:
+            return False
+        pending_timer = getattr(self, "_change_restart_timer_id", None)
+        if pending_timer is not None:
+            try:
+                self.root.after_cancel(pending_timer)
+            except (tk.TclError, ValueError):
+                pass
+            self._change_restart_timer_id = None
+        self._pending_change_comparison_source = None
+        try:
+            return self.request_change_comparison(affected_source=source)
+        except Exception:
+            self._pending_change_comparison_source = source
+            raise
+
+    def _schedule_deferred_change_comparison(self):
+        if not getattr(self, "_pending_change_comparison_source", None):
+            return False
+        pending_timer = getattr(self, "_change_restart_timer_id", None)
+        if pending_timer is not None:
+            try:
+                self.root.after_cancel(pending_timer)
+            except (tk.TclError, ValueError):
+                pass
+
+        def restart():
+            self._change_restart_timer_id = None
+            self._start_deferred_change_comparison()
+
+        self._change_restart_timer_id = self.root.after(
+            self.SESSION_AUTOSAVE_DELAY_MS + 150,
+            restart,
+        )
         return True
 
     def _change_now(self):
@@ -5127,7 +5179,12 @@ class AUSLStatsApp:
         )
 
     @staticmethod
-    def _snapshot_facts_for_database(database, locked_lineups):
+    def _snapshot_facts_for_database(
+        database,
+        locked_lineups,
+        *,
+        cancel_check=None,
+    ):
         """Build every exact-game canonical fact collection off the UI thread."""
 
         schedule = database.get("schedule_results", pd.DataFrame())
@@ -5139,6 +5196,8 @@ class AUSLStatsApp:
         )
         facts = []
         for game in games:
+            if callable(cancel_check) and cancel_check():
+                return None
             lineup_lock = (
                 copy.deepcopy(locked_games.get(game.game_id, {}))
                 if isinstance(locked_games, dict)
@@ -5159,6 +5218,8 @@ class AUSLStatsApp:
                     f"{getattr(collection, 'empty_reason', 'unknown reason')}"
                 )
             facts.extend(collection.facts)
+        if callable(cancel_check) and cancel_check():
+            return None
         unique = {}
         for fact in facts:
             existing = unique.get(fact.fact_id)
@@ -5229,11 +5290,22 @@ class AUSLStatsApp:
                 self._change_build_pending = None
                 if task is None:
                     self._change_build_running = False
+                    self._change_active_source = None
                     return
+            self._change_active_source = task["affected_source"]
             try:
                 facts = self._snapshot_facts_for_database(
-                    task["database"], task["locked_lineups"]
+                    task["database"],
+                    task["locked_lineups"],
+                    cancel_check=lambda current=task: (
+                        current["generation"]
+                        != getattr(self, "_change_build_generation", None)
+                        or current["database_identity"]
+                        != id(getattr(self, "db", None))
+                    ),
                 )
+                if facts is None:
+                    continue
                 digest = build_snapshot_digest(
                     task["database"],
                     facts=facts,
@@ -6136,8 +6208,28 @@ class AUSLStatsApp:
         self._schedule_session_autosave("rundown scroll changed")
 
     def _on_fact_filter_changed(self, _event=None):
+        comparison_in_flight = bool(
+            getattr(self, "_change_build_running", False)
+            or getattr(self, "_change_callback_pending", False)
+            or getattr(self, "_pending_change_comparison_source", None)
+        )
+        if comparison_in_flight:
+            pending_task = getattr(self, "_change_build_pending", None)
+            source = (
+                getattr(self, "_change_active_source", None)
+                or (
+                    pending_task.get("affected_source")
+                    if isinstance(pending_task, dict)
+                    else None
+                )
+                or "local_reload"
+            )
+            self._change_build_generation += 1
+            self._pending_change_comparison_source = source
         self._render_fact_cards()
         self._schedule_session_autosave("fact filters changed")
+        if comparison_in_flight:
+            self._schedule_deferred_change_comparison()
 
     def _on_session_view_changed(self, _event=None):
         self._schedule_session_autosave("selected view changed")

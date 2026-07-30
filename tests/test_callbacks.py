@@ -89,6 +89,20 @@ def select_official_game(app, game_id="9001"):
     app.game_id_var = FakeVar(str(game_id))
 
 
+def test_main_thread_dispatch_keeps_polling_for_change_worker_result(monkeypatch):
+    app = bare_app(monkeypatch)
+    app._main_thread_results = ausl_stats_app.queue.Queue()
+    app._main_thread_poll_id = "active-poll"
+    app._fact_build_running = False
+    app._change_build_running = True
+    app._change_callback_pending = False
+
+    app._drain_main_thread_results()
+
+    assert app._main_thread_poll_id == "after-1"
+    assert len(app.root.callbacks) == 1
+
+
 def test_initial_load_reports_the_original_error_after_deferred_callback(monkeypatch):
     app = bare_app(monkeypatch)
     seen = []
