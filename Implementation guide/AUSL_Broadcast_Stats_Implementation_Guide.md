@@ -83,7 +83,8 @@ Roadmap note (2026-07-29): Phases 6A–6F are complete on the reviewed `main`
 branch. The focused stabilization pass merged in PR #11, and the project owner
 reported that 100%/125%/150% Windows display scaling, truck-hardware smoke,
 and producer rehearsal passed. The full Phase 6 acceptance record is closed.
-Phase 7A is complete. Phase 7B has not started.
+Phase 7A and the Phase 7B college-data foundation are complete. Phase 7C's
+ten-player pilot has not started.
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -900,7 +901,8 @@ developer-only, ambiguous, stale, or unapproved material.
 
 Implementation status (2026-07-29): complete on
 `agent/phase7a-producer-enrichment`. The detailed evidence is in
-`Phase_7A_Acceptance_Record.md`. Phase 7B has not started.
+`Phase_7A_Acceptance_Record.md`. Phase 7B is accepted in
+`Phase_7B_Acceptance_Record.md`; Phase 7C's ten-player pilot has not started.
 
 `src/ausl_enrichment.py` defines the typed CORE_ONLY, PRODUCER_APPROVED, and
 DEVELOPER_REVIEW modes and the defensive row gates. Ordinary startup and
@@ -1379,15 +1381,13 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-1. Review the accepted Phase 7A trust boundary and draft PR evidence.
-2. Keep the default core distribution unchanged; use the explicit
-   `approved-enrichment` profile only when approved optional rows are intended.
-3. Retain official-note manual approval and media exact-identity approval
-   before producer promotion.
-4. Stop after Phase 7A. Phase 7B is **NOT STARTED**.
-5. Begin Phase 7B only in a separate pass after the owner accepts this Phase 7A
-   boundary; define the college schema and provenance rules before collecting
-   or displaying college data.
+1. Review the accepted Phase 7B schema and importer contract.
+2. Begin Phase 7C with exactly ten varied players and explicit source evidence.
+3. Keep all pilot output in developer review; do not add producer UI or
+   distribution members.
+4. Validate identity, candidate provenance, conflict state, declared season
+   scope, and completeness before producer review.
+5. Stop after the ten-player pilot. Phase 7D UI work remains separate.
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College
