@@ -7,8 +7,14 @@ Acceptance date: 2026-08-01
 - Starting remote `main`: `d67124b706d77f6ab677b5257a253088e20f5e78`.
 - Branch: `agent/phase7b-college-foundation`.
 - Clean baseline: **847 passed** with warnings treated as errors.
-- Implementation commits: recorded in the final branch/PR handoff because a
-  commit cannot contain its own final hash.
+- Reviewed implementation commits:
+  - `6e80507` — normalized model, provenance/conflict/completeness logic,
+    deterministic serialization, validator, and focused tests.
+  - `d11ce58` — specification, tracker/guide status, and acceptance contract.
+  - `8851456` and `b86d676` — explicit Phase 7C boundary and roadmap-test
+    alignment.
+- The final evidence-record commit and branch tip are recorded in the PR and
+  completion report because a commit cannot contain its own hash.
 
 ## Schema and trust decisions
 
@@ -38,11 +44,23 @@ Acceptance date: 2026-08-01
 
 ## Verification
 
-- Phase 7B focused tests: final exact result recorded after acceptance run.
-- Full offline suite, compileall, pip check, core and synthetic approved-
-  enrichment verification: final exact results recorded after acceptance run.
-- Factual XLSX hashes are compared with starting `main`; no factual export is
-  part of the Phase 7B commit.
+- Phase 7B plus Phase 7A safety/distribution matrix: **116 passed in 5.95 s**.
+- Complete clean offline suite with warnings as errors after rebasing onto the
+  merged responsiveness fix: **899 passed in 41.73 s**. The original accepted
+  Phase 7A baseline was 847; the publish-time `main` baseline was 853.
+- Packaging/privacy/portable ZIP matrix: **41 passed in 5.34 s**.
+- Synthetic approved-enrichment directory and ZIP verification:
+  **6 passed in 3.17 s**.
+- `compileall`: passed. `pip check`: no broken requirements.
+- Checked-in core distribution: `Clean distribution verified: data\\exports`.
+- Git LFS lists all four factual XLSX exports and direct header inspection
+  confirmed real ZIP/XLSX bytes rather than pointer text.
+- Git whitespace, tracked-file secret, history secret, and private-path scans:
+  passed.
+- Git object IDs for every checked-in factual XLSX exactly match starting
+  `main`; `git diff` reports no `data/exports` change in this branch.
+- No UI or startup code changed, so a new scaling/Tk smoke was neither required
+  nor performed.
 
 ## Boundary and limitations
 
