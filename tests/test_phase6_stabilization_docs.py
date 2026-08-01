@@ -21,7 +21,7 @@ def test_tracker_records_owner_reported_phase6_scaling_acceptance():
     assert "Phase 7A" in text and "Phase 7E" in text
 
 
-def test_guide_next_work_order_stops_after_phase7a():
+def test_guide_next_work_order_advances_only_to_phase7c_pilot():
     text = GUIDE.read_text(encoding="utf-8")
     phase6f = text.index("#### 6F. Faster search and player comparison")
     phase7 = text.index("### Phase 7", phase6f)
@@ -30,7 +30,7 @@ def test_guide_next_work_order_stops_after_phase7a():
 
     assert "Implementation status (2026-07-29): complete" in phase6f_section
     assert "Complete Phase 6F" not in next_work
-    assert "Phase 7A" in next_work
     assert "Phase 7B" in next_work
+    assert "Phase 7C" in next_work
     assert "not started" in next_work.casefold()
-    assert "Stop after Phase 7A" in next_work
+    assert "Stop after the ten-player pilot" in next_work
