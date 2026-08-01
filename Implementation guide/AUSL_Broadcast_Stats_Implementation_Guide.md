@@ -1381,6 +1381,8 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
+Phase 7B is complete. Phase 7C's ten-player pilot has not started.
+
 1. Review the accepted Phase 7B schema and importer contract.
 2. Begin Phase 7C with exactly ten varied players and explicit source evidence.
 3. Keep all pilot output in developer review; do not add producer UI or

@@ -38,4 +38,3 @@ def test_phase7b_acceptance_and_status_are_bounded():
     assert "Phase 7C" in guide and "ten-player pilot" in guide
     assert "production college data" in acceptance
     assert "College Résumé UI" in acceptance
-
