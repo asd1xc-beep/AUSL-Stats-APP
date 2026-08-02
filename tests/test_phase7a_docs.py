@@ -23,7 +23,7 @@ def test_phase6_full_acceptance_records_only_owner_reported_details():
     assert "PHASE 6 ACCEPTED" in text
 
 
-def test_tracker_marks_only_phase7a_scope_complete_and_phase7b_unstarted():
+def test_tracker_preserves_phase7a_scope_after_phase7b():
     text = TRACKER.read_text(encoding="utf-8")
 
     for item in (
@@ -36,9 +36,8 @@ def test_tracker_marks_only_phase7a_scope_complete_and_phase7b_unstarted():
         "ENRICH-004",
     ):
         assert f"- [x] `{item}`" in text
-    assert "PHASE 7A COMPLETE — PHASE 7B NOT STARTED" in text
-    assert "Phase 7B" in text and "NOT STARTED" in text
-    assert "- [ ] `COLLEGE-001`" in text
+    assert "PHASE 7B COMPLETE" in text
+    assert "- [x] `COLLEGE-001`" in text
 
 
 def test_phase7a_acceptance_record_captures_trust_and_verification():
@@ -73,4 +72,4 @@ def test_readme_and_guide_explain_producer_refresh_and_distribution_profile():
         assert "PRODUCER_APPROVED" in text
         assert "DEVELOPER_REVIEW" in text
         assert "approved-enrichment" in text
-        assert "Phase 7B has not started" in text
+    assert "Phase 7B" in guide

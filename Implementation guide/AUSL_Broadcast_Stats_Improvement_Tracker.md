@@ -44,15 +44,16 @@ at `08fd7f09f24a53f3270516c51e6667e9daa35538`. Windows scaling at 100%,
 **project-owner reported** complete; no unsupplied hardware or behavior detail
 is inferred. The full Phase 6 acceptance is closed.
 
-Phase 7A now completes centralized split reliability, typed enrichment load
+Phase 7A completed centralized split reliability, typed enrichment load
 modes, producer-facing Full Enrichment Refresh, strict media/note approval
 gates, last-known-good source handling, and the explicit approved-enrichment
-distribution profile. Phase 7B is **NOT STARTED**.
+distribution profile. Phase 7B now completes the normalized, provenance-first
+college data foundation. Phase 7C's ten-player pilot is **NOT STARTED**.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 7A COMPLETE — PHASE 7B NOT STARTED**
+Status: **PHASE 7B COMPLETE — PHASE 7C TEN-PLAYER PILOT NOT STARTED**
 
 ## Approved next roadmap
 
@@ -468,7 +469,7 @@ debug exports, ambiguous identities, and unapproved rows remain excluded.
 
 The college layer must remain visually and statistically separate from AUSL professional totals.
 
-- [ ] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · PLANNED — PHASE 7B**
+- [x] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · COMPLETE — PHASE 7B**
   - Support multiple schools, seasons, transfers, shortened seasons, extra eligibility, and two-way players.
 
 - [ ] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · PLANNED — PHASE 7D**
@@ -479,13 +480,13 @@ The college layer must remain visually and statistically separate from AUSL prof
 - [ ] `COLLEGE-003` — Build a verified core résumé from official sources. **P2 · PLANNED — PHASE 7C**
   - School(s), seasons, career batting/pitching totals, final season, championships/WCWS, awards, and records.
 
-- [ ] `COLLEGE-004` — Add source hierarchy and field-level provenance. **P1 · PLANNED — PHASE 7B**
+- [x] `COLLEGE-004` — Add source hierarchy and field-level provenance. **P1 · COMPLETE — PHASE 7B**
   - Preferred order: official AUSL profile, NCAA statistics, official school athletics site, manually verified entry.
   - Every displayed value must retain its own source, effective season/date,
     retrieval time, and verification state; one good source must not silently
     validate unrelated fields.
 
-- [ ] `COLLEGE-005` — Add `Verified`, `Partial`, and `Needs review` completeness states. **P1 · PLANNED — PHASE 7B**
+- [x] `COLLEGE-005` — Add `Verified`, `Partial`, and `Needs review` completeness states. **P1 · COMPLETE — PHASE 7B**
   - Missing information remains unavailable and is never converted to zero.
 
 - [ ] `COLLEGE-006` — Pilot the résumé with ten varied players before full-roster import. **P2 · PLANNED — PHASE 7C**
@@ -525,6 +526,25 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 7B — College data foundation
+
+- Completion date: 2026-08-01.
+- Starting commit and branch: remote `main`
+  `d67124b706d77f6ab677b5257a253088e20f5e78`;
+  `agent/phase7b-college-foundation`.
+- Completed tracker scope: `COLLEGE-001`, `COLLEGE-004`, and `COLLEGE-005`.
+- Added a GUI-free normalized model, field-level evidence candidates, retained
+  conflict resolution, explainable completeness, deterministic versioned JSON,
+  bounded validation, and an offline explicit-file developer validator.
+- Verification: **116** focused/safety tests and **899** complete offline tests
+  passed with warnings as errors; compile, dependency, distribution, privacy,
+  LFS/XLSX, whitespace, secret, and unchanged-export checks passed.
+- No production college data, UI, startup/refresh integration, or distribution
+  member was added. `COLLEGE-003` and `COLLEGE-006` remain uncompleted.
+- Detailed evidence: `Implementation guide/Phase_7B_Acceptance_Record.md`.
+
+**PHASE 7B COMPLETE — PHASE 7C TEN-PLAYER PILOT NOT STARTED**
 
 ### Phase 7A — Producer-facing approved enrichment
 
