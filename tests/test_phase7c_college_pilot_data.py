@@ -154,6 +154,18 @@ def test_independent_real_pilot_imports_are_byte_identical(tmp_path):
     assert one.review_report_sha256 == two.review_report_sha256
 
 
+def test_real_review_packet_exposes_honors_seasons_and_source_coverage():
+    text = (
+        ROOT / "Implementation guide" / "Phase_7C_Review_Packet.md"
+    ).read_text(encoding="utf-8")
+    assert "Final college season:" in text
+    assert "Honors, records, WCWS, and championships" in text
+    assert "Four-time NCAA champion with Oklahoma, 2021-2024" in text
+    assert "2021 WCWS All-Tournament Team" in text
+    assert "Source coverage:" in text
+    assert "Source records by type:" in text
+
+
 def test_staging_and_envelope_contain_no_producer_approval_shortcut():
     staging = load_staging((PILOT / "review_staging.json").read_bytes())
     text = (PILOT / "pilot_envelope.json").read_text(encoding="utf-8").casefold()

@@ -303,6 +303,17 @@ def render_review_packet(manifest: PilotManifest, envelope: CollegeEnvelope) -> 
     assessments = {player_id: assess_completeness(resume, envelope) for player_id, resume in by_player.items()}
     totals = Counter(item.state.value for item in assessments.values())
     source_types = Counter(item.source_type.value for item in envelope.sources)
+    field_source_types: Counter[str] = Counter()
+    for resume in envelope.resumes:
+        evidence_ids = [
+            resume.display_name_source_id,
+            *(item.source_id for item in resume.identity_mappings),
+            *(source_id for item in resume.programs for source_id in item.source_ids),
+            *(source_id for item in resume.stints for source_id in item.provenance_ids),
+            *(item.source_id for record in resume.stat_records for item in record.candidates),
+            *(source_id for item in resume.achievements for source_id in item.provenance_ids),
+        ]
+        field_source_types.update(sources[source_id].source_type.value for source_id in evidence_ids)
     lines = [
         "# Phase 7C College Résumé Pilot Review Packet",
         "",
@@ -319,7 +330,10 @@ def render_review_packet(manifest: PilotManifest, envelope: CollegeEnvelope) -> 
         f"- Unresolved conflicts: {len(validation.unresolved_conflicts)}",
         f"- Missing provenance: {len(validation.missing_provenance)}",
         f"- Records rejected by validation: {len(validation.errors)}",
-        "- Fields by source type: " + ", ".join(
+        "- Evidence-bearing fields by source type: " + ", ".join(
+            f"{name}={count}" for name, count in sorted(field_source_types.items())
+        ),
+        "- Source records by type: " + ", ".join(
             f"{name}={count}" for name, count in sorted(source_types.items())
         ),
         "- Source coverage gaps: human identity review for all pilot résumés; additional unavailable sections are listed per player.",
@@ -329,6 +343,9 @@ def render_review_packet(manifest: PilotManifest, envelope: CollegeEnvelope) -> 
     for entry in sorted(manifest.entries, key=lambda item: (item.display_name.casefold(), item.player_id)):
         resume = by_player[entry.player_id]
         assessment = assessments[entry.player_id]
+        referenced = sorted({resume.display_name_source_id, *(m.source_id for m in resume.identity_mappings), *(s for p in resume.programs for s in p.source_ids), *(s for stint in resume.stints for s in stint.provenance_ids), *(c.source_id for r in resume.stat_records for c in r.candidates), *(s for achievement in resume.achievements for s in achievement.provenance_ids)})
+        source_type_names = sorted({sources[source_id].source_type.value for source_id in referenced})
+        final_seasons = [stint.end_season for stint in resume.stints if stint.end_season is not None]
         lines.extend([
             f"## {entry.display_name} — AUSL ID {entry.player_id}", "",
             f"- AUSL context: {entry.team_code}; {entry.roster_status}",
@@ -336,6 +353,8 @@ def render_review_packet(manifest: PilotManifest, envelope: CollegeEnvelope) -> 
             f"- Completeness: **{assessment.state.value}**",
             f"- Missing expected fields: {', '.join(assessment.missing_fields) or 'None'}",
             f"- Blocking issues: {', '.join(assessment.blocking_reasons) or 'None'}",
+            f"- Final college season: {max(final_seasons) if final_seasons else 'Unavailable'}",
+            f"- Source coverage: {len(referenced)} records ({', '.join(source_type_names)}).",
             "- School/transfer timeline: " + "; ".join(
                 f"{program.display_name} ({stint.start_season or '?'}–{stint.end_season or '?'})"
                 for stint in sorted(resume.stints, key=lambda item: item.transfer_order)
@@ -349,8 +368,15 @@ def render_review_packet(manifest: PilotManifest, envelope: CollegeEnvelope) -> 
                 lines.append(f"- `{candidate.candidate_id}`: {candidate.metric_definition} = {value} ({record.record_type.value}, {record.role.value}); source `{candidate.source_id}`.")
         if not resume.stat_records:
             lines.append("- No statistical candidate is sufficiently normalized.")
+        lines.extend(["", "### Honors, records, WCWS, and championships", ""])
+        for achievement in sorted(resume.achievements, key=lambda item: item.achievement_id):
+            lines.append(
+                f"- {achievement.normalized_label} ({achievement.season_or_date}); "
+                f"source `{achievement.provenance_ids[0]}`."
+            )
+        if not resume.achievements:
+            lines.append("- Unavailable; no supported achievement is selected for this pilot résumé.")
         lines.extend(["", "### Source references", ""])
-        referenced = sorted({resume.display_name_source_id, *(m.source_id for m in resume.identity_mappings), *(s for p in resume.programs for s in p.source_ids), *(c.source_id for r in resume.stat_records for c in r.candidates)})
         for source_id in referenced:
             source = sources[source_id]
             lines.append(f"- `{source_id}` — {source.organization}, *{source.title}*, {source.locator}; {source.url or source.local_document_id}.")

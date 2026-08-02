@@ -13,7 +13,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Unresolved conflicts: 0
 - Missing provenance: 0
 - Records rejected by validation: 0
-- Fields by source type: official_ausl_player_profile=1, official_school_athletics=11
+- Evidence-bearing fields by source type: official_ausl_player_profile=20, official_school_athletics=104
+- Source records by type: official_ausl_player_profile=1, official_school_athletics=11
 - Source coverage gaps: human identity review for all pilot résumés; additional unavailable sections are listed per player.
 - Recommended résumé section order: Identity; Schools/Transfer Timeline; Career Totals; Final Season; Honors/Records; WCWS/Championships; Sources/Completeness.
 
@@ -24,6 +25,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: sections.achievements
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2026
+- Source coverage: 3 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: BYU (2023–2024); Oklahoma (2025–2026)
 
 ### Candidate facts for later review
@@ -44,6 +47,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `1322-season_pitching-2024-strikeouts`: strikeouts = 17 (season_pitching, two_way); source `ou-agbayani-bio`.
 - `1322-season_pitching-2024-wins`: wins = 5 (season_pitching, two_way); source `ou-agbayani-bio`.
 
+### Honors, records, WCWS, and championships
+
+- Unavailable; no supported achievement is selected for this pilot résumé.
+
 ### Source references
 
 - `ausl-roster-2026` — Athletes Unlimited Softball League, *Canonical AUSL 2026 roster export*, roster_2026 row matched by exact player_id; data/exports/ausl_rosters.xlsx#roster_2026.
@@ -57,6 +64,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2025
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Tennessee (2023–2025)
 
 ### Candidate facts for later review
@@ -66,6 +75,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `1324-season_pitching-2025-losses`: losses = 11 (season_pitching, pitcher); source `ut-pickens-bio`.
 - `1324-season_pitching-2025-strikeouts`: strikeouts = 306 (season_pitching, pitcher); source `ut-pickens-bio`.
 - `1324-season_pitching-2025-wins`: wins = 25 (season_pitching, pitcher); source `ut-pickens-bio`.
+
+### Honors, records, WCWS, and championships
+
+- 2025 Softball America National Pitcher of the Year (2025); source `ut-pickens-bio`.
 
 ### Source references
 
@@ -79,6 +92,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2023
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Kentucky (2019–2023)
 
 ### Candidate facts for later review
@@ -86,6 +101,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `933-season_batting-2021-batting_average`: batting_average = 0.495 (season_batting, hitter); source `uk-kowalik-bio`.
 - `933-season_batting-2021-hits`: hits = 100 (season_batting, hitter); source `uk-kowalik-bio`.
 - `933-season_batting-2021-runs`: runs = 79 (season_batting, hitter); source `uk-kowalik-bio`.
+
+### Honors, records, WCWS, and championships
+
+- Kentucky career runs record reached in 2022 (2022); source `uk-kowalik-bio`.
 
 ### Source references
 
@@ -99,6 +118,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2024
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Oklahoma State (2019–2023); Oklahoma (2024–2024)
 
 ### Candidate facts for later review
@@ -108,6 +129,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `1285-season_pitching-2023-losses`: losses = 7 (season_pitching, pitcher); source `ou-maxwell-bio`.
 - `1285-season_pitching-2023-strikeouts`: strikeouts = 229 (season_pitching, pitcher); source `ou-maxwell-bio`.
 - `1285-season_pitching-2023-wins`: wins = 16 (season_pitching, pitcher); source `ou-maxwell-bio`.
+
+### Honors, records, WCWS, and championships
+
+- 2024 NCAA champion with Oklahoma (2024); source `ou-maxwell-bio`.
 
 ### Source references
 
@@ -121,6 +146,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2025
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Louisville (2022–2023); Florida (2024–2025)
 
 ### Candidate facts for later review
@@ -130,6 +157,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `1102-season_batting-2025-home_runs`: home_runs = 9 (season_batting, hitter); source `uf-otis-bio`.
 - `1102-season_batting-2025-rbi`: rbi = 53 (season_batting, hitter); source `uf-otis-bio`.
 - `1102-season_batting-2025-runs`: runs = 82 (season_batting, hitter); source `uf-otis-bio`.
+
+### Honors, records, WCWS, and championships
+
+- 2024 NFCA First-Team All-American (2024); source `uf-otis-bio`.
 
 ### Source references
 
@@ -143,6 +174,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2025
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Stanford (2023–2024); Texas Tech (2025–2025)
 
 ### Candidate facts for later review
@@ -152,6 +185,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `1327-season_pitching-2025-strikeouts`: strikeouts = 319 (season_pitching, two_way); source `ttu-canady-bio`.
 - `1327-season_pitching-2025-wins`: wins = 34 (season_pitching, two_way); source `ttu-canady-bio`.
 - `1327-season_batting-2025-home_runs`: home_runs = 11 (season_batting, two_way); source `ttu-canady-bio`.
+
+### Honors, records, WCWS, and championships
+
+- 2024 USA Softball Collegiate Player of the Year (2024); source `ttu-canady-bio`.
 
 ### Source references
 
@@ -165,6 +202,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2021
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: James Madison (2017–2021)
 
 ### Candidate facts for later review
@@ -176,6 +215,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `169-season_batting-2021-batting_average`: batting_average = 0.317 (season_batting, two_way); source `jmu-alexander-bio`.
 - `169-season_batting-2021-home_runs`: home_runs = 2 (season_batting, two_way); source `jmu-alexander-bio`.
 - `169-season_batting-2021-rbi`: rbi = 12 (season_batting, two_way); source `jmu-alexander-bio`.
+
+### Honors, records, WCWS, and championships
+
+- 2021 WCWS All-Tournament Team (2021); source `jmu-alexander-bio`.
 
 ### Source references
 
@@ -189,6 +232,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2021
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: UCLA (2017–2021)
 
 ### Candidate facts for later review
@@ -202,6 +247,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `278-season_pitching-2021-strikeouts`: strikeouts = 183 (season_pitching, two_way); source `ucla-garcia-bio`.
 - `278-season_pitching-2021-wins`: wins = 18 (season_pitching, two_way); source `ucla-garcia-bio`.
 
+### Honors, records, WCWS, and championships
+
+- 2019 NCAA champion and two-time Honda Cup winner (2019); source `ucla-garcia-bio`.
+
 ### Source references
 
 - `ausl-roster-2026` — Athletes Unlimited Softball League, *Canonical AUSL 2026 roster export*, roster_2026 row matched by exact player_id; data/exports/ausl_rosters.xlsx#roster_2026.
@@ -214,6 +263,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2024
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Oklahoma (2021–2024)
 
 ### Candidate facts for later review
@@ -223,6 +274,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `1075-source_career_batting-career-home_runs`: home_runs = 98 (source_career_batting, hitter); source `ou-jennings-ausl`.
 - `1075-source_career_batting-career-rbi`: rbi = 314 (source_career_batting, hitter); source `ou-jennings-ausl`.
 - `1075-source_career_batting-career-runs`: runs = 277 (source_career_batting, hitter); source `ou-jennings-ausl`.
+
+### Honors, records, WCWS, and championships
+
+- Four-time NCAA champion with Oklahoma, 2021-2024 (2024); source `ou-jennings-ausl`.
 
 ### Source references
 
@@ -236,6 +291,8 @@ Status: **PRODUCER REVIEW PENDING**
 - Completeness: **Needs Review**
 - Missing expected fields: None
 - Blocking issues: identity_review_pending, section_needs_review
+- Final college season: 2024
+- Source coverage: 2 records (official_ausl_player_profile, official_school_athletics).
 - School/transfer timeline: Clemson (2020–2024)
 
 ### Candidate facts for later review
@@ -249,6 +306,10 @@ Status: **PRODUCER REVIEW PENDING**
 - `950-source_career_pitching-career-losses`: losses = 37 (source_career_pitching, two_way); source `clemson-cagle-career`.
 - `950-source_career_pitching-career-strikeouts`: strikeouts = 819 (source_career_pitching, two_way); source `clemson-cagle-career`.
 - `950-source_career_pitching-career-wins`: wins = 86 (source_career_pitching, two_way); source `clemson-cagle-career`.
+
+### Honors, records, WCWS, and championships
+
+- 2023 USA Softball Collegiate Player of the Year (2023); source `clemson-cagle-career`.
 
 ### Source references
 
