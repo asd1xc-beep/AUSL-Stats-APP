@@ -118,6 +118,53 @@ def test_current_fact_result_updates_collection_and_verification_count():
     assert dashboard == [True]
 
 
+def test_current_fact_result_renders_before_deferred_change_comparison():
+    app = prepare_app()
+    app._fact_build_generation = 4
+    current = collection("9001", [fact(selected_game_id="9001")])
+    events = []
+    app._pending_change_comparison_source = "official_core_sources"
+    app._render_fact_cards = lambda: events.append("facts rendered")
+    app.request_change_comparison = lambda **kwargs: events.append(
+        ("change comparison", kwargs["affected_source"])
+    )
+    app.refresh_game_day_dashboard = lambda: None
+
+    accepted = app._finish_fact_rebuild(
+        current,
+        generation=4,
+        game_id="9001",
+        database_identity=id(app.db),
+    )
+
+    assert accepted is True
+    assert events == [
+        "facts rendered",
+        ("change comparison", "official_core_sources"),
+    ]
+    assert app._pending_change_comparison_source is None
+
+
+def test_stale_fact_result_cannot_start_deferred_change_comparison():
+    app = prepare_app()
+    app._fact_build_generation = 4
+    app.selected_game = selected_game("9002")
+    app._pending_change_comparison_source = "official_core_sources"
+    requested = []
+    app.request_change_comparison = lambda **kwargs: requested.append(kwargs)
+
+    accepted = app._finish_fact_rebuild(
+        collection("9001", [fact(selected_game_id="9001")]),
+        generation=3,
+        game_id="9001",
+        database_identity=id(app.db),
+    )
+
+    assert accepted is False
+    assert requested == []
+    assert app._pending_change_comparison_source == "official_core_sources"
+
+
 def test_changed_evidence_invalidates_previously_copied_version():
     app = prepare_app()
     app._fact_build_generation = 4
@@ -324,6 +371,36 @@ def test_fact_filters_keep_both_team_and_review_views_local():
     app.fact_status_filter_var.set("All facts")
     app.fact_team_filter_var.set("CAR")
     assert app._filtered_fact_cards() == [review]
+
+
+def test_filter_change_supersedes_background_comparison_before_rendering():
+    app = prepare_app()
+    app._change_build_generation = 7
+    app._change_build_running = True
+    app._change_callback_pending = False
+    app._change_active_source = "official_core_sources"
+    app._pending_change_comparison_source = None
+    events = []
+    app._render_fact_cards = lambda: events.append(
+        ("facts rendered", app._change_build_generation)
+    )
+    app.request_change_comparison = lambda **kwargs: events.append(
+        ("change comparison", kwargs["affected_source"])
+    )
+    app._schedule_session_autosave = lambda _reason: None
+
+    app._on_fact_filter_changed()
+
+    assert events == [("facts rendered", 8)]
+    assert app._pending_change_comparison_source == "official_core_sources"
+    assert len(app.root.scheduled) == 1
+    _timer, delay_ms, restart = app.root.scheduled.pop()
+    assert delay_ms > app.SESSION_AUTOSAVE_DELAY_MS
+
+    restart()
+
+    assert events[-1] == ("change comparison", "official_core_sources")
+    assert app._pending_change_comparison_source is None
 
 
 def test_fact_panel_contract_is_scrollable():

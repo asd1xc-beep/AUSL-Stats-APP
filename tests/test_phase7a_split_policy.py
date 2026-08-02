@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+import ausl_facts
 from ausl_splits import (
     DEFAULT_SPLIT_SAMPLE_POLICY,
     SplitSampleState,
@@ -286,3 +287,68 @@ def test_split_fact_missing_provenance_or_wrong_player_is_excluded():
         fact.source_record_identity.startswith("split:")
         for fact in collection.facts
     )
+
+
+def test_producer_approved_split_rows_reuse_canonical_policy_annotations(
+    monkeypatch,
+):
+    annotated = apply_split_sample_policy(
+        pd.DataFrame([_split_fact_row()]),
+        category="batting",
+    )
+    annotated["producer_approved"] = True
+    annotated["producer_air_ready"] = True
+    annotated["producer_trust_state"] = "VERIFIED"
+    database = _fact_database(annotated.to_dict("records"))
+
+    def unexpected_revalidation(*_args, **_kwargs):
+        raise AssertionError(
+            "Producer-approved rows must reuse the canonical load-boundary policy"
+        )
+
+    monkeypatch.setattr(
+        ausl_facts,
+        "apply_split_sample_policy",
+        unexpected_revalidation,
+    )
+
+    collection = build_selected_game_facts(database, _selected_game())
+
+    assert any(
+        fact.source_record_identity.startswith("split:")
+        for fact in collection.facts
+    )
+
+
+def test_split_policy_receives_only_selected_game_players_and_season(monkeypatch):
+    rows = [
+        _split_fact_row(),
+        *[
+            _split_fact_row(
+                player_id=900 + index,
+                season=2025,
+                split_key=f"irrelevant-{index}",
+            )
+            for index in range(100)
+        ],
+    ]
+    database = _fact_database(rows)
+    database["enrichment_mode"] = "developer_review"
+    observed_rows = []
+    canonical_policy = apply_split_sample_policy
+
+    def recording_policy(frame, *, category):
+        if not frame.empty:
+            observed_rows.extend(frame[["player_id", "season"]].to_dict("records"))
+        return canonical_policy(frame, category=category)
+
+    monkeypatch.setattr(
+        ausl_facts,
+        "apply_split_sample_policy",
+        recording_policy,
+    )
+
+    collection = build_selected_game_facts(database, _selected_game())
+
+    assert collection.available
+    assert observed_rows == [{"player_id": 101, "season": 2026}]

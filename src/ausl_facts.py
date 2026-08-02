@@ -944,25 +944,60 @@ def _split_stat_facts(
     health_state, health, health_warning = _source_trust(
         database, "split_stats"
     )
+    enrichment_mode = _text(database.get("enrichment_mode")).casefold()
+    roster_counts = roster["_player_id"].value_counts()
+    roster_by_id = {
+        _identifier(row.get("_player_id")): row
+        for row in roster.to_dict("records")
+        if roster_counts.get(_identifier(row.get("_player_id")), 0) == 1
+        and _text(row.get("_team_code")).upper() in team_codes
+    }
     facts: list[BroadcastFact] = []
     for key, category, is_pitcher in (
         ("batting_splits", "batting", False),
         ("pitching_splits", "pitching", True),
     ):
-        frame = apply_split_sample_policy(
-            database.get(key, pd.DataFrame()), category=category
+        source_frame = database.get(key, pd.DataFrame())
+        if not isinstance(source_frame, pd.DataFrame) or source_frame.empty:
+            continue
+        if (
+            "player_id" not in source_frame.columns
+            or "season" not in source_frame.columns
+        ):
+            continue
+        player_ids = source_frame["player_id"].map(_identifier)
+        seasons = pd.to_numeric(source_frame["season"], errors="coerce")
+        relevant = source_frame.loc[
+            player_ids.isin(roster_by_id) & seasons.eq(season)
+        ].copy()
+        if relevant.empty:
+            continue
+        policy_columns = {
+            "split_sample_state",
+            "split_sample_label",
+            "split_air_ready",
+            "producer_approved",
+            "producer_air_ready",
+            "producer_trust_state",
+        }
+        canonical_producer_rows = bool(
+            enrichment_mode == "producer_approved"
+            and policy_columns.issubset(relevant.columns)
+            and relevant["producer_approved"].map(_bool_true).all()
+        )
+        frame = (
+            relevant
+            if canonical_producer_rows
+            else apply_split_sample_policy(relevant, category=category)
         )
         if frame.empty:
             continue
-        for _, row in frame.iterrows():
+        for row in frame.to_dict("records"):
             player_id = _identifier(row.get("player_id"))
-            matches = roster[roster["_player_id"].eq(player_id)]
-            if len(matches) != 1:
+            player = roster_by_id.get(player_id)
+            if player is None:
                 continue
-            player = matches.iloc[0]
             team_code = player["_team_code"]
-            if team_code not in team_codes:
-                continue
             row_season = _number(row.get("season"), integer=True)
             if row_season != season:
                 continue
@@ -974,7 +1009,7 @@ def _split_stat_facts(
             if not all((split_key, split_label, source_name, source_url, imported_at)):
                 continue
             name = _text(player.get("player_name"))
-            eligible = bool(row.get("split_air_ready"))
+            eligible = _bool_true(row.get("split_air_ready"))
             if is_pitcher:
                 outs = split_innings_to_outs(row.get("inningsPitched"))
                 strikeouts = _number(row.get("strikeOuts"), integer=True)
@@ -1005,7 +1040,16 @@ def _split_stat_facts(
                     f"{split_label.lower()} split."
                 )
                 sample_evidence = ("sample_plate_appearances", plate_appearances)
-            if eligible and health_state is VerificationState.VERIFIED:
+            producer_row_approved = bool(
+                enrichment_mode == "producer_approved"
+                and _bool_true(row.get("producer_approved"))
+                and _bool_true(row.get("producer_air_ready"))
+            )
+            if (
+                eligible
+                and producer_row_approved
+                and health_state is VerificationState.VERIFIED
+            ):
                 state = VerificationState.VERIFIED
                 warning = ""
             elif health_state is VerificationState.STALE:
@@ -1016,13 +1060,24 @@ def _split_stat_facts(
                 warning = health_warning
             else:
                 state = VerificationState.VERIFY
-                warning = (
-                    "SMALL SAMPLE: below the configured producer split threshold; "
-                    "not air-ready."
-                    if not eligible
-                    else health_warning
-                    or "Split source approval is incomplete."
-                )
+                if not eligible:
+                    warning = (
+                        "SMALL SAMPLE: below the configured producer split "
+                        "threshold; not air-ready."
+                    )
+                elif enrichment_mode == "developer_review":
+                    warning = (
+                        "Split row is available for developer review only; "
+                        "producer approval is required."
+                    )
+                elif not producer_row_approved:
+                    warning = (
+                        "Split row did not pass the producer-approved load boundary."
+                    )
+                else:
+                    warning = (
+                        health_warning or "Split source approval is incomplete."
+                    )
             record_identity = (
                 f"split:{season}:{player_id}:{category}:{split_key}"
             )
