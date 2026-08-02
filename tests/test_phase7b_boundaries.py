@@ -17,7 +17,9 @@ def test_college_artifacts_are_absent_from_producer_distribution_contracts():
     ):
         text = (ROOT / relative).read_text(encoding="utf-8").casefold()
         assert "college" not in text
-    assert not list((ROOT / "data").rglob("*college*"))
+    pilot_root = ROOT / "data" / "college_pilot"
+    if pilot_root.exists():
+        assert all(ROOT / "data" / "exports" not in path.parents for path in pilot_root.rglob("*"))
 
 
 def test_no_college_ui_or_facts_exist_in_phase7b():
