@@ -7,7 +7,9 @@ Status: **PHASE 7C TECHNICAL PILOT COMPLETE — PRODUCER REVIEW PENDING — PHAS
 - Accepted Phase 7B starting commit: `ebd032fb2512db379f5ab725a7ae506f5bec1ec6`.
 - Phase 7B clean baseline: **899 passed** with warnings treated as errors.
 - Branch: `agent/phase7c-college-pilot`.
-- Ending commit: recorded in the completion report after evidence commits are created.
+- Verified implementation tip: `929428267891b2d0c56815f4bcfc2e148a8ec7a9`.
+- The acceptance-evidence finalization commit is listed in the completion
+  report because a commit cannot contain its own hash.
 
 ## Accepted contract and importer
 
@@ -52,9 +54,35 @@ Status: **PHASE 7C TECHNICAL PILOT COMPLETE — PRODUCER REVIEW PENDING — PHAS
 
 ## Verification evidence
 
-Final command totals, deterministic build hashes, distribution checks,
-workbook hash comparison, whitespace/secret scans, and commit IDs are recorded
-after the final clean-checkout verification pass.
+- Phase 7B/7C schema, importer, data, report, boundary, and documentation
+  matrix: **76 passed in 1.83 s**.
+- Phase 7A enrichment/refresh/split/distribution/docs safety matrix:
+  **79 passed in 3.59 s**.
+- Complete clean offline suite with warnings as errors:
+  **931 passed in 19.47 s**.
+- Packaging/privacy/portable ZIP/distribution matrix:
+  **41 passed in 2.47 s**.
+- Forced mid-promotion rollback and structural last-known-good tests:
+  **2 passed in 0.48 s**.
+- `compileall`: passed. `pip check`: no broken requirements.
+- Core distribution: `Clean distribution verified: data\\exports`.
+- Approved-enrichment distribution: staged and verified successfully; the
+  clean-checkout CLI run used the valid `core_only` fallback, while the
+  focused Phase 7A tests verified approved optional rows and deterministic ZIP.
+- Two independent pilot builds were byte-identical:
+  - envelope SHA-256:
+    `d8c111e7762bf96e81ccd6844230123e31cfbab780f92d40d5aa695ccfdb3442`;
+  - review-packet SHA-256:
+    `76e45bd68192b0cec53e7e22e7dd17a955d4531022113bebb0043cfd8aa6497d`.
+- Git LFS listed all four professional workbooks; each clean-checkout file
+  had a real ZIP/XLSX header and its bytes matched its LFS SHA-256.
+- Starting and ending LFS hashes were identical:
+  - roster: `fa7e390b645bccea2497eca95eebb914e9cff6e5da214e1604f9b3235eb07840`;
+  - season stats: `f4aa966c94802944ceba3bfbeeddc54e135b1d13518867945e7e7419f54d8caa`;
+  - career stats: `c2cfb23f4247baf3baefd40f2dd9cfe34a5ca7c532da9f77238a0bc4a2dc3773`;
+  - team context: `45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb`.
+- Git whitespace validation passed. Tracked/history high-confidence secret
+  scans and tracked/history private-path scans each returned zero matches.
 
 No UI, startup, refresh, packaging, or application behavior changed, so Phase
 7C requires no scaling or Tk smoke unless final regressions reveal an

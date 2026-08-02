@@ -2,12 +2,11 @@
 
 Version: 1.2
 
-Roadmap updated: 2026-07-29
+Roadmap updated: 2026-08-01
 
-Prepared from: accepted Phase 6 GitHub `main` at
-`08fd7f09f24a53f3270516c51e6667e9daa35538`, then updated through the
-reviewed Phase 7A implementation commits on
-`agent/phase7a-producer-enrichment`.
+Prepared from: accepted Phase 7B GitHub `main` at
+`ebd032fb2512db379f5ab725a7ae506f5bec1ec6`, then updated through the Phase
+7C technical pilot on `agent/phase7c-college-pilot`.
 
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 

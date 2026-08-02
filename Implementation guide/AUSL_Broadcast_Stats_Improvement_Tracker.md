@@ -1,10 +1,10 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
 
-Project source reviewed: accepted Phase 6 GitHub `main` at
-`08fd7f09f24a53f3270516c51e6667e9daa35538`, then the reviewed Phase 7A
-commits on `agent/phase7a-producer-enrichment`.
+Project source reviewed through accepted Phase 7B GitHub `main` at
+`ebd032fb2512db379f5ab725a7ae506f5bec1ec6`, then the Phase 7C technical
+pilot on `agent/phase7c-college-pilot`.
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
