@@ -28,13 +28,14 @@ def test_phase7b_acceptance_and_status_are_bounded():
     acceptance = (DOCS / "Phase_7B_Acceptance_Record.md").read_text(encoding="utf-8")
     tracker = (DOCS / "AUSL_Broadcast_Stats_Improvement_Tracker.md").read_text(encoding="utf-8")
     guide = (DOCS / "AUSL_Broadcast_Stats_Implementation_Guide.md").read_text(encoding="utf-8")
-    for item in ("COLLEGE-001", "COLLEGE-004", "COLLEGE-005"):
+    for item in ("COLLEGE-001", "COLLEGE-003", "COLLEGE-004", "COLLEGE-005"):
         assert f"- [x] `{item}`" in tracker
-    for item in ("COLLEGE-003", "COLLEGE-006"):
+    for item in ("COLLEGE-006",):
         assert f"- [ ] `{item}`" in tracker
     statement = "PHASE 7B COMPLETE — PHASE 7C TEN-PLAYER PILOT NOT STARTED"
     assert statement in acceptance
     assert statement in tracker
+    assert "PHASE 7C TECHNICAL PILOT COMPLETE — PRODUCER REVIEW PENDING" in tracker
     assert "Phase 7C" in guide and "ten-player pilot" in guide
     assert "production college data" in acceptance
     assert "College Résumé UI" in acceptance
