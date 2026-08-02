@@ -26,7 +26,7 @@ Status: **PHASE 7C TECHNICAL PILOT COMPLETE — PRODUCER REVIEW PENDING — PHAS
 
 ## Pilot and source coverage
 
-- Ten exact IDs: `169`, `278`, `929`, `933`, `950`, `1102`, `1285`, `1322`,
+- Ten exact IDs: `169`, `278`, `933`, `950`, `1075`, `1102`, `1285`, `1322`,
   `1324`, and `1327`.
 - Official identity source coverage: 10 of 10.
 - Official school-source records: 11; local canonical AUSL roster source: 1.

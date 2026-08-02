@@ -59,14 +59,14 @@
         "award_or_record",
         "wcws_or_championship"
       ],
-      "display_name": "Jocelyn Alo",
+      "display_name": "Tiare Jennings",
       "expected_college_role": "hitter",
       "expected_evidence_issue": null,
       "initial_identity_source_id": "ausl-roster-2026",
-      "player_id": "929",
-      "reason": "Oklahoma career record holder with authoritative totals.",
-      "roster_status": "Inactive - Excused",
-      "team_code": "CHI"
+      "player_id": "1075",
+      "reason": "Oklahoma career record holder and four-time champion with an official AUSL-season profile.",
+      "roster_status": "Active",
+      "team_code": "TEX"
     },
     {
       "coverage_categories": [

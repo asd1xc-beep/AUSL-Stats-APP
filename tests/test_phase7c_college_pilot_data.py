@@ -27,7 +27,7 @@ from tools.build_phase7c_pilot_inputs import build
 ROOT = Path(__file__).resolve().parents[1]
 PILOT = ROOT / "data" / "college_pilot"
 EXPECTED_IDS = {
-    "169", "278", "929", "933", "950", "1102", "1285", "1322", "1324", "1327"
+    "169", "278", "933", "950", "1075", "1102", "1285", "1322", "1324", "1327"
 }
 OFFICIAL_HOSTS = {
     "byucougars.com",

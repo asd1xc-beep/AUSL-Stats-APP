@@ -15,7 +15,7 @@ envelope without beginning the Phase 7D College Résumé UI.
 | `950` | Valerie Cagle | CAR · Active | Two-way | veteran; single school; two-way; award/record | Clemson provides authoritative career batting and pitching tables. |
 | `278` | Rachel Garcia | TEX · Active | Two-way | veteran; single school; two-way; award/record; championship | UCLA supplies separate 2021 batting and pitching evidence plus championship context. |
 | `1327` | NiJaree Canady | TEX · Active | Two-way | early career; transfer; pitcher/two-way; award; WCWS | Stanford-to-Texas Tech history exercises a recent transfer and separate-role evidence. |
-| `929` | Jocelyn Alo | CHI · Inactive — Excused | Hitter | veteran; single school; hitter; record; championship | Oklahoma publishes compact authoritative career totals and the NCAA home-run record. |
+| `1075` | Tiare Jennings | TEX · Active | Hitter | veteran; single school; hitter; record; championship | Oklahoma publishes an official AUSL-season profile with her career totals and four championships. |
 | `1324` | Karlyn Pickens | CAR · Active | Pitcher | early career; single school; pitcher; award; WCWS | Tennessee provides a recent official pitching season and national award context. |
 | `169` | Odicci Alexander-Bennett | CHI · Active | Two-way | veteran; single school; two-way; WCWS | James Madison supplies separate 2021 batting/pitching evidence and WCWS context. |
 | `1285` | Kelly Maxwell | PDX · Active | Pitcher | transfer; pitcher; award; championship | Oklahoma State-to-Oklahoma history exercises multi-school and championship coverage. |

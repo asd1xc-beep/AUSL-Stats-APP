@@ -642,35 +642,35 @@
     {
       "achievements": [
         {
-          "achievement_id": "929-achievement-1",
-          "achievement_type": "record",
-          "normalized_label": "NCAA career home run record: 122",
-          "player_id": "929",
+          "achievement_id": "1075-achievement-1",
+          "achievement_type": "championship",
+          "normalized_label": "Four-time NCAA champion with Oklahoma, 2021-2024",
+          "player_id": "1075",
           "program_id": "oklahoma",
           "provenance_ids": [
-            "ou-alo-bio"
+            "ou-jennings-ausl"
           ],
-          "scope": "individual",
-          "season_or_date": "2022",
-          "source_wording": "NCAA career home run record: 122"
+          "scope": "team",
+          "season_or_date": "2024",
+          "source_wording": "Four-time NCAA champion with Oklahoma, 2021-2024"
         }
       ],
-      "canonical_display_name": "Jocelyn Alo",
+      "canonical_display_name": "Tiare Jennings",
       "display_name_source_id": "ausl-roster-2026",
       "identity_mappings": [
         {
           "aliases": [],
-          "ausl_player_id": "929",
+          "ausl_player_id": "1075",
           "evidence_reference": "Exact canonical AUSL roster ID; human review pending.",
-          "mapping_id": "identity-929",
+          "mapping_id": "identity-1075",
           "review_state": "needs_review",
           "reviewed_at": null,
           "reviewer": null,
-          "source_athlete_id": "ausl-roster-929",
+          "source_athlete_id": "ausl-roster-1075",
           "source_id": "ausl-roster-2026"
         }
       ],
-      "player_id": "929",
+      "player_id": "1075",
       "programs": [
         {
           "display_name": "Oklahoma",
@@ -678,11 +678,11 @@
           "program_id": "oklahoma",
           "source_identifiers": [],
           "source_ids": [
-            "ou-alo-bio"
+            "ou-jennings-ausl"
           ]
         }
       ],
-      "resume_id": "pilot-resume-929",
+      "resume_id": "pilot-resume-1075",
       "section_statuses": [
         [
           "identity",
@@ -705,79 +705,79 @@
         {
           "candidates": [
             {
-              "candidate_id": "929-source_career_batting-career-batting_average",
+              "candidate_id": "1075-source_career_batting-career-batting_average",
               "field_path": "stats.batting_average",
               "metric_definition": "batting_average",
-              "player_id": "929",
+              "player_id": "1075",
               "program_id": "oklahoma",
-              "raw_source_value": "0.445",
+              "raw_source_value": "0.412",
               "record_type": "source_career_batting",
               "season": null,
-              "source_id": "ou-alo-bio",
+              "source_id": "ou-jennings-ausl",
               "unit": "rate",
-              "value": "0.445",
+              "value": "0.412",
               "value_state": "present"
             },
             {
-              "candidate_id": "929-source_career_batting-career-hits",
+              "candidate_id": "1075-source_career_batting-career-hits",
               "field_path": "stats.hits",
               "metric_definition": "hits",
-              "player_id": "929",
+              "player_id": "1075",
               "program_id": "oklahoma",
-              "raw_source_value": 343,
+              "raw_source_value": 314,
               "record_type": "source_career_batting",
               "season": null,
-              "source_id": "ou-alo-bio",
+              "source_id": "ou-jennings-ausl",
               "unit": "count",
-              "value": 343,
+              "value": 314,
               "value_state": "present"
             },
             {
-              "candidate_id": "929-source_career_batting-career-home_runs",
+              "candidate_id": "1075-source_career_batting-career-home_runs",
               "field_path": "stats.home_runs",
               "metric_definition": "home_runs",
-              "player_id": "929",
+              "player_id": "1075",
               "program_id": "oklahoma",
-              "raw_source_value": 122,
+              "raw_source_value": 98,
               "record_type": "source_career_batting",
               "season": null,
-              "source_id": "ou-alo-bio",
+              "source_id": "ou-jennings-ausl",
               "unit": "count",
-              "value": 122,
+              "value": 98,
               "value_state": "present"
             },
             {
-              "candidate_id": "929-source_career_batting-career-rbi",
+              "candidate_id": "1075-source_career_batting-career-rbi",
               "field_path": "stats.rbi",
               "metric_definition": "rbi",
-              "player_id": "929",
+              "player_id": "1075",
               "program_id": "oklahoma",
-              "raw_source_value": 323,
+              "raw_source_value": 314,
               "record_type": "source_career_batting",
               "season": null,
-              "source_id": "ou-alo-bio",
+              "source_id": "ou-jennings-ausl",
               "unit": "count",
-              "value": 323,
+              "value": 314,
               "value_state": "present"
             },
             {
-              "candidate_id": "929-source_career_batting-career-runs",
+              "candidate_id": "1075-source_career_batting-career-runs",
               "field_path": "stats.runs",
               "metric_definition": "runs",
-              "player_id": "929",
+              "player_id": "1075",
               "program_id": "oklahoma",
-              "raw_source_value": 281,
+              "raw_source_value": 277,
               "record_type": "source_career_batting",
               "season": null,
-              "source_id": "ou-alo-bio",
+              "source_id": "ou-jennings-ausl",
               "unit": "count",
-              "value": 281,
+              "value": 277,
               "value_state": "present"
             }
           ],
-          "player_id": "929",
+          "player_id": "1075",
           "program_id": "oklahoma",
-          "record_id": "929-1-source_career_batting",
+          "record_id": "1075-1-source_career_batting",
           "record_type": "source_career_batting",
           "role": "hitter",
           "season": null
@@ -785,23 +785,14 @@
       ],
       "stints": [
         {
-          "end_season": 2022,
+          "end_season": 2024,
           "program_id": "oklahoma",
           "provenance_ids": [
-            "ou-alo-bio"
+            "ou-jennings-ausl"
           ],
-          "season_kinds": [
-            [
-              2020,
-              "shortened"
-            ],
-            [
-              2022,
-              "extra_eligibility"
-            ]
-          ],
-          "start_season": 2018,
-          "stint_id": "929-stint-1",
+          "season_kinds": [],
+          "start_season": 2021,
+          "stint_id": "1075-stint-1",
           "transfer_order": 1,
           "uncertainty_note": null
         }
@@ -2082,17 +2073,17 @@
     {
       "approved_at": null,
       "content_hash": null,
-      "effective_date": "2022",
+      "effective_date": "2026",
       "local_document_id": null,
-      "locator": "career record book and TOTAL statistics row",
+      "locator": "Tiare Jennings (Texas Volts) section",
       "organization": "University of Oklahoma Athletics",
       "retrieved_at": "2026-08-02T01:39:16+00:00",
       "review_note": "Official-source evidence normalized for developer review; producer review not performed.",
       "reviewer": null,
-      "source_id": "ou-alo-bio",
+      "source_id": "ou-jennings-ausl",
       "source_type": "official_school_athletics",
-      "title": "Jocelyn Alo 2022 roster biography",
-      "url": "https://soonersports.com/sports/softball/roster/jocelyn-alo/14888",
+      "title": "Sooner Alumnae Start 2026 AUSL Season",
+      "url": "https://soonersports.com/news/2026/6/9/softball-sooner-alumnae-start-2026-ausl-season",
       "verification_state": "verified",
       "version": "phase7c-normalized-manual-v1"
     },

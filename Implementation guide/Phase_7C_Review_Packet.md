@@ -50,28 +50,6 @@ Status: **PRODUCER REVIEW PENDING**
 - `byu-agbayani-bio` — BYU Athletics, *Ailana Agbayani 2024 roster biography*, 2023 and 2024 two-way season sections; https://byucougars.com/sports/softball/roster/player/ailana-agbayani.
 - `ou-agbayani-bio` — University of Oklahoma Athletics, *Ailana Agbayani 2026 roster biography*, career statline and BYU/Oklahoma season sections; https://soonersports.com/sports/softball/roster/ailana-agbayani/19763.
 
-## Jocelyn Alo — AUSL ID 929
-
-- AUSL context: CHI; Inactive - Excused
-- Expected college role: hitter
-- Completeness: **Needs Review**
-- Missing expected fields: None
-- Blocking issues: identity_review_pending, section_needs_review
-- School/transfer timeline: Oklahoma (2018–2022)
-
-### Candidate facts for later review
-
-- `929-source_career_batting-career-batting_average`: batting_average = 0.445 (source_career_batting, hitter); source `ou-alo-bio`.
-- `929-source_career_batting-career-hits`: hits = 343 (source_career_batting, hitter); source `ou-alo-bio`.
-- `929-source_career_batting-career-home_runs`: home_runs = 122 (source_career_batting, hitter); source `ou-alo-bio`.
-- `929-source_career_batting-career-rbi`: rbi = 323 (source_career_batting, hitter); source `ou-alo-bio`.
-- `929-source_career_batting-career-runs`: runs = 281 (source_career_batting, hitter); source `ou-alo-bio`.
-
-### Source references
-
-- `ausl-roster-2026` — Athletes Unlimited Softball League, *Canonical AUSL 2026 roster export*, roster_2026 row matched by exact player_id; data/exports/ausl_rosters.xlsx#roster_2026.
-- `ou-alo-bio` — University of Oklahoma Athletics, *Jocelyn Alo 2022 roster biography*, career record book and TOTAL statistics row; https://soonersports.com/sports/softball/roster/jocelyn-alo/14888.
-
 ## Karlyn Pickens — AUSL ID 1324
 
 - AUSL context: CAR; Active
@@ -228,6 +206,28 @@ Status: **PRODUCER REVIEW PENDING**
 
 - `ausl-roster-2026` — Athletes Unlimited Softball League, *Canonical AUSL 2026 roster export*, roster_2026 row matched by exact player_id; data/exports/ausl_rosters.xlsx#roster_2026.
 - `ucla-garcia-bio` — UCLA Athletics, *Rachel Garcia 2021 roster biography*, 2021 biography and statistics; https://uclabruins.com/sports/softball/roster/player/rachel-garcia.
+
+## Tiare Jennings — AUSL ID 1075
+
+- AUSL context: TEX; Active
+- Expected college role: hitter
+- Completeness: **Needs Review**
+- Missing expected fields: None
+- Blocking issues: identity_review_pending, section_needs_review
+- School/transfer timeline: Oklahoma (2021–2024)
+
+### Candidate facts for later review
+
+- `1075-source_career_batting-career-batting_average`: batting_average = 0.412 (source_career_batting, hitter); source `ou-jennings-ausl`.
+- `1075-source_career_batting-career-hits`: hits = 314 (source_career_batting, hitter); source `ou-jennings-ausl`.
+- `1075-source_career_batting-career-home_runs`: home_runs = 98 (source_career_batting, hitter); source `ou-jennings-ausl`.
+- `1075-source_career_batting-career-rbi`: rbi = 314 (source_career_batting, hitter); source `ou-jennings-ausl`.
+- `1075-source_career_batting-career-runs`: runs = 277 (source_career_batting, hitter); source `ou-jennings-ausl`.
+
+### Source references
+
+- `ausl-roster-2026` — Athletes Unlimited Softball League, *Canonical AUSL 2026 roster export*, roster_2026 row matched by exact player_id; data/exports/ausl_rosters.xlsx#roster_2026.
+- `ou-jennings-ausl` — University of Oklahoma Athletics, *Sooner Alumnae Start 2026 AUSL Season*, Tiare Jennings (Texas Volts) section; https://soonersports.com/news/2026/6/9/softball-sooner-alumnae-start-2026-ausl-season.
 
 ## Valerie Cagle — AUSL ID 950
 
