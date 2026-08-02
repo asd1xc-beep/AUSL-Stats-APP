@@ -452,8 +452,16 @@ def _resume_source_refs(resume: CollegeResume) -> set[str]:
 def assess_completeness(resume: CollegeResume, envelope: CollegeEnvelope) -> CompletenessAssessment:
     source_ids = {item.source_id for item in envelope.sources if item.verification_state == "verified"}
     blocking: list[str] = []
-    if not resume.identity_mappings or not any(item.review_state is IdentityReviewState.VERIFIED for item in resume.identity_mappings):
+    if not resume.identity_mappings or any(
+        item.review_state is IdentityReviewState.AMBIGUOUS
+        for item in resume.identity_mappings
+    ):
         blocking.append("ambiguous_identity")
+    elif not any(
+        item.review_state is IdentityReviewState.VERIFIED
+        for item in resume.identity_mappings
+    ):
+        blocking.append("identity_review_pending")
     if resume.display_name_source_id not in source_ids:
         blocking.append("display_name_missing_provenance")
     if _resume_source_refs(resume) - source_ids:
@@ -583,6 +591,8 @@ def validate_envelope(envelope: CollegeEnvelope) -> ValidationReport:
     source_set = set(source_ids)
     missing: set[str] = set()
     unresolved: list[str] = []
+    ambiguous_identities: list[str] = []
+    pending_identity_review: list[str] = []
     conflicts: list[str] = []
     unsupported: set[str] = set()
     counts: Counter[str] = Counter()
@@ -600,8 +610,16 @@ def validate_envelope(envelope: CollegeEnvelope) -> ValidationReport:
         conflicting_athletes = any(len(values) > 1 for values in athlete_ids.values())
         if conflicting_athletes:
             unresolved.append(resume.resume_id)
+            ambiguous_identities.append(resume.resume_id)
+        elif any(
+            item.review_state is IdentityReviewState.AMBIGUOUS
+            for item in resume.identity_mappings
+        ):
+            unresolved.append(resume.resume_id)
+            ambiguous_identities.append(resume.resume_id)
         elif not any(item.review_state is IdentityReviewState.VERIFIED for item in resume.identity_mappings):
             unresolved.append(resume.resume_id)
+            pending_identity_review.append(resume.resume_id)
         counts.update(item.record_type.value for item in resume.stat_records)
         supported_metrics = {
             "games", "at_bats", "plate_appearances", "runs", "hits",
@@ -641,8 +659,12 @@ def validate_envelope(envelope: CollegeEnvelope) -> ValidationReport:
                 )
         if any(len(values) > 1 for values in by_source.values()):
             conflicting_identity_ids.append(resume.resume_id)
-    errors = [*(f"duplicate stable ID: {item}" for item in duplicates), *(f"missing provenance: {item}" for item in sorted(missing)), *(f"unresolved identity: {item}" for item in unresolved), *(f"conflicting source athlete IDs: {item}" for item in conflicting_identity_ids), *(f"unresolved conflict: {item}" for item in conflicts), *(f"unsupported metric definition: {item}" for item in sorted(unsupported))]
-    return ValidationReport(tuple(errors), (), len(envelope.resumes), len(envelope.sources), tuple(sorted(counts.items())), duplicates, tuple(sorted(set(unresolved))), tuple(sorted(missing)), tuple(sorted(conflicts)), (), (), tuple(sorted(unsupported)), tuple(sorted(complete.items())), tuple(sorted(safe)))
+    errors = [*(f"duplicate stable ID: {item}" for item in duplicates), *(f"missing provenance: {item}" for item in sorted(missing)), *(f"unresolved identity: {item}" for item in ambiguous_identities), *(f"conflicting source athlete IDs: {item}" for item in conflicting_identity_ids), *(f"unresolved conflict: {item}" for item in conflicts), *(f"unsupported metric definition: {item}" for item in sorted(unsupported))]
+    warnings = tuple(
+        f"human review pending for exact identity: {item}"
+        for item in sorted(pending_identity_review)
+    )
+    return ValidationReport(tuple(errors), warnings, len(envelope.resumes), len(envelope.sources), tuple(sorted(counts.items())), duplicates, tuple(sorted(set(unresolved))), tuple(sorted(missing)), tuple(sorted(conflicts)), (), (), tuple(sorted(unsupported)), tuple(sorted(complete.items())), tuple(sorted(safe)))
 
 
 def _wire(value: Any) -> Any:
