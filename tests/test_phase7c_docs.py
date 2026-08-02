@@ -17,9 +17,9 @@ def test_phase7c_required_documents_exist_and_preserve_phase_boundary():
     assert "PRODUCER REVIEW PENDING" in review
     assert STATUS in acceptance
     assert "Schema version: `1`" in acceptance
-    assert "931 passed in 19.47 s" in acceptance
+    assert "932 passed in 19.26 s" in acceptance
     assert "d8c111e7762bf96e81ccd6844230123e31cfbab780f92d40d5aa695ccfdb3442" in acceptance
-    assert "76e45bd68192b0cec53e7e22e7dd17a955d4531022113bebb0043cfd8aa6497d" in acceptance
+    assert "c4c315ceebc976d791060bcf8ce1b8760176fd768cb1be410b694bd25f056891" in acceptance
 
 
 def test_tracker_marks_only_the_technical_core_complete_and_review_pending():
