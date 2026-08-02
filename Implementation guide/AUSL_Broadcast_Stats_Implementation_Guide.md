@@ -84,7 +84,8 @@ branch. The focused stabilization pass merged in PR #11, and the project owner
 reported that 100%/125%/150% Windows display scaling, truck-hardware smoke,
 and producer rehearsal passed. The full Phase 6 acceptance record is closed.
 Phase 7A and the Phase 7B college-data foundation are complete. Phase 7C's
-ten-player pilot has not started.
+ten-player technical pilot is complete in developer-review state; producer
+review is pending and Phase 7D remains not started.
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -902,7 +903,8 @@ developer-only, ambiguous, stale, or unapproved material.
 Implementation status (2026-07-29): complete on
 `agent/phase7a-producer-enrichment`. The detailed evidence is in
 `Phase_7A_Acceptance_Record.md`. Phase 7B is accepted in
-`Phase_7B_Acceptance_Record.md`; Phase 7C's ten-player pilot has not started.
+`Phase_7B_Acceptance_Record.md`; Phase 7C's developer-review technical pilot
+is complete, producer review is pending, and Phase 7D remains not started.
 
 `src/ausl_enrichment.py` defines the typed CORE_ONLY, PRODUCER_APPROVED, and
 DEVELOPER_REVIEW modes and the defensive row gates. Ordinary startup and
@@ -1031,9 +1033,11 @@ season, honors/records, and WCWS/championship context. Do not make complete
 season-by-season statistics a pilot requirement.
 
 For each player, retain a review record that shows source coverage, unresolved
-fields, completeness state, and the exact facts eligible for air-ready copy.
-Have the producer review the ten-player set before the UI or importer is
-generalized.
+fields, completeness state, and exact candidate facts for later review. Do not
+describe unapproved candidates as air-ready. The implemented cohort, review
+packet, and technical evidence are in `Phase_7C_Pilot_Cohort.md`,
+`Phase_7C_Review_Packet.md`, and `Phase_7C_Acceptance_Record.md`. Have the
+producer review the ten-player set before the UI or importer is generalized.
 
 Acceptance criteria:
 
@@ -1381,15 +1385,17 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-Phase 7B is complete. Phase 7C's ten-player pilot has not started.
+Phase 7C's developer-review technical pilot is complete. Producer review is
+pending, and Phase 7D remains not started.
 
-1. Review the accepted Phase 7B schema and importer contract.
-2. Begin Phase 7C with exactly ten varied players and explicit source evidence.
+1. Review the ten-player cohort and deterministic review packet.
+2. Record explicit producer feedback without fabricating approval metadata.
 3. Keep all pilot output in developer review; do not add producer UI or
    distribution members.
-4. Validate identity, candidate provenance, conflict state, declared season
-   scope, and completeness before producer review.
-5. Stop after the ten-player pilot. Phase 7D UI work remains separate.
+4. Resolve or explicitly retain identity, provenance, conflict, season-scope,
+   and completeness findings from that review.
+5. Start Phase 7D only after the project owner supplies the producer-review
+   result; the current technical pass stops at the ten-player pilot.
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College
