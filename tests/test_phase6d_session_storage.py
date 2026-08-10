@@ -145,6 +145,29 @@ def test_invalid_current_and_backup_start_empty_without_modal_loop(tmp_path):
     assert len(tuple(tmp_path.glob("producer_session.corrupt-*.json"))) >= 2
 
 
+def test_corrupt_current_and_backup_are_both_quarantined_when_clock_collides(
+    tmp_path, monkeypatch
+):
+    class FrozenDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz) if tz is not None else NOW
+
+    monkeypatch.setattr(ausl_session, "datetime", FrozenDateTime)
+    store = SessionStore(tmp_path)
+    current = b"bad current with unique evidence"
+    backup = b"bad backup with different evidence"
+    store.current_path.write_bytes(current)
+    store.backup_path.write_bytes(backup)
+
+    loaded = store.load()
+    quarantined = tuple(tmp_path.glob("producer_session.corrupt-*.json"))
+
+    assert loaded.status is SessionLoadStatus.UNAVAILABLE
+    assert len(quarantined) == 2
+    assert {path.read_bytes() for path in quarantined} == {current, backup}
+
+
 def test_generation_order_prevents_older_save_from_overwriting_newer(tmp_path):
     store = SessionStore(tmp_path)
     first = populated_snapshot()
