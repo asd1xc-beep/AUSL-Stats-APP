@@ -1,10 +1,10 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-08-01
+Last updated: 2026-08-11
 
-Project source reviewed through accepted Phase 7B GitHub `main` at
-`ebd032fb2512db379f5ab725a7ae506f5bec1ec6`, then the Phase 7C technical
-pilot on `agent/phase7c-college-pilot`.
+Project source reviewed through merged Phase 7C GitHub `main` at
+`5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`, then the Phase 7D
+implementation on `agent/phase7d-college-resume-ui`.
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -36,7 +36,7 @@ Priority legend:
 
 ## Current milestone
 
-### Milestone 7A — Producer-facing approved enrichment
+### Milestone 7D — Producer-facing College Résumé
 
 Phase 6F completed on 2026-07-29. The stabilization changes merged in PR #11
 at `08fd7f09f24a53f3270516c51e6667e9daa35538`. Windows scaling at 100%,
@@ -44,18 +44,19 @@ at `08fd7f09f24a53f3270516c51e6667e9daa35538`. Windows scaling at 100%,
 **project-owner reported** complete; no unsupplied hardware or behavior detail
 is inferred. The full Phase 6 acceptance is closed.
 
-Phase 7A completed centralized split reliability, typed enrichment load
-modes, producer-facing Full Enrichment Refresh, strict media/note approval
-gates, last-known-good source handling, and the explicit approved-enrichment
-distribution profile. Phase 7B now completes the normalized, provenance-first
-college data foundation. Phase 7C now has a technically complete ten-player
-developer-review pilot; producer review remains pending and Phase 7D has not
-started.
+Phase 7A completed producer-facing approved enrichment and Phase 7B completed
+the normalized, provenance-first college data foundation. Phase 7C built the
+ten-player developer-review pilot. The project owner reported on 2026-08-11
+that all ten exact players and displayed pilot facts were reviewed, looked
+correct, and Phase 7D was authorized. This is project-owner acceptance; it is
+not represented as a personal AUSL producer review. Phase 7D now adds the
+separate approved College Résumé workflow. Windows display-scaling sign-off is
+still pending, and Phase 7E has not started.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 7C TECHNICAL PILOT COMPLETE — PRODUCER REVIEW PENDING — PHASE 7D NOT STARTED**
+Status: **PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
 
 ## Approved next roadmap
 
@@ -69,10 +70,10 @@ be reused by the college layer.
 | 1 | Phase 6 stabilization | Close the four independent-review findings without starting Phase 7 | Complete |
 | 2 | Phase 6 acceptance | Owner scaling sign-off and final full-phase acceptance record | Complete |
 | 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Complete |
-| 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Phase 7A trust boundaries stable |
-| 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Technical pilot complete; producer review pending |
-| 6 | Phase 7D | Add the separate College Résumé tab | Pilot data and producer review accepted |
-| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | College tab pilot accepted |
+| 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Complete |
+| 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
+| 6 | Phase 7D | Add the separate College Résumé tab | Implementation complete; scaling sign-off pending |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Phase 7D scaling acceptance |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -474,7 +475,7 @@ The college layer must remain visually and statistically separate from AUSL prof
 - [x] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · COMPLETE — PHASE 7B**
   - Support multiple schools, seasons, transfers, shortened seasons, extra eligibility, and two-way players.
 
-- [ ] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · PLANNED — PHASE 7D**
+- [x] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · IMPLEMENTATION COMPLETE — PHASE 7D; WINDOWS SCALING SIGN-OFF PENDING**
   - Sections: Snapshot, Schools/Transfer Timeline, College Career Totals,
     Season-by-Season Summary, Honors/Records, WCWS/Championships, Broadcast
     Connections, and Sources/Completeness.
@@ -491,7 +492,7 @@ The college layer must remain visually and statistically separate from AUSL prof
 - [x] `COLLEGE-005` — Add `Verified`, `Partial`, and `Needs review` completeness states. **P1 · COMPLETE — PHASE 7B**
   - Missing information remains unavailable and is never converted to zero.
 
-- [ ] `COLLEGE-006` — Pilot the résumé with ten varied players before full-roster import. **P2 · PRODUCER REVIEW PENDING — PHASE 7C**
+- [x] `COLLEGE-006` — Pilot the résumé with ten varied players before full-roster import. **P2 · COMPLETE — PROJECT-OWNER REVIEWED 2026-08-11**
   - Include rookies, veterans, transfers, hitters, pitchers, two-way players,
     award/WCWS résumés, and at least one deliberately incomplete record.
   - The pilot target is a verified useful résumé, not forced completeness for
@@ -536,7 +537,8 @@ Fill in one record when a milestone or major item is completed.
   `ebd032fb2512db379f5ab725a7ae506f5bec1ec6`;
   `agent/phase7c-college-pilot`.
 - Technically completed tracker scope: `COLLEGE-003` for the ten-player pilot.
-  `COLLEGE-006` remains open until the producer reviews the cohort.
+  `COLLEGE-006` was subsequently accepted through the project owner's
+  2026-08-11 review of all ten exact players and displayed pilot facts.
 - Added an explicit offline developer-review importer, exact ten-ID manifest,
   normalized official-source evidence, deterministic Phase 7B envelope,
   rollback-safe paired promotion, review packet, and distribution boundaries.
@@ -544,7 +546,27 @@ Fill in one record when a milestone or major item is completed.
   or producer distribution member was added.
 - Detailed evidence: `Implementation guide/Phase_7C_Acceptance_Record.md`.
 
-**PHASE 7C TECHNICAL PILOT COMPLETE — PRODUCER REVIEW PENDING — PHASE 7D NOT STARTED**
+**PHASE 7C ACCEPTED BY PROJECT OWNER ON 2026-08-11**
+
+### Phase 7D — Producer-facing College Résumé
+
+- Starting commit and branch: merged Phase 7C `main`
+  `5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`;
+  `agent/phase7d-college-resume-ui`.
+- Project-owner review is recorded through a deterministic approval transaction
+  bound to the immutable pilot SHA-256, exact ten IDs, résumé and candidate
+  IDs, review date/scope, and deliberately incomplete fields.
+- Added the ninth main tab, exact Player Lookup handoff, explicit college
+  career/season labels, field-specific copy gates, source-inclusive copy,
+  local approved-data reload, last-known-good fallback, and mouse/keyboard
+  scrolling at 1120x720.
+- Core distributions remain college-free. Only the explicit
+  `approved-enrichment` profile may include the validated approved envelope
+  and matching manifest. Developer pilot/staging/review artifacts remain
+  excluded.
+- Detailed evidence: `Implementation guide/Phase_7D_Acceptance_Record.md`.
+
+**PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
 
 ### Phase 7B — College data foundation
 

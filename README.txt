@@ -5,11 +5,11 @@ from the NFL_STATS_DATABASE project, so changes here do not modify or replace
 the NFL application.
 
 CURRENT READINESS
-Phases 1-6 and Phase 7A are implemented and accepted. Phase 7A started from
-remote main 08fd7f09f24a53f3270516c51e6667e9daa35538 and adds typed
-CORE_ONLY, PRODUCER_APPROVED, and DEVELOPER_REVIEW boundaries, the
-producer-facing Full Enrichment Refresh, centralized split reliability, and an
-explicit approved-enrichment distribution profile.
+Phases 1-7C are implemented. The project owner accepted the exact ten-player
+Phase 7C college pilot on 2026-08-11 and authorized Phase 7D; this is recorded
+as project-owner acceptance, not as a claim of personal AUSL producer review.
+Phase 7D adds the ninth main tab, College Résumé, using only a hash-validated
+approved local envelope and exact player IDs.
 
 The clean Phase 7A baseline passed 769 offline tests. The accepted Phase 7A
 source passes 847 tests with warnings treated as errors. The deterministic
@@ -32,12 +32,16 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Status: PHASE 7A COMPLETE — PHASE 7B NOT STARTED.
-Phase 7B has not started. This remains an assisted
+Status: PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED.
+The project owner still needs to report display-scaling results at 100%, 125%,
+and 150% before Phase 7D is accepted and Phase 7E begins. This remains an assisted
 broadcast tool, not a candidate for unattended on-air use: cards that do not
 pass exact identity, provenance, freshness, source-health, and approval gates
 stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line copy.
-Cancellation is cooperative while a single urllib request is inside its
+College values are visually and statistically separate from AUSL professional
+totals. Missing or conflicting college fields remain unavailable, the one
+documented Partial résumé remains Partial, and developer-review data cannot use
+producer copy actions. Cancellation is cooperative while a single urllib request is inside its
 bounded timeout, although cancelled/superseded jobs cannot overlap core
 commits or replace a newer coherent snapshot.
 
