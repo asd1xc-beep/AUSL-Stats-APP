@@ -1,12 +1,12 @@
 # AUSL Broadcast Stats — Codex Implementation Guide
 
-Version: 1.2
+Version: 1.3
 
-Roadmap updated: 2026-08-01
+Roadmap updated: 2026-08-11
 
-Prepared from: accepted Phase 7B GitHub `main` at
-`ebd032fb2512db379f5ab725a7ae506f5bec1ec6`, then updated through the Phase
-7C technical pilot on `agent/phase7c-college-pilot`.
+Prepared from: merged Phase 7C GitHub `main` at
+`5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`, then updated through Phase 7D
+on `agent/phase7d-college-resume-ui`.
 
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 
@@ -82,9 +82,10 @@ Roadmap note (2026-07-29): Phases 6A–6F are complete on the reviewed `main`
 branch. The focused stabilization pass merged in PR #11, and the project owner
 reported that 100%/125%/150% Windows display scaling, truck-hardware smoke,
 and producer rehearsal passed. The full Phase 6 acceptance record is closed.
-Phase 7A and the Phase 7B college-data foundation are complete. Phase 7C's
-ten-player technical pilot is complete in developer-review state; producer
-review is pending and Phase 7D remains not started.
+Phases 7A and 7B are complete. The project owner accepted the ten-player Phase
+7C pilot on 2026-08-11 and authorized Phase 7D without claiming personal AUSL
+producer review. Phase 7D implementation is complete; Windows scaling sign-off
+at 100%, 125%, and 150% remains pending. Phase 7E has not started.
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -1384,17 +1385,15 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-Phase 7C's developer-review technical pilot is complete. Producer review is
-pending, and Phase 7D remains not started.
+Phase 7D implementation is complete on the ten-player reviewed cohort.
 
-1. Review the ten-player cohort and deterministic review packet.
-2. Record explicit producer feedback without fabricating approval metadata.
-3. Keep all pilot output in developer review; do not add producer UI or
-   distribution members.
-4. Resolve or explicitly retain identity, provenance, conflict, season-scope,
-   and completeness findings from that review.
-5. Start Phase 7D only after the project owner supplies the producer-review
-   result; the current technical pass stops at the ten-player pilot.
+1. The project owner performs Windows display-scaling checks at 100%, 125%,
+   and 150% and reports the result.
+2. Keep Phase 7E blocked until that sign-off is recorded.
+3. Preserve the current exact-ID, field-provenance, approval-hash, incomplete
+   field, and college-versus-AUSL separation gates.
+4. If scaling passes, begin Phase 7E with a bounded roster-scaling plan; do not
+   silently add new résumé values or generated connections.
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College

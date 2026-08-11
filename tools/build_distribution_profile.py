@@ -22,6 +22,11 @@ if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from ausl_enrichment import approved_enrichment_frames
+from ausl_college_approval import (
+    APPROVAL_MANIFEST_NAME as COLLEGE_APPROVAL_MANIFEST_NAME,
+    APPROVED_ENVELOPE_NAME as COLLEGE_APPROVED_ENVELOPE_NAME,
+    validate_approved_payload,
+)
 from tools.generate_distribution_manifest import (
     CORE_EXPORTS,
     generate_distribution_manifest,
@@ -119,14 +124,16 @@ def _read_optional_frames(source: Path) -> dict[str, pd.DataFrame]:
     return frames
 
 
-def _hash_record(path: Path, *, row_count: int) -> dict[str, object]:
+def _hash_record(
+    path: Path, *, row_count: int, validation: str = "producer_approved_phase_7a"
+) -> dict[str, object]:
     payload = path.read_bytes()
     return {
         "bytes": len(payload),
         "name": path.name,
         "row_count": int(row_count),
         "sha256": hashlib.sha256(payload).hexdigest(),
-        "validation": "producer_approved_phase_7a",
+        "validation": validation,
     }
 
 
@@ -204,12 +211,39 @@ def stage_distribution_profile(
             }
         )
 
+    college_sources = []
+    for name in (COLLEGE_APPROVED_ENVELOPE_NAME, COLLEGE_APPROVAL_MANIFEST_NAME):
+        direct = source / name
+        checked_in = source.parent / "college_approved" / name
+        college_sources.append(direct if direct.is_file() else checked_in)
+    college_player_count = 0
+    if any(path.is_file() for path in college_sources):
+        if not all(path.is_file() for path in college_sources):
+            raise ValueError(
+                "Approved college packaging requires both envelope and approval manifest"
+            )
+        artifact = validate_approved_payload(
+            college_sources[0].read_bytes(), college_sources[1].read_bytes()
+        )
+        college_player_count = len(artifact.envelope.resumes)
+        for source_path in college_sources:
+            destination_path = destination / source_path.name
+            shutil.copyfile(source_path, destination_path)
+            file_records.append(
+                _hash_record(
+                    destination_path,
+                    row_count=college_player_count,
+                    validation="producer_approved_phase_7d_college",
+                )
+            )
+
     snapshot = update_manifest.get("updated_at")
     manifest = {
         "approval_schema_version": APPROVAL_SCHEMA_VERSION,
         "fallback": "none" if file_records else "core_only",
         "files": sorted(file_records, key=lambda item: item["name"]),
         "profile": "approved-enrichment",
+        "college_player_count": college_player_count,
         "provenance_columns": provenance_columns,
         "row_counts": row_counts,
         "schema_version": 1,
