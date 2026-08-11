@@ -20,6 +20,11 @@ if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from ausl_enrichment import approved_enrichment_frames
+from ausl_college_approval import (
+    APPROVAL_MANIFEST_NAME as COLLEGE_APPROVAL_MANIFEST_NAME,
+    APPROVED_ENVELOPE_NAME as COLLEGE_APPROVED_ENVELOPE_NAME,
+    validate_approved_payload,
+)
 
 
 _FORBIDDEN_PATHS = {
@@ -47,6 +52,9 @@ _FORBIDDEN_NAMES = {
     "locked_lineups.json": "producer lineup locks",
     "player_notes.csv": "producer manual notes",
     "thumbs.db": "operating-system cache",
+    "pilot_envelope.json": "developer-review college pilot",
+    "pilot_manifest.json": "developer-review college pilot manifest",
+    "review_staging.json": "developer-review college staging data",
 }
 _UNVERIFIED_ENRICHMENT_NAMES = {
     "ausl_batting_splits.xlsx",
@@ -96,7 +104,11 @@ _APPROVED_ENRICHMENT_WORKBOOKS = {
 _APPROVED_DISTRIBUTION_EXPORT_NAMES = (
     _ALLOWED_DISTRIBUTION_EXPORT_NAMES
     | set(_APPROVED_ENRICHMENT_WORKBOOKS)
-    | {_APPROVED_ENRICHMENT_MANIFEST}
+    | {
+        _APPROVED_ENRICHMENT_MANIFEST,
+        COLLEGE_APPROVED_ENVELOPE_NAME,
+        COLLEGE_APPROVAL_MANIFEST_NAME,
+    }
 )
 _SECRET_DATA_SUFFIXES = {".cfg", ".db", ".ini", ".json", ".pickle", ".sqlite", ".txt", ".yaml", ".yml"}
 _SECRET_STEM = re.compile(
@@ -558,8 +570,116 @@ def _approved_manifest_violations(
                 )
             packaged_frames[key] = frame
 
+        college_names = (
+            COLLEGE_APPROVED_ENVELOPE_NAME,
+            COLLEGE_APPROVAL_MANIFEST_NAME,
+        )
+        college_sources = {
+            name: entries_by_key.get(f"{prefix}{name}".casefold())
+            for name in college_names
+        }
+        college_available = all(college_sources.values())
+        if any(college_sources.values()) and not college_available:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved college envelope and approval manifest must be packaged together",
+                )
+            )
+        college_artifact = None
+        if college_available:
+            college_payloads: dict[str, bytes] = {}
+            try:
+                college_payloads = {
+                    name: read_entry(source_entry)
+                    for name, source_entry in college_sources.items()
+                    if source_entry is not None
+                }
+                college_artifact = validate_approved_payload(
+                    college_payloads[COLLEGE_APPROVED_ENVELOPE_NAME],
+                    college_payloads[COLLEGE_APPROVAL_MANIFEST_NAME],
+                )
+            except (OSError, ValueError) as exc:
+                violations.append(
+                    Violation(
+                        target,
+                        f"{prefix}{COLLEGE_APPROVED_ENVELOPE_NAME}",
+                        f"college approval/hash validation failed: {exc}",
+                    )
+                )
+            for name in college_names:
+                record = records.get(name)
+                payload = college_payloads.get(name, b"")
+                source_entry = college_sources[name]
+                if record is None:
+                    violations.append(
+                        Violation(
+                            target,
+                            str(source_entry),
+                            "approved college file is absent from approval manifest",
+                        )
+                    )
+                    continue
+                if record.get("sha256") != hashlib.sha256(payload).hexdigest():
+                    violations.append(
+                        Violation(
+                            target,
+                            str(source_entry),
+                            "college approved-enrichment manifest hash mismatch",
+                        )
+                    )
+                if record.get("bytes") != len(payload):
+                    violations.append(
+                        Violation(
+                            target,
+                            str(source_entry),
+                            "college approved-enrichment manifest byte count mismatch",
+                        )
+                    )
+                expected_count = (
+                    len(college_artifact.envelope.resumes)
+                    if college_artifact is not None
+                    else manifest.get("college_player_count")
+                )
+                if (
+                    record.get("row_count") != expected_count
+                    or record.get("validation")
+                    != "producer_approved_phase_7d_college"
+                ):
+                    violations.append(
+                        Violation(
+                            target,
+                            str(source_entry),
+                            "approved college manifest validation is invalid",
+                        )
+                    )
+        else:
+            for name in college_names:
+                if name in records:
+                    violations.append(
+                        Violation(
+                            target,
+                            manifest_entry,
+                            f"approved manifest lists missing college file: {name}",
+                        )
+                    )
+        actual_college_count = (
+            len(college_artifact.envelope.resumes)
+            if college_artifact is not None
+            else 0
+        )
+        if manifest.get("college_player_count") != actual_college_count:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment college player count is invalid",
+                )
+            )
+
         unexpected_records = set(records).difference(
-            _APPROVED_ENRICHMENT_WORKBOOKS
+            set(_APPROVED_ENRICHMENT_WORKBOOKS) | set(college_names)
         )
         for filename in sorted(unexpected_records):
             violations.append(
@@ -614,7 +734,9 @@ def _approved_manifest_violations(
                     "approved-enrichment row counts do not match packaged workbooks",
                 )
             )
-        expected_fallback = "core_only" if not packaged_frames else "none"
+        expected_fallback = (
+            "core_only" if not packaged_frames and not college_available else "none"
+        )
         if manifest.get("fallback") != expected_fallback:
             violations.append(
                 Violation(
