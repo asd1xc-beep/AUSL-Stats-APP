@@ -47,4 +47,3 @@ def test_readme_and_guide_keep_scaling_and_phase7e_open():
         assert "project owner" in text.casefold()
         assert "Phase 7E" in text
         assert "100%" in text and "125%" in text and "150%" in text
-

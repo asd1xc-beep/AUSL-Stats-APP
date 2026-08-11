@@ -102,16 +102,29 @@ one.
 
 ## Verification
 
-- Phase 7D focused contract: **35 passed** before documentation assertions.
+- Phase 7D focused contract: **38 passed in 3.85 s**.
+- Phase 7B/7C college regressions: **79 passed in 4.70 s**.
+- Phase 7A enrichment/distribution regressions: **79 passed in 4.90 s**.
+- Session/search/copy/refresh/privacy regressions: **276 passed in 18.97 s**.
+- Complete clean offline suite with warnings as errors: **971 passed in
+  40.57 s**.
 - Offline real-Tk smoke: passed on Windows at 1120×720 with Python 3.12.10 and
   Tk 8.6.15. It covered all nine tabs, Player Lookup handoff, hitter, pitcher,
   two-way, transfer, Partial, nonpilot unavailable, approved/source copy,
   blocked-copy clipboard preservation, mouse/keyboard scroll, local Quick
   Refresh, Local/Offline Mode, rapid selection, and session restore. All
   external network routes were blocked.
-- Final focused/full, compile, dependency, distribution, deterministic ZIP,
-  privacy, LFS/XLSX, whitespace, secret scan, and workbook-hash results are
-  recorded in the completion report after the clean-checkout verification.
+- `compileall` passed and `pip check` reported no broken requirements.
+- Core distribution verification passed. Two independently staged and
+  verified approved-enrichment distributions produced byte-identical ZIPs,
+  SHA-256
+  `57cf838cb618317a4902462aaf1effa6c216fa7143499d04cbd4042168494c72`.
+- Git LFS lists four real XLSX payloads. Their hashes are unchanged from the
+  starting commit: roster `fa7e390b...7840`, season `f4aa966c...8caa`, career
+  `c2cfb23f...3773`, and team context `45e60f70...9eb` (full values retained
+  in the completion report).
+- Git whitespace validation and tracked/history high-confidence secret and
+  private-path scans passed with zero matches.
 
 ## Remaining limitations and Phase 7E boundary
 

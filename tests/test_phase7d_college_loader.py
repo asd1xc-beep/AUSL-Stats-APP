@@ -76,4 +76,3 @@ def test_loader_does_not_use_network(monkeypatch, tmp_path):
 
     monkeypatch.setattr(socket, "create_connection", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("network")))
     assert _store(tmp_path).load(CollegeDataMode.PRODUCER_APPROVED).available
-

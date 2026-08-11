@@ -69,4 +69,3 @@ def test_distribution_manifest_records_college_transaction(tmp_path):
     manifest = json.loads((approved / "approved_enrichment_manifest.json").read_text(encoding="utf-8"))
     names = {item["name"] for item in manifest["files"]}
     assert {"college_resume_envelope.json", "college_approval_manifest.json"} <= names
-

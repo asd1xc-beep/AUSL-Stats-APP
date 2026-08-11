@@ -105,4 +105,3 @@ def test_every_approved_identity_is_exact_and_reviewed():
             assert mapping.review_state.value == "verified"
             assert mapping.reviewer == "project_owner"
             assert mapping.reviewed_at is not None
-

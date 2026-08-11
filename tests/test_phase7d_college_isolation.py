@@ -49,4 +49,3 @@ def test_approved_college_artifacts_are_not_professional_workbooks():
         for path in (ROOT / "data" / "college_approved").iterdir()
     }
     assert workbook_hashes.isdisjoint(college_hashes)
-

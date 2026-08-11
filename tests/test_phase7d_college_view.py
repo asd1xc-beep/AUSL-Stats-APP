@@ -85,4 +85,3 @@ def test_canonical_outs_and_missing_formatting():
     assert format_innings_outs(409) == "136.1 IP"
     assert format_innings_outs(0) == "0.0 IP"
     assert format_innings_outs(None) == "Unavailable"
-

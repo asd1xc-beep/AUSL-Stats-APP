@@ -91,4 +91,3 @@ def test_unknown_field_and_unavailable_summary_preserve_clipboard():
     app._current_college_view = None
     assert not app.copy_college_summary()
     assert app.root.text == before
-
