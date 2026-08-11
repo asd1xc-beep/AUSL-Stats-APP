@@ -1,4 +1,4 @@
-"""Local, fail-closed loading boundary for college rÃ©sumÃ© data."""
+"""Local, fail-closed loading boundary for college résumé data."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class CollegeStore:
                 False,
                 None,
                 None,
-                "COLLEGE DATA: CORE ONLY â€” approved college rÃ©sumÃ©s are unavailable.",
+                "COLLEGE DATA: CORE ONLY — approved college résumés are unavailable.",
             )
         if selected is EnrichmentMode.DEVELOPER_REVIEW:
             try:
@@ -103,7 +103,7 @@ class CollegeStore:
                     None,
                     None,
                     f"College developer-review data unavailable: {type(exc).__name__}.",
-                    "DEVELOPER REVIEW â€” NOT AIR READY",
+                    "DEVELOPER REVIEW — NOT AIR READY",
                 )
             return CollegeLoadResult(
                 selected,
@@ -112,7 +112,7 @@ class CollegeStore:
                 envelope,
                 None,
                 "Developer-review college pilot loaded for diagnostics.",
-                "DEVELOPER REVIEW â€” NOT AIR READY",
+                "DEVELOPER REVIEW — NOT AIR READY",
                 self.developer_pilot_path.parent,
             )
 
@@ -135,7 +135,7 @@ class CollegeStore:
                 True,
                 artifact.envelope,
                 artifact,
-                "Producer-approved college rÃ©sumÃ©s loaded and hash-validated.",
+                "Producer-approved college résumés loaded and hash-validated.",
                 "",
                 directory,
             )
@@ -159,7 +159,7 @@ class CollegeStore:
                 self._last_good,
                 message="Approved college replacement failed validation; retained last-known-good snapshot.",
                 warning=(
-                    "COLLEGE DATA WARNING â€” invalid replacement rejected; "
+                    "COLLEGE DATA WARNING — invalid replacement rejected; "
                     "using last-known-good approved snapshot."
                 ),
             )
@@ -170,6 +170,5 @@ class CollegeStore:
             None,
             None,
             f"College approval unavailable or invalid: {type(error).__name__}.",
-            "COLLEGE RÃ‰SUMÃ‰ UNAVAILABLE â€” approval validation failed closed.",
+            "COLLEGE RÉSUMÉ UNAVAILABLE — approval validation failed closed.",
         )
-

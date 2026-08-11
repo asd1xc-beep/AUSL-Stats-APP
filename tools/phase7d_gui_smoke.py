@@ -1,4 +1,4 @@
-"""Offline real-Tk smoke for the Phase 7D College RÃ©sumÃ© workflow."""
+"""Offline real-Tk smoke for the Phase 7D College Résumé workflow."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def main() -> int:
         root = tk.Tk()
         roots.append(root)
         root.geometry("1120x720")
-        root.title("AUSL Phase 7D Smoke â€” College RÃ©sumÃ©")
+        root.title("AUSL Phase 7D Smoke — College Résumé")
         app = ausl_stats_app.AUSLStatsApp(
             root, session_store=SessionStore(state_dir)
         )
@@ -110,7 +110,7 @@ def main() -> int:
         root.update()
 
         tabs = tuple(app.main_tabs.tab(tab_id, "text") for tab_id in app.main_tabs.tabs())
-        assert len(tabs) == 9 and "College RÃ©sumÃ©" in tabs
+        assert len(tabs) == 9 and "College Résumé" in tabs
         for tab_id in app.main_tabs.tabs():
             app.main_tabs.select(tab_id)
             root.update_idletasks()
@@ -128,7 +128,7 @@ def main() -> int:
         app.select_result()
         assert _identifier(app.selected_player_id) == "950"
         assert app.view_selected_college_resume()
-        assert app.main_tabs.tab(app.main_tabs.select(), "text") == "College RÃ©sumÃ©"
+        assert app.main_tabs.tab(app.main_tabs.select(), "text") == "College Résumé"
         checks.append("lookup_handoff")
 
         views = {player_id: _select(app, database, player_id) for player_id in PILOT_IDS}
@@ -211,7 +211,7 @@ def main() -> int:
         app2._finish_load(copy.deepcopy(database))
         root2.update()
         assert _identifier(app2.selected_player_id) == "950"
-        assert app2.main_tabs.tab(app2.main_tabs.select(), "text") == "College RÃ©sumÃ©"
+        assert app2.main_tabs.tab(app2.main_tabs.select(), "text") == "College Résumé"
         assert app2._current_college_view.player_id == "950"
         checks.append("session_restore")
 

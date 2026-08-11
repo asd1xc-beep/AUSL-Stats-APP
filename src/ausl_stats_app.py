@@ -2243,7 +2243,7 @@ class AUSLStatsApp:
         college = ttk.Frame(self.main_tabs, padding=8)
         self.main_tabs.add(game_day, text="Game Day")
         self.main_tabs.add(lookup, text="Player Lookup")
-        self.main_tabs.add(college, text="College RÃ©sumÃ©")
+        self.main_tabs.add(college, text="College Résumé")
         self.main_tabs.add(team_totals, text="Team Totals")
         self.main_tabs.add(producer, text="Producer Prep")
         self.main_tabs.add(lineups, text="Lineup Lock")
@@ -2876,7 +2876,7 @@ class AUSLStatsApp:
         ).pack(side="left", padx=(0, 5))
         ttk.Button(
             buttons,
-            text="View College RÃ©sumÃ©",
+            text="View College Résumé",
             command=self.view_selected_college_resume,
         ).pack(side="left", padx=(8, 5))
         self.copy_status = tk.StringVar()
@@ -2919,7 +2919,7 @@ class AUSLStatsApp:
             text="Back to Player Lookup",
             command=self.return_to_player_lookup,
         ).grid(row=0, column=0, sticky="w", padx=(0, 10))
-        self.college_title_var = tk.StringVar(value="College RÃ©sumÃ©")
+        self.college_title_var = tk.StringVar(value="College Résumé")
         ttk.Label(
             controls,
             textvariable=self.college_title_var,
@@ -2927,7 +2927,7 @@ class AUSLStatsApp:
         ).grid(row=0, column=1, sticky="w")
         ttk.Button(
             controls,
-            text="Copy College RÃ©sumÃ© Summary",
+            text="Copy College Résumé Summary",
             command=self.copy_college_summary,
         ).grid(row=0, column=2, padx=(8, 0))
         self.college_status_var = tk.StringVar(
@@ -3040,7 +3040,7 @@ class AUSLStatsApp:
         container = getattr(self, "college_content", None)
         if container is None:
             return
-        frame = ttk.LabelFrame(container, text="College RÃ©sumÃ©", padding=18)
+        frame = ttk.LabelFrame(container, text="College Résumé", padding=18)
         frame.pack(fill="x", padx=4, pady=4)
         ttk.Label(
             frame,
@@ -3088,7 +3088,7 @@ class AUSLStatsApp:
             message = (
                 loaded.message
                 if isinstance(loaded, CollegeLoadResult)
-                else "Approved college rÃ©sumÃ© data is unavailable."
+                else "Approved college résumé data is unavailable."
             )
             self._current_college_view = None
             self._render_college_unavailable(message)
@@ -3116,15 +3116,15 @@ class AUSLStatsApp:
 
     def _render_college_view(self, view):
         self._clear_college_content()
-        self.college_title_var.set(f"College RÃ©sumÃ© â€” {view.player_name}")
+        self.college_title_var.set(f"College Résumé — {view.player_name}")
         mode_suffix = (
-            " â€” Local/Offline installed snapshot"
+            " — Local/Offline installed snapshot"
             if bool(getattr(self, "_offline_mode", False))
             else ""
         )
         self.college_status_var.set(
             f"{view.message}{mode_suffix}"
-            + (f" â€” {view.warning}" if view.warning else "")
+            + (f" — {view.warning}" if view.warning else "")
         )
 
         snapshot = self._college_section("Snapshot")
@@ -3133,7 +3133,7 @@ class AUSLStatsApp:
             text=view.player_name,
             style="CollegeHeader.TLabel",
         ).pack(anchor="w")
-        context = " Â· ".join(
+        context = " · ".join(
             item
             for item in (
                 f"Current AUSL context: {view.current_team}" if view.current_team else "",
@@ -3157,7 +3157,7 @@ class AUSLStatsApp:
             timeline = self._college_section("Schools and Transfer Timeline")
             ttk.Label(
                 timeline,
-                text=" â†’ ".join(view.school_timeline),
+                text=" → ".join(view.school_timeline),
                 style="CollegeScope.TLabel",
             ).pack(anchor="w")
 
@@ -3227,7 +3227,7 @@ class AUSLStatsApp:
         details = self._college_section("Sources and Completeness")
         ttk.Label(
             details,
-            text=f"Completeness: {view.completeness} Â· Reviewed: {view.reviewed_date}",
+            text=f"Completeness: {view.completeness} · Reviewed: {view.reviewed_date}",
             style="CollegeScope.TLabel",
         ).pack(anchor="w")
         if view.missing_fields:
@@ -3238,7 +3238,7 @@ class AUSLStatsApp:
                 wraplength=940,
             ).pack(anchor="w", pady=(3, 0))
         for source in view.source_summaries:
-            ttk.Label(details, text=f"â€¢ {source}", style="Sub.TLabel", wraplength=960).pack(anchor="w")
+            ttk.Label(details, text=f"• {source}", style="Sub.TLabel", wraplength=960).pack(anchor="w")
         self._bind_college_mousewheel_tree(self.college_content)
         self.college_canvas.configure(scrollregion=self.college_canvas.bbox("all"))
         self.college_canvas.yview_moveto(0.0)
@@ -3261,7 +3261,7 @@ class AUSLStatsApp:
             return False
         if not field.copy_eligible:
             self.college_status_var.set(
-                f"College copy blocked â€” {field.block_reason} Clipboard was unchanged."
+                f"College copy blocked — {field.block_reason} Clipboard was unchanged."
             )
             return False
         text = field.copy_with_source if with_source else field.copy_text
@@ -3286,10 +3286,10 @@ class AUSLStatsApp:
             reason = (
                 view.summary_block_reason
                 if view is not None
-                else "No exact college rÃ©sumÃ© is selected."
+                else "No exact college résumé is selected."
             )
             self.college_status_var.set(
-                f"College summary copy blocked â€” {reason} Clipboard was unchanged."
+                f"College summary copy blocked — {reason} Clipboard was unchanged."
             )
             return False
         text = view.summary_copy_with_source if with_source else view.summary_copy_text
@@ -3301,21 +3301,21 @@ class AUSLStatsApp:
             "with_source": bool(with_source),
             "copied_at": datetime.now(timezone.utc),
         }
-        self.college_status_var.set("College rÃ©sumÃ© summary copied.")
+        self.college_status_var.set("College résumé summary copied.")
         return True
 
     def view_selected_college_resume(self):
         if getattr(self, "selected_player_id", None) is None:
             if hasattr(self, "college_status_var"):
                 self.college_status_var.set(
-                    "Select one exact player identity before opening College RÃ©sumÃ©."
+                    "Select one exact player identity before opening College Résumé."
                 )
             return False
         self._select_notebook_text(
-            getattr(self, "main_tabs", None), "College RÃ©sumÃ©"
+            getattr(self, "main_tabs", None), "College Résumé"
         )
         self.render_college_resume()
-        self._schedule_session_autosave("college rÃ©sumÃ© opened")
+        self._schedule_session_autosave("college résumé opened")
         return True
 
     def return_to_player_lookup(self):

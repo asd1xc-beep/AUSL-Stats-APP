@@ -18,7 +18,7 @@ class _Notebook:
     def tab(self, tab_id, option):
         assert option == "text"
         return (
-            "Game Day", "Player Lookup", "College RÃ©sumÃ©", "Team Totals",
+            "Game Day", "Player Lookup", "College Résumé", "Team Totals",
             "Producer Prep", "Lineup Lock", "Manual Notes", "Live Game", "Compare Players",
         )[tab_id]
 
@@ -31,8 +31,8 @@ class _Notebook:
 def test_phase7d_source_builds_exactly_nine_tabs_and_lookup_handoff():
     source = (ROOT / "src" / "ausl_stats_app.py").read_text(encoding="utf-8")
     assert source.count('self.main_tabs.add(') == 9
-    assert 'text="College RÃ©sumÃ©"' in source
-    assert "View College RÃ©sumÃ©" in source
+    assert 'text="College Résumé"' in source
+    assert "View College Résumé" in source
 
     app = ausl_stats_app.AUSLStatsApp.__new__(ausl_stats_app.AUSLStatsApp)
     app.main_tabs = _Notebook()
@@ -59,4 +59,3 @@ def test_college_scroll_contract_is_mouse_and_keyboard_accessible():
     assert "_on_college_mousewheel" in source
     assert '"<MouseWheel>"' in source
     assert '"<Prior>"' in source and '"<Next>"' in source
-

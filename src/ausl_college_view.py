@@ -1,4 +1,4 @@
-"""Pure presentation and copy models for producer college rÃ©sumÃ©s."""
+"""Pure presentation and copy models for producer college résumés."""
 
 from __future__ import annotations
 
@@ -160,10 +160,10 @@ def _record_scope(record: StatRecord, program: str) -> tuple[str, str]:
         StatRecordType.DERIVED_CAREER_BATTING,
         StatRecordType.DERIVED_CAREER_PITCHING,
     }:
-        return f"COLLEGE CAREER â€” {program.upper()}", f"COLLEGE CAREER ({program.upper()})"
+        return f"COLLEGE CAREER — {program.upper()}", f"COLLEGE CAREER ({program.upper()})"
     season = str(record.season) if record.season is not None else "UNKNOWN"
     return (
-        f"{season} COLLEGE SEASON â€” {program.upper()}",
+        f"{season} COLLEGE SEASON — {program.upper()}",
         f"{season} COLLEGE SEASON ({program.upper()})",
     )
 
@@ -202,7 +202,7 @@ def _stat_field(
         if metric in consumed:
             continue
         if metric == "wins" and "losses" in metrics:
-            parts.append(f"{int(value)}â€“{int(metrics['losses'])} W-L")
+            parts.append(f"{int(value)}–{int(metrics['losses'])} W-L")
             consumed.update({"wins", "losses"})
             continue
         if metric == "losses" and "wins" in metrics:
@@ -211,9 +211,9 @@ def _stat_field(
         consumed.add(metric)
     program = _record_program(resume, record)
     scope_label, copy_scope = _record_scope(record, program)
-    display_text = " Â· ".join(parts)
+    display_text = " · ".join(parts)
     source_summary = _source_line(used_sources, reviewed_date)
-    copy_text = f"{resume.canonical_display_name.upper()} â€” {copy_scope}: {', '.join(parts)}"
+    copy_text = f"{resume.canonical_display_name.upper()} — {copy_scope}: {', '.join(parts)}"
     reason = ""
     if not copy_mode_allowed:
         reason = "Developer review mode is not air ready."
@@ -245,10 +245,10 @@ def _achievement_field(
 ) -> CollegeFieldView:
     program = programs.get(achievement.program_id, "College") if achievement.program_id else "College"
     season = f"{achievement.season_or_date} " if achievement.season_or_date else ""
-    scope = f"{season}COLLEGE {achievement.achievement_type.value.replace('_', ' ').upper()} â€” {program.upper()}"
+    scope = f"{season}COLLEGE {achievement.achievement_type.value.replace('_', ' ').upper()} — {program.upper()}"
     used_sources = [sources[source_id] for source_id in achievement.provenance_ids if source_id in sources]
     source_summary = _source_line(used_sources, reviewed_date)
-    copy_text = f"{resume.canonical_display_name.upper()} â€” {scope}: {achievement.normalized_label}"
+    copy_text = f"{resume.canonical_display_name.upper()} — {scope}: {achievement.normalized_label}"
     reason = "" if copy_mode_allowed and len(used_sources) == len(achievement.provenance_ids) else (
         "Developer review mode is not air ready." if not copy_mode_allowed else "Achievement provenance is unavailable."
     )
@@ -288,7 +288,7 @@ def build_college_resume_view(
     identity = str(player_id).strip()
     matches = [resume for resume in envelope.resumes if resume.player_id == identity]
     warning = (
-        "DEVELOPER REVIEW â€” NOT AIR READY"
+        "DEVELOPER REVIEW — NOT AIR READY"
         if selected_mode is EnrichmentMode.DEVELOPER_REVIEW
         else ""
     )
@@ -299,7 +299,7 @@ def build_college_resume_view(
             "",
             current_team,
             current_status,
-            "College rÃ©sumÃ© unavailable for this player. The current reviewed pilot covers ten players; no college history has been inferred.",
+            "College résumé unavailable for this player. The current reviewed pilot covers ten players; no college history has been inferred.",
             warning,
             "Unavailable",
             (),
@@ -313,7 +313,7 @@ def build_college_resume_view(
             "",
             "",
             False,
-            "No exact approved college rÃ©sumÃ© is available.",
+            "No exact approved college résumé is available.",
         )
     resume = matches[0]
     source_map = {source.source_id: source for source in envelope.sources}
@@ -364,13 +364,13 @@ def build_college_resume_view(
         }
     )
     source_summaries = tuple(
-        f"{source_map[source_id].organization} â€” {source_map[source_id].title} ({source_map[source_id].locator})"
+        f"{source_map[source_id].organization} — {source_map[source_id].title} ({source_map[source_id].locator})"
         for source_id in used_source_ids
     )
     copyable = tuple(field for field in (*stat_fields, *achievements) if field.copy_eligible)
     summary_lines = [
-        f"{resume.canonical_display_name.upper()} â€” COLLEGE RÃ‰SUMÃ‰",
-        f"SCHOOLS: {' â†’ '.join(timeline) if timeline else 'Unavailable'}",
+        f"{resume.canonical_display_name.upper()} — COLLEGE RÉSUMÉ",
+        f"SCHOOLS: {' → '.join(timeline) if timeline else 'Unavailable'}",
         *(f"{field.scope_label}: {field.display_text}" for field in copyable),
         f"COMPLETENESS: {assessment.state.value}",
     ]
@@ -390,7 +390,7 @@ def build_college_resume_view(
         resume.canonical_display_name,
         current_team,
         current_status,
-        "Reviewed college rÃ©sumÃ© loaded.",
+        "Reviewed college résumé loaded.",
         warning,
         assessment.state.value,
         assessment.missing_fields,
@@ -406,4 +406,3 @@ def build_college_resume_view(
         bool(copyable),
         summary_reason,
     )
-

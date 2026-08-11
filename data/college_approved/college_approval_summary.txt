@@ -1,4 +1,4 @@
-AUSL College RÃ©sumÃ© Approval Summary
+AUSL College Résumé Approval Summary
 Review role: project_owner
 Review date: 2026-08-11
 Decision: approved_for_college_resume_display

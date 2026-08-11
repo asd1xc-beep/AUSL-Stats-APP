@@ -36,7 +36,7 @@ Producer-visible artifacts:
 - `college_approval_manifest.json` — SHA-256
   `c3adebfc0b7e7060280eb4c666498c8028c82809d2711eb5a71812a2a0d959fc`;
 - `college_approval_summary.txt` — SHA-256
-  `45995637fc095d563f1c10dcc0ea00e0740e59841333cc1e934bafddddcaf970`.
+  `f5837dc45644e094975541f465c0afe1a28e0b04f8cae21c29d299057d02e5e7`.
 
 The derived result is nine `Verified` résumés and one `Partial` résumé.
 Ailana Agbayani's achievements and incomplete pitching scope remain
@@ -124,4 +124,3 @@ one.
 - Phase 7E must not start until scaling acceptance is reported.
 
 **PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
-

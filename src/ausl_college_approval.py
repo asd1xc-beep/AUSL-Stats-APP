@@ -1,4 +1,4 @@
-"""Tamper-evident approval transaction for reviewed college rÃ©sumÃ© data.
+"""Tamper-evident approval transaction for reviewed college résumé data.
 
 The developer-review pilot remains immutable.  This module derives a separate
 producer-visible envelope whose exact bytes, identities, candidate values, and
@@ -323,7 +323,7 @@ def approve_pilot_payload(
     }
     manifest_payload = _json_payload(manifest)
     summary_lines = [
-        "AUSL College RÃ©sumÃ© Approval Summary",
+        "AUSL College Résumé Approval Summary",
         f"Review role: {reviewer_role}",
         f"Review date: {review_date}",
         f"Decision: {decision}",
@@ -483,4 +483,3 @@ def approve_pilot_files(
         for temporary in temporaries:
             temporary.unlink(missing_ok=True)
     return result
-
