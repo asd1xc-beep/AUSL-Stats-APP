@@ -1,0 +1,9 @@
+AUSL College RÃ©sumÃ© Approval Summary
+Review role: project_owner
+Review date: 2026-08-11
+Decision: approved_for_college_resume_display
+Input SHA-256: d8c111e7762bf96e81ccd6844230123e31cfbab780f92d40d5aa695ccfdb3442
+Approved SHA-256: 36da267aed5bf12e40e5e923100ecbaf4811a896a523a6f476f80d4612b78b4a
+Exact player IDs: 169, 278, 933, 950, 1075, 1102, 1285, 1322, 1324, 1327
+Completeness: Verified=9, Partial=1, Needs Review=0
+Incomplete fields: 1322:sections.achievements
