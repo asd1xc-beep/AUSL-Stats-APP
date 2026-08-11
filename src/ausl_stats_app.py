@@ -98,6 +98,8 @@ from ausl_comparison import (
 )
 from ausl_enrichment import EnrichmentMode
 from ausl_splits import apply_split_sample_policy
+from ausl_college_store import CollegeLoadResult, CollegeStore
+from ausl_college_view import CollegeFieldView, build_college_resume_view
 
 
 CURRENT_YEAR = max(SEASONS)
@@ -1446,6 +1448,7 @@ def official_team_snapshot(team_code, season, database):
 
 class AUSLStatsApp:
     FACT_PANEL_SCROLLABLE = True
+    COLLEGE_PANEL_SCROLLABLE = True
 
     SESSION_AUTOSAVE_DELAY_MS = 500
 
@@ -1494,6 +1497,15 @@ class AUSLStatsApp:
         self._active_live_request = None
         self._live_timer_id = None
         self._offline_mode = False
+        self._college_store = CollegeStore.default(
+            event_logger=lambda event, **fields: self._log_event(event, **fields)
+        )
+        self._college_load_result = self._college_store.load(
+            EnrichmentMode.CORE_ONLY
+        )
+        self._current_college_view = None
+        self._college_render_generation = 0
+        self._last_college_copy = None
         self._packet_metadata = {}
         self._verification_count_cache = {}
         self.game_day_readiness = None
@@ -2107,6 +2119,9 @@ class AUSLStatsApp:
         style.configure("FactVerified.TLabel", font=("Segoe UI", 9, "bold"), foreground="#146c43")
         style.configure("FactVerify.TLabel", font=("Segoe UI", 9, "bold"), foreground="#9a6700")
         style.configure("FactUnavailable.TLabel", font=("Segoe UI", 9, "bold"), foreground="#b42318")
+        style.configure("CollegeHeader.TLabel", font=("Segoe UI", 16, "bold"), foreground="#17365d")
+        style.configure("CollegeScope.TLabel", font=("Segoe UI", 10, "bold"), foreground="#315a7d")
+        style.configure("CollegeWarning.TLabel", font=("Segoe UI", 10, "bold"), foreground="#b42318")
 
     def _build(self):
         top = ttk.Frame(self.root, padding=10)
@@ -2225,8 +2240,10 @@ class AUSLStatsApp:
         manual = ttk.Frame(self.main_tabs, padding=8)
         live = ttk.Frame(self.main_tabs, padding=8)
         comparison = ttk.Frame(self.main_tabs, padding=8)
+        college = ttk.Frame(self.main_tabs, padding=8)
         self.main_tabs.add(game_day, text="Game Day")
         self.main_tabs.add(lookup, text="Player Lookup")
+        self.main_tabs.add(college, text="College RÃ©sumÃ©")
         self.main_tabs.add(team_totals, text="Team Totals")
         self.main_tabs.add(producer, text="Producer Prep")
         self.main_tabs.add(lineups, text="Lineup Lock")
@@ -2238,6 +2255,7 @@ class AUSLStatsApp:
         )
         self._build_game_day(game_day)
         self._build_lookup(lookup)
+        self._build_college_resume(college)
         self._build_comparison(comparison)
         self._build_team_totals(team_totals)
         self._build_producer_prep(producer)
@@ -2856,6 +2874,11 @@ class AUSLStatsApp:
             text="Compare Right",
             command=lambda: self.assign_comparison_player("right"),
         ).pack(side="left", padx=(0, 5))
+        ttk.Button(
+            buttons,
+            text="View College RÃ©sumÃ©",
+            command=self.view_selected_college_resume,
+        ).pack(side="left", padx=(8, 5))
         self.copy_status = tk.StringVar()
         ttk.Label(right, textvariable=self.copy_status, style="Sub.TLabel").grid(row=3, column=0, sticky="w")
         self.stat_tabs = ttk.Notebook(right)
@@ -2882,6 +2905,431 @@ class AUSLStatsApp:
         self.root.bind_all("<Escape>", self._clear_search_shortcut, add="+")
         self.root.bind_all("<Control-Key-1>", self._comparison_left_shortcut, add="+")
         self.root.bind_all("<Control-Key-2>", self._comparison_right_shortcut, add="+")
+
+    def _build_college_resume(self, parent):
+        """Build the producer-facing college surface without interpreting raw evidence."""
+
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
+        controls = ttk.Frame(parent)
+        controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        controls.columnconfigure(1, weight=1)
+        ttk.Button(
+            controls,
+            text="Back to Player Lookup",
+            command=self.return_to_player_lookup,
+        ).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.college_title_var = tk.StringVar(value="College RÃ©sumÃ©")
+        ttk.Label(
+            controls,
+            textvariable=self.college_title_var,
+            style="CollegeHeader.TLabel",
+        ).grid(row=0, column=1, sticky="w")
+        ttk.Button(
+            controls,
+            text="Copy College RÃ©sumÃ© Summary",
+            command=self.copy_college_summary,
+        ).grid(row=0, column=2, padx=(8, 0))
+        self.college_status_var = tk.StringVar(
+            value="Select an exact player in Player Lookup to view reviewed college data."
+        )
+        ttk.Label(
+            controls,
+            textvariable=self.college_status_var,
+            style="Sub.TLabel",
+            wraplength=1040,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(5, 0))
+
+        body = ttk.Frame(parent)
+        body.grid(row=1, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+        self.college_canvas = tk.Canvas(
+            body,
+            highlightthickness=0,
+            borderwidth=0,
+            takefocus=True,
+            background="#f4f7fb",
+        )
+        self.college_canvas.grid(row=0, column=0, sticky="nsew")
+        college_scroll = ttk.Scrollbar(
+            body, orient="vertical", command=self.college_canvas.yview
+        )
+        college_scroll.grid(row=0, column=1, sticky="ns")
+        self.college_canvas.configure(yscrollcommand=college_scroll.set)
+        self.college_content = ttk.Frame(self.college_canvas, padding=8)
+        self._college_canvas_window = self.college_canvas.create_window(
+            (0, 0), window=self.college_content, anchor="nw"
+        )
+        self.college_content.bind(
+            "<Configure>",
+            lambda _event: self.college_canvas.configure(
+                scrollregion=self.college_canvas.bbox("all")
+            ),
+        )
+        self.college_canvas.bind(
+            "<Configure>",
+            lambda event: self.college_canvas.itemconfigure(
+                self._college_canvas_window, width=event.width
+            ),
+        )
+        for widget in (self.college_canvas, self.college_content):
+            widget.bind("<MouseWheel>", self._on_college_mousewheel, add="+")
+            widget.bind("<Button-4>", self._on_college_mousewheel, add="+")
+            widget.bind("<Button-5>", self._on_college_mousewheel, add="+")
+        self.college_canvas.bind(
+            "<Prior>", lambda _event: self._college_keyboard_scroll(-1, "pages")
+        )
+        self.college_canvas.bind(
+            "<Next>", lambda _event: self._college_keyboard_scroll(1, "pages")
+        )
+        self.college_canvas.bind(
+            "<Up>", lambda _event: self._college_keyboard_scroll(-2, "units")
+        )
+        self.college_canvas.bind(
+            "<Down>", lambda _event: self._college_keyboard_scroll(2, "units")
+        )
+        self._render_college_unavailable(
+            "No player selected. Choose one exact identity in Player Lookup."
+        )
+
+    def _college_keyboard_scroll(self, amount, units):
+        canvas = getattr(self, "college_canvas", None)
+        if canvas is not None:
+            canvas.yview_scroll(amount, units)
+        return "break"
+
+    def _on_college_mousewheel(self, event):
+        canvas = getattr(self, "college_canvas", None)
+        if canvas is None:
+            return None
+        delta = getattr(event, "delta", 0)
+        number = getattr(event, "num", None)
+        if delta:
+            steps = -1 if delta > 0 else 1
+        elif number == 4:
+            steps = -1
+        elif number == 5:
+            steps = 1
+        else:
+            return None
+        canvas.yview_scroll(steps * 3, "units")
+        return "break"
+
+    def _bind_college_mousewheel_tree(self, widget):
+        try:
+            widget.bind("<MouseWheel>", self._on_college_mousewheel, add="+")
+            widget.bind("<Button-4>", self._on_college_mousewheel, add="+")
+            widget.bind("<Button-5>", self._on_college_mousewheel, add="+")
+            for child in widget.winfo_children():
+                self._bind_college_mousewheel_tree(child)
+        except tk.TclError:
+            return
+
+    def _clear_college_content(self):
+        container = getattr(self, "college_content", None)
+        if container is None:
+            return
+        for child in container.winfo_children():
+            child.destroy()
+
+    def _render_college_unavailable(self, message):
+        self._clear_college_content()
+        if hasattr(self, "college_status_var"):
+            self.college_status_var.set(message)
+        container = getattr(self, "college_content", None)
+        if container is None:
+            return
+        frame = ttk.LabelFrame(container, text="College RÃ©sumÃ©", padding=18)
+        frame.pack(fill="x", padx=4, pady=4)
+        ttk.Label(
+            frame,
+            text=message,
+            style="Sub.TLabel",
+            wraplength=900,
+        ).pack(anchor="w")
+        self._bind_college_mousewheel_tree(frame)
+
+    def _selected_college_roster_context(self):
+        player_id = _manual_note_identifier(
+            getattr(self, "selected_player_id", None)
+        )
+        roster = self.db.get("roster", pd.DataFrame()) if self.db else pd.DataFrame()
+        if (
+            not player_id
+            or not isinstance(roster, pd.DataFrame)
+            or "player_id" not in roster.columns
+        ):
+            return "", ""
+        rows = roster[
+            roster["player_id"].map(_manual_note_identifier).eq(player_id)
+        ]
+        if len(rows) != 1:
+            return "", ""
+        row = rows.iloc[0]
+        team = _optional_text(row, "team") or _optional_text(row, "team_code") or ""
+        return team, self.roster_status(row)
+
+    def render_college_resume(self):
+        self._college_render_generation = getattr(
+            self, "_college_render_generation", 0
+        ) + 1
+        selected = _manual_note_identifier(
+            getattr(self, "selected_player_id", None)
+        )
+        if not selected:
+            self._current_college_view = None
+            self._render_college_unavailable(
+                "No player selected. Choose one exact identity in Player Lookup."
+            )
+            return False
+        loaded = getattr(self, "_college_load_result", None)
+        if not isinstance(loaded, CollegeLoadResult) or not loaded.available:
+            message = (
+                loaded.message
+                if isinstance(loaded, CollegeLoadResult)
+                else "Approved college rÃ©sumÃ© data is unavailable."
+            )
+            self._current_college_view = None
+            self._render_college_unavailable(message)
+            return False
+        team, status = self._selected_college_roster_context()
+        source = loaded.approval or loaded.envelope
+        view = build_college_resume_view(
+            source,
+            player_id=selected,
+            mode=loaded.mode,
+            current_team=team,
+            current_status=status,
+        )
+        self._current_college_view = view
+        if not view.available:
+            self._render_college_unavailable(view.message)
+            return False
+        self._render_college_view(view)
+        return True
+
+    def _college_section(self, title):
+        frame = ttk.LabelFrame(self.college_content, text=title, padding=10)
+        frame.pack(fill="x", padx=4, pady=(0, 8))
+        return frame
+
+    def _render_college_view(self, view):
+        self._clear_college_content()
+        self.college_title_var.set(f"College RÃ©sumÃ© â€” {view.player_name}")
+        mode_suffix = (
+            " â€” Local/Offline installed snapshot"
+            if bool(getattr(self, "_offline_mode", False))
+            else ""
+        )
+        self.college_status_var.set(
+            f"{view.message}{mode_suffix}"
+            + (f" â€” {view.warning}" if view.warning else "")
+        )
+
+        snapshot = self._college_section("Snapshot")
+        ttk.Label(
+            snapshot,
+            text=view.player_name,
+            style="CollegeHeader.TLabel",
+        ).pack(anchor="w")
+        context = " Â· ".join(
+            item
+            for item in (
+                f"Current AUSL context: {view.current_team}" if view.current_team else "",
+                f"Status: {view.current_status}" if view.current_status else "",
+                f"Completeness: {view.completeness}",
+                f"Last reviewed: {view.reviewed_date}",
+            )
+            if item
+        )
+        ttk.Label(snapshot, text=context, style="Sub.TLabel", wraplength=980).pack(
+            anchor="w", pady=(4, 0)
+        )
+        if view.warning:
+            ttk.Label(
+                snapshot,
+                text=view.warning,
+                style="CollegeWarning.TLabel",
+            ).pack(anchor="w", pady=(6, 0))
+
+        if view.school_timeline:
+            timeline = self._college_section("Schools and Transfer Timeline")
+            ttk.Label(
+                timeline,
+                text=" â†’ ".join(view.school_timeline),
+                style="CollegeScope.TLabel",
+            ).pack(anchor="w")
+
+        if view.stat_fields:
+            career = self._college_section("College Career Totals and Season-by-Season Summary")
+            for field in view.stat_fields:
+                item = ttk.Frame(career, padding=(0, 4))
+                item.pack(fill="x")
+                ttk.Label(
+                    item,
+                    text=field.scope_label,
+                    style="CollegeScope.TLabel",
+                ).grid(row=0, column=0, sticky="w")
+                ttk.Label(
+                    item, text=field.display_text, wraplength=790
+                ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+                ttk.Label(
+                    item,
+                    text=field.source_summary,
+                    style="Sub.TLabel",
+                    wraplength=790,
+                ).grid(row=2, column=0, sticky="w", pady=(2, 0))
+                buttons = ttk.Frame(item)
+                buttons.grid(row=0, column=1, rowspan=3, sticky="e", padx=(12, 0))
+                ttk.Button(
+                    buttons,
+                    text="Copy College Fact",
+                    command=lambda field_id=field.field_id: self.copy_college_field(field_id),
+                ).pack(side="top", fill="x")
+                ttk.Button(
+                    buttons,
+                    text="Copy with Source",
+                    command=lambda field_id=field.field_id: self.copy_college_field(
+                        field_id, with_source=True
+                    ),
+                ).pack(side="top", fill="x", pady=(4, 0))
+                item.columnconfigure(0, weight=1)
+
+        if view.achievement_fields:
+            honors = self._college_section("Honors, Records, WCWS and Championships")
+            for field in view.achievement_fields:
+                item = ttk.Frame(honors, padding=(0, 4))
+                item.pack(fill="x")
+                ttk.Label(item, text=field.scope_label, style="CollegeScope.TLabel").pack(anchor="w")
+                ttk.Label(item, text=field.display_text, wraplength=900).pack(anchor="w")
+                ttk.Label(item, text=field.source_summary, style="Sub.TLabel", wraplength=900).pack(anchor="w")
+                actions = ttk.Frame(item)
+                actions.pack(anchor="w", pady=(4, 0))
+                ttk.Button(
+                    actions,
+                    text="Copy College Fact",
+                    command=lambda field_id=field.field_id: self.copy_college_field(field_id),
+                ).pack(side="left")
+                ttk.Button(
+                    actions,
+                    text="Copy with Source",
+                    command=lambda field_id=field.field_id: self.copy_college_field(field_id, with_source=True),
+                ).pack(side="left", padx=(5, 0))
+
+        connections = self._college_section("Broadcast Connections")
+        ttk.Label(
+            connections,
+            text="No reviewed connections available. Phase 7D does not generate college storylines.",
+            style="Sub.TLabel",
+        ).pack(anchor="w")
+
+        details = self._college_section("Sources and Completeness")
+        ttk.Label(
+            details,
+            text=f"Completeness: {view.completeness} Â· Reviewed: {view.reviewed_date}",
+            style="CollegeScope.TLabel",
+        ).pack(anchor="w")
+        if view.missing_fields:
+            ttk.Label(
+                details,
+                text="Unavailable: " + ", ".join(view.missing_fields),
+                style="CollegeWarning.TLabel",
+                wraplength=940,
+            ).pack(anchor="w", pady=(3, 0))
+        for source in view.source_summaries:
+            ttk.Label(details, text=f"â€¢ {source}", style="Sub.TLabel", wraplength=960).pack(anchor="w")
+        self._bind_college_mousewheel_tree(self.college_content)
+        self.college_canvas.configure(scrollregion=self.college_canvas.bbox("all"))
+        self.college_canvas.yview_moveto(0.0)
+
+    def _college_fields(self):
+        view = getattr(self, "_current_college_view", None)
+        if view is None:
+            return ()
+        return (*view.stat_fields, *view.achievement_fields)
+
+    def copy_college_field(self, field_id, *, with_source=False):
+        field = next(
+            (item for item in self._college_fields() if item.field_id == field_id),
+            None,
+        )
+        if not isinstance(field, CollegeFieldView):
+            self.college_status_var.set(
+                "College field is unavailable; clipboard was unchanged."
+            )
+            return False
+        if not field.copy_eligible:
+            self.college_status_var.set(
+                f"College copy blocked â€” {field.block_reason} Clipboard was unchanged."
+            )
+            return False
+        text = field.copy_with_source if with_source else field.copy_text
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        self._last_college_copy = {
+            "field_id": field.field_id,
+            "with_source": bool(with_source),
+            "copied_at": datetime.now(timezone.utc),
+        }
+        self.college_status_var.set(
+            "College fact copied with source."
+            if with_source
+            else "College fact copied with explicit college scope."
+        )
+        return True
+
+    def copy_college_summary(self, *, with_source=False):
+        view = getattr(self, "_current_college_view", None)
+        if view is None or not view.summary_copy_eligible:
+            reason = (
+                view.summary_block_reason
+                if view is not None
+                else "No exact college rÃ©sumÃ© is selected."
+            )
+            self.college_status_var.set(
+                f"College summary copy blocked â€” {reason} Clipboard was unchanged."
+            )
+            return False
+        text = view.summary_copy_with_source if with_source else view.summary_copy_text
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        self._last_college_copy = {
+            "field_id": "resume_summary",
+            "with_source": bool(with_source),
+            "copied_at": datetime.now(timezone.utc),
+        }
+        self.college_status_var.set("College rÃ©sumÃ© summary copied.")
+        return True
+
+    def view_selected_college_resume(self):
+        if getattr(self, "selected_player_id", None) is None:
+            if hasattr(self, "college_status_var"):
+                self.college_status_var.set(
+                    "Select one exact player identity before opening College RÃ©sumÃ©."
+                )
+            return False
+        self._select_notebook_text(
+            getattr(self, "main_tabs", None), "College RÃ©sumÃ©"
+        )
+        self.render_college_resume()
+        self._schedule_session_autosave("college rÃ©sumÃ© opened")
+        return True
+
+    def return_to_player_lookup(self):
+        self._select_notebook_text(
+            getattr(self, "main_tabs", None), "Player Lookup"
+        )
+        entry = getattr(self, "search_entry", None)
+        if entry is not None:
+            try:
+                entry.focus_set()
+            except tk.TclError:
+                pass
+        self._schedule_session_autosave("returned to player lookup")
+        return True
 
     def _build_comparison(self, parent):
         parent.columnconfigure(0, weight=1)
@@ -3421,6 +3869,8 @@ class AUSLStatsApp:
         refresh = getattr(self, "refresh_game_day_dashboard", None)
         if callable(refresh):
             refresh()
+        if hasattr(self, "college_content"):
+            self.render_college_resume()
 
     def _refresh_game_day_if_allowed(self):
         if bool(getattr(self, "_suppress_game_day_refresh", False)):
@@ -3518,6 +3968,11 @@ class AUSLStatsApp:
                 data = load_database(
                     enrichment_mode=EnrichmentMode.PRODUCER_APPROVED
                 )
+                college_store = getattr(self, "_college_store", None)
+                if college_store is not None:
+                    data["_college_load_result"] = college_store.load(
+                        EnrichmentMode.PRODUCER_APPROVED
+                    )
             except Exception as exc:
                 self._post_main_thread(self._finish_initial_load_error, exc)
                 return
@@ -3556,6 +4011,9 @@ class AUSLStatsApp:
     def _finish_load(self, data):
         previous_selected_id = getattr(self, "selected_player_id", None)
         self.db = data
+        college_result = data.get("_college_load_result")
+        if isinstance(college_result, CollegeLoadResult):
+            self._college_load_result = college_result
         if hasattr(self, "_change_build_generation"):
             # Supersede any comparison still walking the replaced database.
             # The replacement comparison starts only after its selected-game
@@ -3614,6 +4072,7 @@ class AUSLStatsApp:
         self.render_team_totals()
         self.render_producer_prep()
         self.render_manual_notes()
+        self.render_college_resume()
         if (
             fact_generation_after_invalidate is not None
             and self._fact_build_generation == fact_generation_after_invalidate
@@ -3807,6 +4266,8 @@ class AUSLStatsApp:
             self.copy_status.set("")
         for text in getattr(self, "stat_texts", {}).values():
             self._set_text(text, "Select a player for this game.")
+        if hasattr(self, "college_content"):
+            self.render_college_resume()
 
     def _reset_lineup_editor_for_game(self, selected_game):
         game_label = (
@@ -4625,6 +5086,11 @@ class AUSLStatsApp:
                 data = load_database(
                     enrichment_mode=EnrichmentMode.PRODUCER_APPROVED
                 )
+                college_store = getattr(self, "_college_store", None)
+                if college_store is not None:
+                    data["_college_load_result"] = college_store.load(
+                        EnrichmentMode.PRODUCER_APPROVED
+                    )
             except RefreshCancelled:
                 self._post_main_thread(self._finish_data_update_cancelled, cancel_token)
                 return
@@ -9660,6 +10126,8 @@ class AUSLStatsApp:
         self._set_text(self.stat_texts["current"], "BATTING\n" + self.batting_line(yb) + "\n\nPITCHING\n" + self.pitching_line(yp) + "\n\nFIELDING\n" + self.fielding_line(yf))
         self._set_text(self.stat_texts["previous"], "BATTING\n" + self.batting_line(pb) + "\n\nPITCHING\n" + self.pitching_line(pp) + "\n\nFIELDING\n" + self.fielding_line(pf))
         self._set_text(self.stat_texts["fielding"], CAREER_LABEL.upper() + "\n" + self.fielding_line(cf) + f"\n\n{CURRENT_YEAR}\n" + self.fielding_line(yf) + f"\n\n{CURRENT_YEAR-1}\n" + self.fielding_line(pf))
+        if hasattr(self, "college_content"):
+            self.render_college_resume()
 
     def gfx_text(self, kind):
         semantic_kind = COPY_KIND_ALIASES.get(kind)
