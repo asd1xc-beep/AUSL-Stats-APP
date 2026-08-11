@@ -1,0 +1,173 @@
+{
+  "entries": [
+    {
+      "coverage_categories": [
+        "ausl_veteran",
+        "single_school",
+        "two_way",
+        "award_or_record"
+      ],
+      "display_name": "Valerie Cagle",
+      "expected_college_role": "two_way",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "950",
+      "reason": "Clemson two-way career with authoritative career tables.",
+      "roster_status": "Active",
+      "team_code": "CAR"
+    },
+    {
+      "coverage_categories": [
+        "ausl_veteran",
+        "single_school",
+        "two_way",
+        "award_or_record",
+        "wcws_or_championship"
+      ],
+      "display_name": "Rachel Garcia",
+      "expected_college_role": "two_way",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "278",
+      "reason": "UCLA two-way national award winner and champion.",
+      "roster_status": "Active",
+      "team_code": "TEX"
+    },
+    {
+      "coverage_categories": [
+        "early_career",
+        "multi_school",
+        "pitcher",
+        "two_way",
+        "award_or_record",
+        "wcws_or_championship"
+      ],
+      "display_name": "NiJaree Canady",
+      "expected_college_role": "two_way",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "1327",
+      "reason": "Stanford-to-Texas Tech transfer with separate pitching and batting evidence.",
+      "roster_status": "Active",
+      "team_code": "TEX"
+    },
+    {
+      "coverage_categories": [
+        "ausl_veteran",
+        "single_school",
+        "hitter",
+        "award_or_record",
+        "wcws_or_championship"
+      ],
+      "display_name": "Tiare Jennings",
+      "expected_college_role": "hitter",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "1075",
+      "reason": "Oklahoma career record holder and four-time champion with an official AUSL-season profile.",
+      "roster_status": "Active",
+      "team_code": "TEX"
+    },
+    {
+      "coverage_categories": [
+        "early_career",
+        "single_school",
+        "pitcher",
+        "award_or_record",
+        "wcws_or_championship"
+      ],
+      "display_name": "Karlyn Pickens",
+      "expected_college_role": "pitcher",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "1324",
+      "reason": "Tennessee pitcher with recent official season evidence.",
+      "roster_status": "Active",
+      "team_code": "CAR"
+    },
+    {
+      "coverage_categories": [
+        "ausl_veteran",
+        "single_school",
+        "two_way",
+        "wcws_or_championship"
+      ],
+      "display_name": "Odicci Alexander-Bennett",
+      "expected_college_role": "two_way",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "169",
+      "reason": "James Madison two-way WCWS résumé.",
+      "roster_status": "Active",
+      "team_code": "CHI"
+    },
+    {
+      "coverage_categories": [
+        "multi_school",
+        "pitcher",
+        "award_or_record",
+        "wcws_or_championship"
+      ],
+      "display_name": "Kelly Maxwell",
+      "expected_college_role": "pitcher",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "1285",
+      "reason": "Oklahoma State-to-Oklahoma transfer and 2024 champion.",
+      "roster_status": "Active",
+      "team_code": "PDX"
+    },
+    {
+      "coverage_categories": [
+        "multi_school",
+        "hitter",
+        "award_or_record",
+        "wcws_or_championship"
+      ],
+      "display_name": "Korbe Otis",
+      "expected_college_role": "hitter",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "1102",
+      "reason": "Louisville-to-Florida hitter with final-season official totals.",
+      "roster_status": "Active",
+      "team_code": "PDX"
+    },
+    {
+      "coverage_categories": [
+        "early_career",
+        "multi_school",
+        "hitter",
+        "pitcher",
+        "two_way",
+        "incomplete_or_conflicting"
+      ],
+      "display_name": "Ailana Agbayani",
+      "expected_college_role": "two_way",
+      "expected_evidence_issue": "College pitching scope intentionally incomplete; producer review required.",
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "1322",
+      "reason": "BYU-to-Oklahoma two-way history; pitching career scope intentionally remains incomplete.",
+      "roster_status": "Active",
+      "team_code": "CHI"
+    },
+    {
+      "coverage_categories": [
+        "single_school",
+        "hitter",
+        "award_or_record"
+      ],
+      "display_name": "Kayla Kowalik",
+      "expected_college_role": "hitter",
+      "expected_evidence_issue": null,
+      "initial_identity_source_id": "ausl-roster-2026",
+      "player_id": "933",
+      "reason": "Kentucky hitter and program record holder.",
+      "roster_status": "Injured - Temporary",
+      "team_code": "CAR"
+    }
+  ],
+  "pilot_id": "phase7c-ten-player-pilot-v1",
+  "schema_name": "ausl-college-pilot-manifest",
+  "schema_version": 1
+}

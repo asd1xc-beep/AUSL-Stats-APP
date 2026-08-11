@@ -1205,9 +1205,17 @@ class SessionStore:
     def _quarantine_copy(self, source: Path, data: bytes) -> Path:
         self._ensure_directory()
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        destination = self.directory / f"producer_session.corrupt-{stamp}.json"
-        self._write_exclusive(destination, data)
-        return destination
+        for collision_index in range(1_000):
+            suffix = "" if collision_index == 0 else f"-{collision_index}"
+            destination = self.directory / (
+                f"producer_session.corrupt-{stamp}{suffix}.json"
+            )
+            try:
+                self._write_exclusive(destination, data)
+            except FileExistsError:
+                continue
+            return destination
+        raise OSError("Unable to allocate a unique corrupt-session quarantine file")
 
     def _read_valid(
         self, path: Path
