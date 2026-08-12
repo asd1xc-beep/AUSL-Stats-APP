@@ -48,6 +48,8 @@ def test_interim_acceptance_record_is_honest_about_phase_boundary():
     text = (GUIDE / "Phase_7E_Acceptance_Record.md").read_text(encoding="utf-8")
     assert "930217d55cb562a6c18cfa9642c7f0c6858d1d97" in text
     assert "985 passed" in text
+    assert "1013 passed" in text
+    assert "57cf838cb618317a4902462aaf1effa6c216fa7143499d04cbd4042168494c72" in text
     assert PENDING in text
     assert "Connection engine: not started" in text
     assert "Phase 7 complete" not in text
