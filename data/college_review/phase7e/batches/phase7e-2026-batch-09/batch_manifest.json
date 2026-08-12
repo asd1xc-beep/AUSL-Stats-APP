@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-09",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Peja Goold",
+      "player_id": "1321"
+    },
+    {
+      "display_name": "Amari Harper",
+      "player_id": "1323"
+    },
+    {
+      "display_name": "Reese Atwood",
+      "player_id": "1325"
+    },
+    {
+      "display_name": "Leighann Goode",
+      "player_id": "1326"
+    },
+    {
+      "display_name": "Megan Grant",
+      "player_id": "1328"
+    },
+    {
+      "display_name": "Taylor Tinsley",
+      "player_id": "1329"
+    },
+    {
+      "display_name": "Jordan Woolery",
+      "player_id": "1330"
+    },
+    {
+      "display_name": "Taryn Kern",
+      "player_id": "1331"
+    },
+    {
+      "display_name": "Kaiah Altmeyer",
+      "player_id": "1332"
+    },
+    {
+      "display_name": "Sydney Berzon",
+      "player_id": "1334"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}

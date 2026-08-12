@@ -57,7 +57,7 @@ that Windows display scaling passed at 100%, 125%, and 150%, closing the Phase
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
+Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
 
 ## Approved next roadmap
 
@@ -74,7 +74,7 @@ be reused by the college layer.
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Complete |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
 | 6 | Phase 7D | Add the separate College Résumé tab | Accepted; owner-reported 100%/125%/150% scaling passed 2026-08-12 |
-| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Authorized; implementation in progress |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | 7E-A complete; 11-batch project-owner review pending |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -571,6 +571,23 @@ Project-owner scaling report: passed at 100%, 125%, and 150% on 2026-08-12.
 No unsupplied package, hardware, or interaction detail is inferred.
 
 **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
+
+### Phase 7E-A — Current-roster coverage and bounded import
+
+- Starting remote `main`: `930217d55cb562a6c18cfa9642c7f0c6858d1d97`.
+- Clean baseline: 985 offline tests passed with warnings treated as errors.
+- All 118 exact IDs in the canonical 2026 roster are accounted for.
+- The ten Phase 7D résumés remain approved: nine Verified and one Partial.
+- The remaining 108 exact IDs are in 11 deterministic developer-review
+  batches. No name fallback, generated approval, absent statistic, transfer,
+  season, role, award, WCWS, championship, or connection claim was added.
+- Review artifacts remain outside startup, refresh, facts, core, and
+  approved-enrichment distributions.
+- Project-owner batch decisions are required before Phase 7E-B begins.
+
+Detailed review instructions: `Phase_7E_Review_Packet.md`.
+
+**FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
 
 ### Phase 7B — College data foundation
 

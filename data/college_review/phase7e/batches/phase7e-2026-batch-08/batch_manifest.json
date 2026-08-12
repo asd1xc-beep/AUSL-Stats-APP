@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-08",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Jessica Mullins",
+      "player_id": "1286"
+    },
+    {
+      "display_name": "Kyleigh Sand",
+      "player_id": "1295"
+    },
+    {
+      "display_name": "Jala Wright",
+      "player_id": "1308"
+    },
+    {
+      "display_name": "Dallas Escobedo Magee",
+      "player_id": "1311"
+    },
+    {
+      "display_name": "Sydney Stewart",
+      "player_id": "1315"
+    },
+    {
+      "display_name": "Kenzie Brown",
+      "player_id": "1316"
+    },
+    {
+      "display_name": "Dakota Kennedy",
+      "player_id": "1317"
+    },
+    {
+      "display_name": "Maya Johnson",
+      "player_id": "1318"
+    },
+    {
+      "display_name": "Kenleigh Cahalan",
+      "player_id": "1319"
+    },
+    {
+      "display_name": "Jocelyn Erickson",
+      "player_id": "1320"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}

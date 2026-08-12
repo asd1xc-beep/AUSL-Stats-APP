@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-05",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Lexi Kilfoyl",
+      "player_id": "949"
+    },
+    {
+      "display_name": "Sharlize Palacios",
+      "player_id": "951"
+    },
+    {
+      "display_name": "Skylar Wallace",
+      "player_id": "1000"
+    },
+    {
+      "display_name": "Carley Hoover",
+      "player_id": "1065"
+    },
+    {
+      "display_name": "Bella Dayton",
+      "player_id": "1082"
+    },
+    {
+      "display_name": "Alana Vawter",
+      "player_id": "1086"
+    },
+    {
+      "display_name": "Kelly Torres",
+      "player_id": "1087"
+    },
+    {
+      "display_name": "Maya Brady",
+      "player_id": "1092"
+    },
+    {
+      "display_name": "Mariah Lopez",
+      "player_id": "1095"
+    },
+    {
+      "display_name": "Devyn Netz",
+      "player_id": "1098"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}
