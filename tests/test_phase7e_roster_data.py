@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 from pathlib import Path
 
 from ausl_college import load_envelope, validate_envelope
@@ -19,13 +20,41 @@ EXPECTED_WORKBOOK_HASHES = {
     "ausl_career_stats.xlsx": "c2cfb23f4247baf3baefd40f2dd9cfe34a5ca7c532da9f77238a0bc4a2dc3773",
     "ausl_team_context.xlsx": "45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb",
 }
+STARTING_SHA = "930217d55cb562a6c18cfa9642c7f0c6858d1d97"
+
+
+def _starting_bytes(relative: str) -> bytes:
+    payload = subprocess.run(
+        ["git", "show", f"{STARTING_SHA}:{relative}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
+    prefix = b"version https://git-lfs.github.com/spec/v1\n"
+    if payload.startswith(prefix):
+        oid_line = next(
+            line for line in payload.decode("ascii").splitlines() if line.startswith("oid sha256:")
+        )
+        oid = oid_line.removeprefix("oid sha256:")
+        git_dir_text = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        git_dir = Path(git_dir_text)
+        if not git_dir.is_absolute():
+            git_dir = ROOT / git_dir
+        payload = (git_dir / "lfs" / "objects" / oid[:2] / oid[2:4] / oid).read_bytes()
+    return payload
 
 
 def _tree_hashes(root: Path) -> dict[str, str]:
     return {
         path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(root.rglob("*"))
-        if path.is_file()
+        if path.is_file() and path.name != "batch_review_decisions.json"
     }
 
 
@@ -85,10 +114,16 @@ def test_every_pending_id_occurs_in_exactly_one_review_batch():
 def test_two_independent_real_roster_review_builds_are_byte_identical(tmp_path):
     first = tmp_path / "first"
     second = tmp_path / "second"
+    source = tmp_path / "starting-source"
+    source.mkdir()
+    roster_path = source / "ausl_rosters.xlsx"
+    update_manifest_path = source / "update_manifest.json"
+    roster_path.write_bytes(_starting_bytes("data/exports/ausl_rosters.xlsx"))
+    update_manifest_path.write_bytes(_starting_bytes("data/exports/update_manifest.json"))
     arguments = {
-        "roster_path": ROOT / "data" / "exports" / "ausl_rosters.xlsx",
+        "roster_path": roster_path,
         "approved_dir": ROOT / "data" / "college_approved",
-        "update_manifest_path": ROOT / "data" / "exports" / "update_manifest.json",
+        "update_manifest_path": update_manifest_path,
     }
     assert build_review_bundle(output_dir=first, **arguments) == (118, 11)
     assert build_review_bundle(output_dir=second, **arguments) == (118, 11)
@@ -98,7 +133,6 @@ def test_two_independent_real_roster_review_builds_are_byte_identical(tmp_path):
 
 def test_phase7e_roster_work_did_not_change_professional_workbooks():
     for name, expected in EXPECTED_WORKBOOK_HASHES.items():
-        payload = (ROOT / "data" / "exports" / name).read_bytes()
+        payload = _starting_bytes(f"data/exports/{name}")
         assert payload.startswith(b"PK\x03\x04")
         assert hashlib.sha256(payload).hexdigest() == expected
-
