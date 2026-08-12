@@ -87,6 +87,9 @@ Phases 7A and 7B are complete. The project owner accepted the ten-player Phase
 producer review. The project owner reported on 2026-08-12 that Phase 7D passed
 Windows scaling at 100%, 125%, and 150%. Phase 7D is accepted and Phase 7E is
 authorized.
+Phase 7D implementation is complete and its later manual scaling gate is now
+accepted; this sentence preserves the earlier implementation milestone while
+the status below records the current gate.
 
 Phase 7E-A now accounts for all 118 exact IDs in the checked-in 2026 roster.
 The ten Phase 7D players remain the only approved résumés; 108 developer-review
@@ -912,6 +915,8 @@ Implementation status (2026-07-29): complete on
 `Phase_7A_Acceptance_Record.md`. Phase 7B is accepted in
 `Phase_7B_Acceptance_Record.md`; Phase 7C's developer-review technical pilot
 is complete, producer review is pending, and Phase 7D remains not started.
+Historical boundary at that checkpoint: Phase 7E has not started. The current
+Phase 7E status is recorded in the roadmap and next-work sections below.
 
 `src/ausl_enrichment.py` defines the typed CORE_ONLY, PRODUCER_APPROVED, and
 DEVELOPER_REVIEW modes and the defensive row gates. Ordinary startup and

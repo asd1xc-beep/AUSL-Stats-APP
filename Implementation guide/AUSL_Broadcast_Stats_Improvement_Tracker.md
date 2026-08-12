@@ -53,6 +53,8 @@ not represented as a personal AUSL producer review. Phase 7D adds the separate
 approved College Résumé workflow. The project owner reported on 2026-08-12
 that Windows display scaling passed at 100%, 125%, and 150%, closing the Phase
 7D acceptance gate and authorizing Phase 7E.
+Historical implementation milestone: **PHASE 7D IMPLEMENTATION COMPLETE**;
+the later owner scaling report advanced that milestone to accepted.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
