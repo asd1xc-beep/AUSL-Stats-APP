@@ -72,9 +72,16 @@ Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
   **62 passed**.
 - Connection model and checked-in candidate data: **10 passed**.
 - Clean pre-approval checkpoint suite: **1013 passed in 74.00 seconds**.
+- Clean connection-review checkpoint suite with warnings treated as errors:
+  **1032 passed in 22.03 seconds**.
 - `compileall` passed and `pip check` reported no broken requirements at that
-  checkpoint.
+  checkpoint and at the connection-review checkpoint.
 - Checked-in core distribution verification passed.
+- Two independent connection builds produced byte-identical candidate JSON,
+  SHA-256
+  `e30d4cfa354eb13248871f1cc034a283d46a1f9a59e2f33e5f825b2fb8770c14`,
+  and byte-identical review packets, SHA-256
+  `802c0d7aa953eafae7c993ced32133f8664f2ac9e38ca1eb3e4374e7fc8e651f`.
 - Two independently staged approved-enrichment distributions verified and
   produced byte-identical ZIPs, SHA-256
   `57cf838cb618317a4902462aaf1effa6c216fa7143499d04cbd4042168494c72`.
