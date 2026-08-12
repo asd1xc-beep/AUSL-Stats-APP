@@ -55,31 +55,74 @@ pinned and installed through constraints.txt so a build cannot silently take
 newer package versions.
 
 START
-If you are using the shared ZIP version, unzip the folder and double-click:
+If you are using the portable ZIP version, unblock and unzip the folder, then
+double-click:
+  Start AUSL Broadcast Stats.bat
+
+If you are using the PyInstaller ZIP version, unzip the folder and
+double-click:
   AUSL Broadcast Stats.exe
 
 If you are working from this project/source folder, use:
   Launch AUSL Stats App.bat
 
 SHARING / WINDOWS DEFENDER NOTE
-The build script creates two shareable ZIP files:
+There are three shareable packages. Pick by what the recipient can be asked
+to do:
+
+  dist\AUSL-Broadcast-Stats-Portable-Windows.zip     <- recommended for sharing
+    Built by "Build Portable AUSL App.bat". Carries its own copy of CPython,
+    so the recipient installs nothing and needs no network access. Nothing in
+    it is compiled locally: every binary comes from the official python.org
+    embeddable release and from the pinned dependency wheels, so there is no
+    unsigned, newly built executable for Defender to score as unknown. That is
+    the pattern that gets auto-quarantined, not the presence of an .exe.
+    About 30 MB compressed, roughly 90 MB extracted.
 
   dist\AUSL-Broadcast-Stats-Windows.zip
-    Standard packaged Windows app. This includes an unsigned .exe, so some
-    computers may warn that the publisher is unknown.
+    PyInstaller build. One self-contained .exe tree, but the bootloader is
+    freshly compiled and unsigned, so it has no SmartScreen reputation and is
+    the build most likely to be quarantined on download.
 
   dist\AUSL-Broadcast-Stats-Safer-No-EXE.zip
-    Lower-risk package without a bundled .exe. On another computer, unzip it,
-    run "Setup AUSL Environment.bat" once, then run "Launch AUSL Stats App.bat."
-    This version is less convenient but is usually less likely to be
-    auto-quarantined because it avoids the unsigned bundled executable pattern.
+    Sources only. Smallest download, but the recipient must already have
+    Python 3.12, run "Setup AUSL Environment.bat" once, and be online while
+    pip installs.
 
 The packaged .exe build disables UPX packing and uses an uncompressed ZIP to
-reduce false-positive antivirus heuristics. Code signing is still the best
-long-term way to reduce unknown-publisher warnings.
+reduce false-positive antivirus heuristics. The portable build uses deflate
+instead, because an uncompressed 90 MB archive is impractical to send and a
+plain deflate ZIP is still scannable by every mail and endpoint scanner.
+Code signing is still the only way to remove unknown-publisher warnings
+outright.
 
-Both build paths run tools\verify_distribution.py before and after compression
-and write a portable SHA-256 file beside each ZIP. Verify a ZIP with:
+SENDING THE PORTABLE PACKAGE
+It cannot go out as an email attachment. Gmail and most corporate mail
+gateways reject archives containing python.exe regardless of the archive
+extension, and the package is over the 25 MB attachment limit anyway. Upload
+it to Drive/OneDrive/Dropbox and send the link, or attach it to a GitHub
+release. Do not rename the extension or password-protect the ZIP to slip it
+past a scanner: that trips spam heuristics and makes the download look worse,
+not better.
+
+Paste the contents of the .sha256.txt file into the email body so the
+recipient can confirm the download with:
+  Get-FileHash -Algorithm SHA256 "path\to\package.zip"
+
+Tell the recipient to right-click the downloaded ZIP, choose Properties, tick
+"Unblock", and only then extract it. That clears the mark-of-the-web from
+every extracted file at once. Extracting first instead propagates the mark to
+each file and produces a SmartScreen prompt on the launcher.
+
+The bundled runtime is pinned by SHA-256 in tools\embedded_runtime_pins.json.
+The first build of a given Python version stops and prints the hash it
+downloaded; compare it against the checksum published on python.org, then
+re-run with -AcceptRuntimeHash to record it and commit the result. Later
+builds fail closed if the download ever changes.
+
+All three build paths run tools\verify_distribution.py before and after
+compression and write a portable SHA-256 file beside each ZIP. Verify a ZIP
+with:
   Get-FileHash -Algorithm SHA256 "path\to\package.zip"
 The result must match the first value in package.zip.sha256.txt.
 ZIP members use portable POSIX-style paths so the same archive extracts into

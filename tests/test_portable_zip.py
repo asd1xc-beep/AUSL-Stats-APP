@@ -40,6 +40,7 @@ def test_build_scripts_use_cross_platform_zip_writer():
     for filename in (
         "Build Safer No-EXE AUSL App.ps1",
         "Build Shareable AUSL App.ps1",
+        "Build Portable AUSL App.ps1",
     ):
         script = (root / filename).read_text(encoding="utf-8")
         assert "tools\\create_portable_zip.py" in script
