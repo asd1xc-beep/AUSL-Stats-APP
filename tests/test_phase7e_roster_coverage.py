@@ -28,7 +28,13 @@ STARTING_SHA = "930217d55cb562a6c18cfa9642c7f0c6858d1d97"
 
 def _starting_workbook(relative: str) -> bytes:
     payload = subprocess.run(
-        ["git", "show", f"{STARTING_SHA}:{relative}"],
+        [
+            "git",
+            "-c",
+            f"safe.directory={ROOT}",
+            "show",
+            f"{STARTING_SHA}:{relative}",
+        ],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -42,7 +48,13 @@ def _starting_workbook(relative: str) -> bytes:
         oid = oid_line.removeprefix("oid sha256:")
         git_dir = Path(
             subprocess.run(
-                ["git", "rev-parse", "--git-dir"],
+                [
+                    "git",
+                    "-c",
+                    f"safe.directory={ROOT}",
+                    "rev-parse",
+                    "--git-dir",
+                ],
                 cwd=ROOT,
                 check=True,
                 capture_output=True,
