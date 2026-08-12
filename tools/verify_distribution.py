@@ -40,6 +40,7 @@ _FORBIDDEN_SEGMENTS = {
     "cache": "cache directory",
     "caches": "cache directory",
     "credentials": "credential directory",
+    "college_review": "developer-review college data",
     "log": "application log directory",
     "logs": "application log directory",
     "secrets": "secret-data directory",
@@ -55,6 +56,12 @@ _FORBIDDEN_NAMES = {
     "pilot_envelope.json": "developer-review college pilot",
     "pilot_manifest.json": "developer-review college pilot manifest",
     "review_staging.json": "developer-review college staging data",
+    "developer_review_envelope.json": "developer-review college envelope",
+    "batch_manifest.json": "developer-review college batch manifest",
+    "phase7e_batch_manifest.json": "developer-review college batch manifest",
+    "roster_coverage_manifest.json": "developer-review roster coverage",
+    "review_packet.md": "developer-review packet",
+    "phase7e_connection_review_packet.md": "developer-review connection packet",
 }
 _UNVERIFIED_ENRICHMENT_NAMES = {
     "ausl_batting_splits.xlsx",
