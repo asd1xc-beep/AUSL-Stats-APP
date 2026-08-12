@@ -5,7 +5,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
+
+# Build scripts run this file by path, which puts tools/ on sys.path instead of
+# the project root, so the tools package has to be made importable first.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools.generate_distribution_manifest import _write_json_lf
 
