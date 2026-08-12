@@ -59,7 +59,7 @@ the later owner scaling report advanced that milestone to accepted.
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
 
 ## Approved next roadmap
 
@@ -76,7 +76,7 @@ be reused by the college layer.
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Complete |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
 | 6 | Phase 7D | Add the separate College Résumé tab | Accepted; owner-reported 100%/125%/150% scaling passed 2026-08-12 |
-| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | 7E-A complete; 11-batch project-owner review pending |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | 11 batches approved; 8 connection candidates pending exact-wording review |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -501,7 +501,7 @@ The college layer must remain visually and statistically separate from AUSL prof
   - The pilot target is a verified useful résumé, not forced completeness for
     every season and field.
 
-- [ ] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · PLANNED — PHASE 7E**
+- [ ] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · CONNECTION ENGINE COMPLETE — PROJECT-OWNER WORDING REVIEW PENDING**
   - Former teammates, conference rivals, champions, homecomings, coaches, and role changes.
 
 - [ ] `COLLEGE-008` — Consider complete season-by-season college statistics only after the pilot proves useful. **P3 · DEFERRED — PRODUCER DECISION AFTER PHASE 7D**
@@ -580,16 +580,21 @@ No unsupplied package, hardware, or interaction detail is inferred.
 - Clean baseline: 985 offline tests passed with warnings treated as errors.
 - All 118 exact IDs in the canonical 2026 roster are accounted for.
 - The ten Phase 7D résumés remain approved: nine Verified and one Partial.
-- The remaining 108 exact IDs are in 11 deterministic developer-review
-  batches. No name fallback, generated approval, absent statistic, transfer,
-  season, role, award, WCWS, championship, or connection claim was added.
+- The remaining 108 exact IDs were reviewed in 11 deterministic batches. On
+  2026-08-12, the project owner approved Batch 01 through Batch 11 after
+  reporting no mistakes, clear unavailable labels, and matching schools.
+- The full approved aggregate is 9 Verified and 109 Partial. No name fallback,
+  absent statistic, season, role, award, WCWS, championship, or connection
+  approval was generated.
 - Review artifacts remain outside startup, refresh, facts, core, and
   approved-enrichment distributions.
-- Project-owner batch decisions are required before Phase 7E-B begins.
+- Phase 7E-B generated eight review-only connection candidates and 244 exact
+  suppression records. Connection wording review is still required before
+  any producer integration.
 
 Detailed review instructions: `Phase_7E_Review_Packet.md`.
 
-**FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
 
 ### Phase 7B — College data foundation
 

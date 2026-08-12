@@ -54,7 +54,9 @@ def _tree_hashes(root: Path) -> dict[str, str]:
     return {
         path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(root.rglob("*"))
-        if path.is_file() and path.name != "batch_review_decisions.json"
+        if path.is_file()
+        and path.name != "batch_review_decisions.json"
+        and path.relative_to(root).parts[0] != "connections"
     }
 
 

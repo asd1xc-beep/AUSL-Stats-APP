@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +23,38 @@ from ausl_college_scale import (
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+STARTING_SHA = "930217d55cb562a6c18cfa9642c7f0c6858d1d97"
+
+
+def _starting_workbook(relative: str) -> bytes:
+    payload = subprocess.run(
+        ["git", "show", f"{STARTING_SHA}:{relative}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
+    if payload.startswith(b"version https://git-lfs.github.com/spec/v1\n"):
+        oid_line = next(
+            line
+            for line in payload.decode("ascii").splitlines()
+            if line.startswith("oid sha256:")
+        )
+        oid = oid_line.removeprefix("oid sha256:")
+        git_dir = Path(
+            subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        if not git_dir.is_absolute():
+            git_dir = ROOT / git_dir
+        payload = (
+            git_dir / "lfs" / "objects" / oid[:2] / oid[2:4] / oid
+        ).read_bytes()
+    return payload
 
 
 def _roster(*rows):
@@ -40,7 +74,7 @@ def _roster(*rows):
 
 def test_current_roster_manifest_accounts_for_every_exact_id_and_status():
     roster = pd.read_excel(
-        ROOT / "data" / "exports" / "ausl_rosters.xlsx",
+        io.BytesIO(_starting_workbook("data/exports/ausl_rosters.xlsx")),
         sheet_name="roster_2026",
     )
     approved = load_checked_in_approval(ROOT / "data" / "college_approved")
@@ -167,4 +201,3 @@ def test_pending_players_are_batched_deterministically_with_safe_limits():
         tuple(str(i) for i in range(10, 20)),
         tuple(str(i) for i in range(20, 25)),
     ]
-

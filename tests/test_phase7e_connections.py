@@ -268,4 +268,3 @@ def test_serialization_is_deterministic_and_rejects_approval_shortcuts():
 def test_connection_model_rejects_independently_editable_air_ready_state():
     fields = CollegeConnectionCandidate.__dataclass_fields__
     assert "air_ready" not in fields
-

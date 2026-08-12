@@ -1,73 +1,79 @@
-# Phase 7E Full-Roster Batch Review Packet
+# Phase 7E Full-Roster and Connection Review Packet
 
-Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
 
-## What is ready for review
+## Project-owner batch decision
 
-The checked-in 2026 canonical roster contains 118 distinct exact AUSL player
-IDs. The ten Phase 7D players remain the only approved producer résumés: nine
-are Verified and one is Partial. The other 108 players are now accounted for
-in eleven deterministic developer-review batches of eight to ten players.
+On 2026-08-12, the project owner returned an explicit decision for every
+bounded full-roster review batch:
 
-For those 108 players, this checkpoint imports only the official AUSL roster
-identity and compact college-school field. It does not claim attendance years,
-transfer chronology, roles, statistics, awards, WCWS participation, or
-championships. No new batch has producer approval, and no batch is loaded by
-ordinary startup, refresh, Local/Offline Mode, or a producer distribution.
+- Batch 01 — Approved
+- Batch 02 — Approved
+- Batch 03 — Approved
+- Batch 04 — Approved
+- Batch 05 — Approved
+- Batch 06 — Approved
+- Batch 07 — Approved
+- Batch 08 — Approved
+- Batch 09 — Approved
+- Batch 10 — Approved
+- Batch 11 — Approved
 
-This project-owner review is not represented as a personal AUSL producer review.
+Owner-supplied review note: **No mistakes were found; unavailable information
+was clearly labeled unavailable; and all displayed schools matched.**
 
-## Files to inspect
+This is recorded as project-owner review, not as personal AUSL producer review.
+The approval is bound to the exact batch manifest and envelope hashes in
+`data/college_review/phase7e/batch_review_decisions.json`. It approves only the
+reviewed minimal school-identity résumé scope for each exact AUSL ID. It does
+not approve absent
+seasons, statistics, achievements, roles, or newly generated connections.
 
-Start with:
+## Approved aggregate
 
-- `Implementation guide/Phase_7E_Roster_Coverage_Report.md`
-- `data/college_review/phase7e/roster_coverage_manifest.json`
+- Batch decisions: 11 approved, 0 rejected, 0 corrections requested.
+- Exact roster IDs: 118.
+- Approved review batches: 11.
+- Completeness after review: 9 Verified, 109 Partial, 0 Needs Review.
+- Missing values remain unavailable; no missing value was converted to zero.
+- Aggregate envelope SHA-256:
+  `fbd95eb5173aa50f0e33819907bc74309aaa631b005e7682bd57eb5ffd4b0bfc`.
+- Aggregate approval manifest SHA-256:
+  `d02a63cfc45190590cb7fb8ee66972a09efd697e1ddace591319511a3e4ce081`.
 
-Then inspect each directory under:
+The approved artifacts are in `data/college_approved_batches/phase7e` and
+`data/college_approved_phase7e`. They remain outside ordinary startup,
+refresh, facts, and producer distributions at this checkpoint.
 
-- `data/college_review/phase7e/batches`
+The original review inputs remain available under
+`data/college_review/phase7e/batches`. Every batch retains its exact
+`batch_manifest.json`, `developer_review_envelope.json`, and `review_packet.md`.
 
-Every batch contains:
+## Connection candidates now ready for review
 
-- `batch_manifest.json` — the exact AUSL ID and name set;
-- `developer_review_envelope.json` — the accepted Phase 7B schema with source
-  provenance and no approval fields;
-- `review_packet.md` — the human-readable player-by-player checklist.
+The separate deterministic connection engine produced eight candidates and
+244 exact suppression records. Its review files are:
 
-## Review checklist
+- `data/college_review/phase7e/connections/connection_review_packet.md`
+- `data/college_review/phase7e/connections/connection_candidates.json`
 
-For each batch:
+The human-readable packet lists every candidate's stable ID, exact wording,
+player IDs, program and season scope, evidence version, source records, and
+source references. The JSON contains the complete suppression ledger. Of the
+244 suppressed relationships, 243 lack exact season scope and one has
+overlapping attendance that does not independently prove a teammate
+relationship.
 
-1. Confirm that every exact AUSL ID resolves to the displayed current roster
-   player. A familiar name is not enough.
-2. Confirm that the compact school/program value belongs to that exact player.
-3. Flag spelling, renamed-program, transfer, multi-school, two-way, or identity
-   concerns. Do not infer missing seasons or transfers.
-4. Confirm that missing attendance years, statistics, achievements, and event
-   history remain visibly unavailable.
-5. Do not approve a batch if any exact identity or school value is uncertain.
-6. Do not approve absent statistics, achievements, roles, or connection
-   wording; none is proposed by this checkpoint.
-7. Report a decision for each exact batch ID: approved as a minimal Partial
-   résumé, rejected, or corrections required.
+No connection has project-owner approval. The eight candidates **must not enter producer-facing use**
+until the project owner approves, rejects, or corrects
+each exact connection ID and wording. Approval of Batch 01 through Batch 11
+does not satisfy this separate gate.
 
-## Current aggregate
+## Current gate
 
-- Current roster scope: 118 exact IDs.
-- Existing approved résumés: 9 Verified and 1 Partial.
-- New developer-review résumés: 108 Needs Review.
-- Review batches: 11.
-- Duplicate IDs: 0.
-- Missing roster coverage: 0.
-- Exact identity remaps by name: 0.
-- New human approvals: 0.
-- New connection candidates: 0.
+Review the connection packet and return a decision for each of its eight
+stable IDs. Until that happens, `COLLEGE-007` remains incomplete, the
+connections are not loaded by the app, and final Phase 7E integration must not
+begin.
 
-## Gate to continue
-
-Phase 7E-B, the college connection model and engine, must not begin until the
-project owner returns explicit decisions for the eleven batch IDs. Corrections
-will be applied as new evidence; an approval will bind the exact batch bytes,
-player-ID set, source IDs, deliberately incomplete fields, reviewer role, and
-review date. Automated validation cannot substitute for this decision.
+**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**

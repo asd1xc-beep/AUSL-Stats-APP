@@ -1,6 +1,6 @@
 # Phase 7E Interim Acceptance Record
 
-Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
 
 ## Starting gate and baseline
 
@@ -12,34 +12,54 @@ Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
   test passed at 100%, 125%, and 150%.
 - Phase 7D status: **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**.
 
-## Completed checkpoint: 7E-A roster coverage and bounded import
+## Completed checkpoint: 7E-A roster coverage and approval
 
-- Current season derives from the canonical configured season set and resolves
-  to 2026 for this snapshot.
-- The canonical roster contains 118 unique exact AUSL IDs: 96 Active, 18
-  Reserve Pool, and 4 Injured - Temporary.
-- Existing approved coverage remains nine Verified résumés and one reviewed
+- The checked-in 2026 canonical roster contains 118 unique exact AUSL IDs.
+- The existing ten-player Phase 7D cohort remains nine Verified and one
   Partial résumé.
-- The remaining 108 exact IDs are represented in eleven deterministic
-  developer-review batches. Each uses the Phase 7B schema directly.
-- New evidence is deliberately limited to the official AUSL roster identity
-  and compact school field. Missing seasons, transfer history, statistics,
-  roles, awards, WCWS, and championship details remain unavailable.
-- Every batch is deterministic, idempotent, bounded to at most ten players in
-  this build, atomically promoted, and last-known-good preserving.
-- Review-only artifacts are rejected by distribution verification and remain
-  unreachable from startup, refresh, facts, and the approved college store.
-- Professional AUSL workbook bytes remain unchanged from the starting commit.
+- The other 108 exact IDs were imported in eleven deterministic,
+  developer-review batches using the Phase 7B schema directly.
+- On 2026-08-12, the project owner explicitly approved Batch 01 through Batch
+  11 after reporting no mistakes, clear unavailable labels, and matching
+  schools.
+- Commit `f2d8c801458a48d426d1c20e6d9da11b40457577` records the tamper-evident
+  batch decisions and full-roster aggregate.
+- The approved aggregate contains 118 exact IDs: 9 Verified, 109 Partial, and
+  0 Needs Review. The additional 108 remain Partial because school identity
+  review did not create absent seasons, statistics, achievements, or roles.
+- Aggregate envelope SHA-256:
+  `fbd95eb5173aa50f0e33819907bc74309aaa631b005e7682bd57eb5ffd4b0bfc`.
+- Aggregate approval manifest SHA-256:
+  `d02a63cfc45190590cb7fb8ee66972a09efd697e1ddace591319511a3e4ce081`.
+- This is project-owner review, not a claim of personal AUSL producer review.
+
+## Completed checkpoint: 7E-B review-only connection engine
+
+- Commit `6e4c4691253712ea6f54a833f62eefdeb24f067d` adds the typed, deterministic,
+  network-free connection engine and review artifacts.
+- Stable connection IDs are separate from evidence-version hashes.
+- The engine emitted exactly eight review candidates: four transfers, two
+  non-overlapping shared-program connections, one championship-teammate
+  connection, and one shared-award connection.
+- It emitted 244 exact suppression records: 243 for unavailable attendance
+  seasons and one because overlapping school attendance does not prove a
+  teammate relationship.
+- Missing season, unverified source, ambiguous identity, Needs Review
+  completeness, and insufficient relationship evidence fail closed.
+- No connection has project-owner approval, producer eligibility, UI loading,
+  fact conversion, or distribution inclusion.
 
 ## Failing-first evidence
 
-- The roster and batch tests first failed collection twice because
+- The original roster and batch tests failed collection because
   `ausl_college_scale` did not exist.
 - Four distribution regressions then failed because Phase 7E review paths and
   filenames were not yet rejected by the package privacy verifier.
-- The implementation added the narrow module, explicit offline build tool,
-  deterministic artifacts, and fail-closed allowlist protections required to
-  make those tests pass.
+- The connection test pair failed collection because
+  `ausl_college_connections` did not exist; after implementation it passed all
+  ten focused checks.
+- Four updated documentation checks failed against the obsolete batch-pending
+  state before the living documents and connection specification were updated.
 
 ## Verification so far
 
@@ -47,10 +67,13 @@ Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
 - Roster coverage and batch import: **13 passed**.
 - Coverage/import/distribution/build-privacy/Phase 7D distribution matrix:
   **55 passed**.
-- Deterministic checked-in build: 118 players, 11 batches, 35 files.
-- Clean checkpoint suite with warnings treated as errors: **1013 passed in
-  74.00 seconds**.
-- `compileall` passed and `pip check` reported no broken requirements.
+- Batch approval focused tests: **8 passed**.
+- Batch approval plus Phase 7B schema/provenance/approval/real-data tests:
+  **62 passed**.
+- Connection model and checked-in candidate data: **10 passed**.
+- Clean pre-approval checkpoint suite: **1013 passed in 74.00 seconds**.
+- `compileall` passed and `pip check` reported no broken requirements at that
+  checkpoint.
 - Checked-in core distribution verification passed.
 - Two independently staged approved-enrichment distributions verified and
   produced byte-identical ZIPs, SHA-256
@@ -58,18 +81,18 @@ Status: **FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
   They contain only the existing ten-player approved college envelope and
   manifest; no Phase 7E review artifact is present.
 
-## Human gate and remaining Phase 7E boundary
+## Current human gate and remaining Phase 7E boundary
 
-- Human batch review: pending for all eleven new batches.
-- New batch approval: absent.
-- Connection engine: not started.
-- Connection wording review and approval: not started.
+- Human batch review: complete for all eleven batches.
+- Full-roster aggregate approval: complete for the exact reviewed scope.
+- Connection engine: complete.
+- Connection wording review and approval: pending for all 8 candidates.
 - Producer UI, `BroadcastFact`, session, What Changed, and expanded
   approved-enrichment integration: not started.
 - Final Windows scaling pass for expanded Phase 7E content: not started.
 - `COLLEGE-007` remains incomplete and `COLLEGE-008` remains deferred.
 
 Phase 7 is not complete. Continue only after explicit project-owner decisions
-for the batch artifacts listed in `Phase_7E_Review_Packet.md`.
+for the eight candidate IDs in the connection review packet.
 
-**FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**

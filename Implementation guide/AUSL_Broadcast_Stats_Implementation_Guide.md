@@ -92,10 +92,13 @@ accepted; this sentence preserves the earlier implementation milestone while
 the status below records the current gate.
 
 Phase 7E-A now accounts for all 118 exact IDs in the checked-in 2026 roster.
-The ten Phase 7D players remain the only approved résumés; 108 developer-review
-résumés are divided into 11 bounded batches. Their evidence is deliberately
-limited to the official AUSL roster identity and compact school field.
-**FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+On 2026-08-12, the project owner explicitly approved all 11 bounded batches
+after reporting no mistakes, clear unavailable labels, and matching schools.
+The resulting approved aggregate is 9 Verified and 109 Partial; absent fields
+remain unavailable. Phase 7E-B has produced eight deterministic, review-only
+connection candidates with stable identity, evidence hashes, and a complete
+suppression ledger. The connection wording has not been approved.
+**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -1410,12 +1413,16 @@ Phase 7D is accepted on the ten-player reviewed cohort.
 
 **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
 
-Phase 7E-A has produced deterministic coverage for 118 exact roster IDs: 10
-previously approved résumés plus 108 Needs Review résumés across 11 batches.
-The project owner must inspect `Phase_7E_Review_Packet.md` and return an exact
-decision for each batch before Phase 7E-B begins.
+Phase 7E-A produced deterministic coverage for 118 exact roster IDs and the
+project owner approved all 11 bounded batches on 2026-08-12. The aggregate now
+contains 9 Verified and 109 Partial résumés. Phase 7E-B generated eight
+evidence-backed connection candidates, but none has connection approval. The
+project owner must inspect
+`data/college_review/phase7e/connections/connection_review_packet.md` and
+return an exact decision for each stable ID and wording before app, fact,
+session, What Changed, or distribution integration begins.
 
-**FULL-ROSTER COLLEGE IMPORT COMPLETE — BATCH REVIEW PENDING**
+**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College

@@ -45,4 +45,3 @@ def test_connection_packet_is_reviewable_and_does_not_claim_air_readiness():
     assert "Korbe Otis" in text
     assert "Valerie Cagle" in text and "NiJaree Canady" in text
     assert "Suppressed relationship summary" in text
-
