@@ -1,0 +1,5 @@
+{
+  "archives": {},
+  "note": "SHA-256 of each python.org Windows embeddable archive used to build a portable package. Populate an entry once with 'Build Portable AUSL App.bat -AcceptRuntimeHash', then commit it so later builds fail closed on an unexpected download.",
+  "schema_version": 1
+}

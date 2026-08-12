@@ -304,7 +304,11 @@ def test_runtime_build_and_test_dependencies_are_exactly_pinned():
 
 
 def test_build_scripts_are_clean_by_default_and_fail_closed():
-    script_names = ["Build Shareable AUSL App.ps1", "Build Safer No-EXE AUSL App.ps1"]
+    script_names = [
+        "Build Shareable AUSL App.ps1",
+        "Build Safer No-EXE AUSL App.ps1",
+        "Build Portable AUSL App.ps1",
+    ]
     scripts = [(PROJECT_ROOT / name).read_text(encoding="utf-8") for name in script_names]
 
     for script in scripts:
