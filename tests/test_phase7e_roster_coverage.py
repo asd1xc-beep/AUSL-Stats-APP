@@ -53,7 +53,7 @@ def _starting_workbook(relative: str) -> bytes:
                     "-c",
                     f"safe.directory={ROOT}",
                     "rev-parse",
-                    "--git-dir",
+                    "--git-common-dir",
                 ],
                 cwd=ROOT,
                 check=True,
