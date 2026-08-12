@@ -1,12 +1,12 @@
 # AUSL Broadcast Stats — Codex Implementation Guide
 
-Version: 1.3
+Version: 1.4
 
-Roadmap updated: 2026-08-11
+Roadmap updated: 2026-08-12
 
-Prepared from: merged Phase 7C GitHub `main` at
-`5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`, then updated through Phase 7D
-on `agent/phase7d-college-resume-ui`.
+Prepared from: merged Phase 7D and portable-build GitHub `main` at
+`930217d55cb562a6c18cfa9642c7f0c6858d1d97`, then updated for Phase 7E on
+`agent/phase7e-college-scale-connections`.
 
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 
@@ -84,8 +84,9 @@ reported that 100%/125%/150% Windows display scaling, truck-hardware smoke,
 and producer rehearsal passed. The full Phase 6 acceptance record is closed.
 Phases 7A and 7B are complete. The project owner accepted the ten-player Phase
 7C pilot on 2026-08-11 and authorized Phase 7D without claiming personal AUSL
-producer review. Phase 7D implementation is complete; Windows scaling sign-off
-at 100%, 125%, and 150% remains pending. Phase 7E has not started.
+producer review. The project owner reported on 2026-08-12 that Phase 7D passed
+Windows scaling at 100%, 125%, and 150%. Phase 7D is accepted and Phase 7E is
+authorized.
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -1385,15 +1386,18 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-Phase 7D implementation is complete on the ten-player reviewed cohort.
+Phase 7D is accepted on the ten-player reviewed cohort.
 
-1. The project owner performs Windows display-scaling checks at 100%, 125%,
-   and 150% and reports the result.
-2. Keep Phase 7E blocked until that sign-off is recorded.
+1. The project owner reported on 2026-08-12 that Windows display-scaling checks
+   passed at 100%, 125%, and 150%.
+2. Record **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED** without inferring
+   unsupplied hardware, package, interaction, or producer-review details.
 3. Preserve the current exact-ID, field-provenance, approval-hash, incomplete
    field, and college-versus-AUSL separation gates.
-4. If scaling passes, begin Phase 7E with a bounded roster-scaling plan; do not
+4. Begin Phase 7E with a bounded roster-scaling plan; do not
    silently add new résumé values or generated connections.
+
+**PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College

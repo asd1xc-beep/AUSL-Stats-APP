@@ -1,10 +1,10 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
-Project source reviewed through merged Phase 7C GitHub `main` at
-`5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`, then the Phase 7D
-implementation on `agent/phase7d-college-resume-ui`.
+Project source reviewed through merged Phase 7D and portable-build GitHub
+`main` at `930217d55cb562a6c18cfa9642c7f0c6858d1d97`, then Phase 7E on
+`agent/phase7e-college-scale-connections`.
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -49,14 +49,15 @@ the normalized, provenance-first college data foundation. Phase 7C built the
 ten-player developer-review pilot. The project owner reported on 2026-08-11
 that all ten exact players and displayed pilot facts were reviewed, looked
 correct, and Phase 7D was authorized. This is project-owner acceptance; it is
-not represented as a personal AUSL producer review. Phase 7D now adds the
-separate approved College Résumé workflow. Windows display-scaling sign-off is
-still pending, and Phase 7E has not started.
+not represented as a personal AUSL producer review. Phase 7D adds the separate
+approved College Résumé workflow. The project owner reported on 2026-08-12
+that Windows display scaling passed at 100%, 125%, and 150%, closing the Phase
+7D acceptance gate and authorizing Phase 7E.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
+Status: **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
 
 ## Approved next roadmap
 
@@ -72,8 +73,8 @@ be reused by the college layer.
 | 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Complete |
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Complete |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
-| 6 | Phase 7D | Add the separate College Résumé tab | Implementation complete; scaling sign-off pending |
-| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Phase 7D scaling acceptance |
+| 6 | Phase 7D | Add the separate College Résumé tab | Accepted; owner-reported 100%/125%/150% scaling passed 2026-08-12 |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Authorized; implementation in progress |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -475,7 +476,7 @@ The college layer must remain visually and statistically separate from AUSL prof
 - [x] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · COMPLETE — PHASE 7B**
   - Support multiple schools, seasons, transfers, shortened seasons, extra eligibility, and two-way players.
 
-- [x] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · IMPLEMENTATION COMPLETE — PHASE 7D; WINDOWS SCALING SIGN-OFF PENDING**
+- [x] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · FULLY ACCEPTED — PHASE 7D**
   - Sections: Snapshot, Schools/Transfer Timeline, College Career Totals,
     Season-by-Season Summary, Honors/Records, WCWS/Championships, Broadcast
     Connections, and Sources/Completeness.
@@ -566,7 +567,10 @@ Fill in one record when a milestone or major item is completed.
   excluded.
 - Detailed evidence: `Implementation guide/Phase_7D_Acceptance_Record.md`.
 
-**PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
+Project-owner scaling report: passed at 100%, 125%, and 150% on 2026-08-12.
+No unsupplied package, hardware, or interaction detail is inferred.
+
+**PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
 
 ### Phase 7B — College data foundation
 
