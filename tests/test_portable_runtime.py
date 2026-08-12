@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -231,6 +234,39 @@ def test_committed_pin_file_is_a_well_formed_allowlist():
     for name, digest in pins["archives"].items():
         assert name.startswith("python-3.12.") and name.endswith("-embed-amd64.zip")
         assert isinstance(digest, str) and len(digest) == 64
+
+
+BUILD_SCRIPTS = (
+    "Build Portable AUSL App.ps1",
+    "Build Safer No-EXE AUSL App.ps1",
+    "Build Shareable AUSL App.ps1",
+)
+
+
+def test_every_tool_a_build_script_invokes_imports_standalone(tmp_path):
+    """Guard the by-path invocation the build scripts actually use.
+
+    A build script runs each tool as ``python tools\\<name>.py``, which puts
+    tools/ on sys.path instead of the project root, so a module-level
+    ``from tools...`` import fails. In-process tests cannot catch this because
+    pytest inserts the rootdir for them, so the check has to be a subprocess
+    started outside the project directory.
+    """
+
+    referenced: set[str] = set()
+    for name in BUILD_SCRIPTS:
+        script = (ROOT / name).read_text(encoding="utf-8")
+        referenced.update(re.findall(r"tools\\(\w+\.py)", script))
+    assert referenced, "no build script tool invocations were found"
+
+    for tool in sorted(referenced):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / tool), "--help"],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, f"{tool} failed to start:\n{result.stderr}"
 
 
 def test_portable_build_script_keeps_the_fail_closed_packaging_contract():
