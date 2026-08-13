@@ -111,7 +111,6 @@ def test_tampering_or_incomplete_review_contract_fails_closed():
             decision=BATCH_APPROVAL_DECISION,
         )
 
-
 def test_batch_approval_is_deterministic_and_does_not_mutate_review_inputs():
     manifest, envelope, first = _approved_batch()
     _manifest, _envelope, second = _approved_batch()
@@ -172,4 +171,3 @@ def test_aggregate_contains_exact_current_roster_once_and_only_approved_batches(
             reviewer_role="project_owner",
             review_date="2026-08-12",
         )
-

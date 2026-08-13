@@ -60,4 +60,3 @@ def test_aggregate_manifest_hashes_coverage_and_every_batch_approval():
         if directory.is_dir()
     }
     assert set(artifact.manifest.batch_approval_manifest_sha256s) == expected
-

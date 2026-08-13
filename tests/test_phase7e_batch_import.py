@@ -154,7 +154,6 @@ def test_batch_promotion_is_idempotent_and_failure_retains_last_known_good(tmp_p
 
     assert first == second
     assert before == {path.name: path.read_bytes() for path in destination.iterdir()}
-
     def fail_replace(source, target):
         raise OSError("forced promotion failure")
 
@@ -167,4 +166,3 @@ def test_batch_promotion_is_idempotent_and_failure_retains_last_known_good(tmp_p
             replace_func=fail_replace,
         )
     assert before == {path.name: path.read_bytes() for path in destination.iterdir()}
-

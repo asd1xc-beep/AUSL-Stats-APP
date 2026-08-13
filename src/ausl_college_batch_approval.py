@@ -104,7 +104,6 @@ def _candidate_ids(envelope: CollegeEnvelope) -> tuple[str, ...]:
         )
     )
 
-
 def _incomplete_fields(envelope: CollegeEnvelope) -> tuple[str, ...]:
     return tuple(
         sorted(
@@ -813,4 +812,3 @@ def load_aggregate_approval(directory: Path | str) -> ApprovedAggregateArtifact:
         (root / AGGREGATE_ENVELOPE_NAME).read_bytes(),
         (root / AGGREGATE_MANIFEST_NAME).read_bytes(),
     )
-
