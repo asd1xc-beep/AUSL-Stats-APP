@@ -1,6 +1,6 @@
 # Phase 7E Full-Roster and Connection Review Packet
 
-Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+Status: **PHASE 7 COMPLETE**
 
 ## Project-owner batch decision
 
@@ -76,7 +76,7 @@ The approval applies only to those eight immutable evidence versions. It does
 not approve the 244 suppressed relationships or a connection rebuilt from
 changed wording, evidence, identity, season scope, or provenance.
 
-## Producer integration and remaining gate
+## Producer integration and final acceptance
 
 The validated eight-connection artifact is available in the College Résumé
 view and the bounded selected-game Broadcast Fact collection. Exact evidence
@@ -85,8 +85,9 @@ restore, and What Changed. The approved-enrichment profile packages only the
 validated 118-player aggregate and eight-connection approval files; review
 decisions, packets, staging files, summaries, and suppressions remain excluded.
 
-`COLLEGE-007` is technically complete. Phase 7 is not yet closed: the project
-owner must complete the expanded-content Windows scaling pass at 100%, 125%,
-and 150%. `COLLEGE-008` remains deferred.
+`COLLEGE-007` is complete. The project owner reported that the expanded-
+content Windows scaling pass succeeded at 100%, 125%, and 150%, closing Phase
+7. No unsupplied package, hardware, display, or interaction detail is inferred.
+`COLLEGE-008` remains deferred.
 
-**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+**PHASE 7 COMPLETE**

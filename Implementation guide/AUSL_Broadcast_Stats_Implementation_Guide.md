@@ -99,9 +99,10 @@ remain unavailable. Phase 7E-B produced eight deterministic connection
 candidates with stable identity, evidence hashes, and a complete suppression
 ledger. The project owner separately double-checked and approved all eight
 exact wordings. Those immutable versions now pass the producer workflow and
-package gates; changed evidence requires a new review. The final expanded-
-content Windows scaling sign-off at 100%, 125%, and 150% remains open.
-**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+package gates; changed evidence requires a new review. The project owner
+reported that the final expanded-content Windows scaling checks passed at
+100%, 125%, and 150%, closing Phase 7 without inferring unsupplied details.
+**PHASE 7 COMPLETE**
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -1421,10 +1422,11 @@ project owner approved all 11 bounded batches on 2026-08-12. The aggregate now
 contains 9 Verified and 109 Partial résumés. The project owner separately
 double-checked and approved all eight Phase 7E-B connection wordings. Exact-
 version UI, fact, copy, rundown, session, What Changed, and explicit approved-
-enrichment integration now pass their technical gates. Phase 7 remains open
-only for the final owner-run expanded-content Windows scaling sign-off.
+enrichment integration pass their technical gates. The project owner reported
+that the expanded-content Windows scaling checks passed at 100%, 125%, and
+150%, closing Phase 7.
 
-**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+**PHASE 7 COMPLETE**
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College

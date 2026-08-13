@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE = ROOT / "Implementation guide"
-PENDING = "PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING"
+PENDING = "PHASE 7 COMPLETE"
 
 
 def test_phase7d_scaling_gate_is_closed_before_phase7e():
@@ -48,7 +48,7 @@ def test_review_packet_records_all_batch_and_connection_approvals():
     assert "personal AUSL producer review" in text
 
 
-def test_interim_acceptance_record_is_honest_about_phase_boundary():
+def test_phase7e_acceptance_record_closes_only_after_owner_scaling():
     text = (GUIDE / "Phase_7E_Acceptance_Record.md").read_text(encoding="utf-8")
     assert "930217d55cb562a6c18cfa9642c7f0c6858d1d97" in text
     assert "985 passed" in text
@@ -58,7 +58,8 @@ def test_interim_acceptance_record_is_honest_about_phase_boundary():
     assert "Connection engine: complete" in text
     assert "Connection wording review and approval: complete" in text
     assert "eight review candidates" in text
-    assert "Phase 7 complete" not in text
+    assert "project-owner reported" in text
+    assert "100%" in text and "125%" in text and "150%" in text
     tracker = (GUIDE / "AUSL_Broadcast_Stats_Improvement_Tracker.md").read_text(encoding="utf-8")
     assert "[x] `COLLEGE-007`" in tracker
     assert "[ ] `COLLEGE-008`" in tracker
@@ -91,12 +92,12 @@ def test_connection_specification_documents_fail_closed_relationship_rules():
         "Overlapping attendance does not prove a teammate relationship",
         "Missing attendance seasons suppress",
         "project-owner approval",
-        "COLLEGE-007 is technically complete",
+        "COLLEGE-007 is complete",
     ):
         assert required in text
 
 
-def test_full_phase7_record_stops_at_final_windows_gate():
+def test_full_phase7_record_closes_after_final_windows_gate():
     text = (GUIDE / "Phase_7_Full_Acceptance_Record.md").read_text(
         encoding="utf-8"
     )
@@ -104,4 +105,5 @@ def test_full_phase7_record_stops_at_final_windows_gate():
     assert "118" in text and "109 Partial" in text
     assert "all eight exact" in text
     assert "100%" in text and "125%" in text and "150%" in text
+    assert "project-owner reported" in text
     assert "COLLEGE-008` remains deferred" in text

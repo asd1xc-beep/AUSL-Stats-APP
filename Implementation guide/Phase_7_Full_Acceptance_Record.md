@@ -1,6 +1,6 @@
 # Phase 7 Full Acceptance Record
 
-Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+Status: **PHASE 7 COMPLETE**
 
 ## Scope completed through the technical gate
 
@@ -52,14 +52,13 @@ suppression ledgers, raw sources, and developer packets remain excluded.
 - Windows 10 source real-Tk smoke passed at 1120x720 using Python 3.12.10 and
   Tk 8.6.15 with network access blocked.
 
-## Remaining human gate
+## Final human gate
 
-The technical and content-approval gates are closed, but the expanded Phase
-7E interface has not yet received the project-owner Windows scaling pass at
-100%, 125%, and 150%. Do not label Phase 7 fully accepted until the owner
-reports those three checks complete. No unsupplied hardware, package, display,
-or interaction details may be inferred.
+The project-owner reported that the expanded Phase 7E interface passed Windows
+scaling checks at 100%, 125%, and 150%. This closes the final Phase 7 human
+gate. No unsupplied hardware, package, display, or interaction details are
+inferred.
 
-`COLLEGE-007` is technically complete. `COLLEGE-008` remains deferred.
+`COLLEGE-007` is complete. `COLLEGE-008` remains deferred.
 
-**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+**PHASE 7 COMPLETE**

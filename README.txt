@@ -33,7 +33,7 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Status: PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING.
+Status: PHASE 7 COMPLETE.
 The 2026 coverage manifest accounts for all 118 exact roster IDs. On
 2026-08-12, the project owner approved all 11 bounded batches after reporting
 no mistakes, clear unavailable labels, and matching schools. The resulting
@@ -45,8 +45,9 @@ connection wordings. Those immutable evidence versions now appear in College
 Résumé and eligible selected-game fact workflows, including copy, pin,
 rundown, used-on-air, session restore, What Changed, and the explicit
 approved-enrichment package. Changed future evidence requires new review.
-Phase 7 is not yet closed: the owner must still run the final Windows expanded-
-content scaling check at 100%, 125%, and 150%.
+The project owner reported that the final expanded-content Windows scaling
+checks passed at 100%, 125%, and 150%. This closes Phase 7 without asserting
+unsupplied package, hardware, display, or interaction details.
 The reported scaling result closes the Phase 7D start gate without asserting
 unsupplied hardware, package, or interaction details. This remains an assisted
 broadcast tool, not a candidate for unattended on-air use: cards that do not

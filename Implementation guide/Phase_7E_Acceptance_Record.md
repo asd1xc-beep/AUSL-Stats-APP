@@ -1,6 +1,6 @@
-# Phase 7E Interim Acceptance Record
+# Phase 7E Acceptance Record
 
-Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+Status: **PHASE 7 COMPLETE**
 
 ## Starting gate and baseline
 
@@ -150,7 +150,7 @@ Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
   passed the targeted secret scan; tracked/history private producer filenames
   were absent.
 
-## Current human gate and remaining Phase 7E boundary
+## Final human acceptance gate
 
 - Human batch review: complete for all eleven batches.
 - Full-roster aggregate approval: complete for the exact reviewed scope.
@@ -158,10 +158,13 @@ Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 - Connection wording review and approval: complete for all 8 exact versions.
 - Producer UI, `BroadcastFact`, session, What Changed, and expanded
   approved-enrichment integration: complete and verified.
-- Final Windows scaling pass for expanded Phase 7E content: not started.
-- `COLLEGE-007` is technically complete and `COLLEGE-008` remains deferred.
+- The project-owner reported that the final expanded-content Windows scaling
+  checks passed at 100%, 125%, and 150%.
+- `COLLEGE-007` is complete and `COLLEGE-008` remains deferred.
+- No unsupplied package, hardware, display, or interaction detail is inferred
+  from the owner's scaling report.
 
-Phase 7 is not complete. The remaining gate is a project-owner expanded-
-content Windows scaling pass at 100%, 125%, and 150%.
+All Phase 7 technical, content-review, connection-approval, package, and
+project-owner scaling gates are closed.
 
-**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+**PHASE 7 COMPLETE**

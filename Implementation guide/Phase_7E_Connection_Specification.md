@@ -1,6 +1,6 @@
 # Phase 7E College Connection Specification
 
-Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
+Status: **PHASE 7 COMPLETE**
 
 ## Boundary
 
@@ -11,9 +11,9 @@ owner separately double-checked all eight exact candidate wordings and
 approved all eight. The approval transaction binds every semantic field and
 evidence version; rebuilt or changed evidence is not approved implicitly.
 
-COLLEGE-007 is technically complete after the human wording gate and the
-application, workflow, package, and real-Tk acceptance checks passed. Phase 7
-closure still requires the final project-owner Windows scaling sign-off.
+COLLEGE-007 is complete after the human wording gate, application, workflow,
+package, real-Tk, and project-owner-reported 100%, 125%, and 150% Windows
+scaling checks passed.
 
 ## Identity and evidence versioning
 
