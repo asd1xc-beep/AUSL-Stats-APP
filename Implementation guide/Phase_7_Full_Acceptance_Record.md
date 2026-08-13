@@ -43,9 +43,12 @@ suppression ledgers, raw sources, and developer packets remain excluded.
 - Branch: `agent/phase7e-college-scale-connections`.
 - Clean starting Phase 7E baseline: 985 tests passed with warnings treated as
   errors.
-- Exact final full-suite totals, distribution hashes, build checks, and ending
-  commit are recorded in `Phase_7E_Acceptance_Record.md` and the completion
-  handoff after the final clean verification run.
+- Clean-checkout suite: 1,063 tests passed with warnings treated as errors.
+- Compile, dependency integrity, core and approved-enrichment distribution,
+  deterministic approved-profile ZIP, all three Windows package paths, real-
+  XLSX/LFS payload, whitespace, and tracked/history secret/private-data checks
+  passed. Exact commands, hashes, and timings are recorded in
+  `Phase_7E_Acceptance_Record.md` and the completion handoff.
 - Windows 10 source real-Tk smoke passed at 1120x720 using Python 3.12.10 and
   Tk 8.6.15 with network access blocked.
 

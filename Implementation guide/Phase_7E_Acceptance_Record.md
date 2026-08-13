@@ -127,6 +127,28 @@ Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
   1120x720 with network blocked. It exercised all nine tabs, approved
   connection copy/source copy, no-connection and Partial states, Game Day,
   pin/used evidence identity, and Local/Offline rebuilding.
+- Clean-checkout complete offline suite with warnings treated as errors:
+  **1063 passed in 86.83 seconds**.
+- `compileall` passed; `pip check` reported no broken requirements.
+- Checked-in core distribution verification passed. Two independently staged
+  Phase 7E approved-enrichment profiles both passed and produced byte-identical
+  ZIPs, SHA-256
+  `d1fbd3db543ad55bc099ecaf2d99ad3a95d02a689c03ac4b087e32d79cf85b32`.
+- The Windows safer no-EXE, standard PyInstaller EXE, and bundled-runtime
+  portable paths each built the approved-enrichment profile and passed their
+  package distribution/privacy verification.
+- All four checked-in professional workbooks remained real XLSX payloads and
+  retained their starting SHA-256 values: roster
+  `fa7e390b645bccea2497eca95eebb914e9cff6e5da214e1604f9b3235eb07840`,
+  season stats
+  `f4aa966c94802944ceba3bfbeeddc54e135b1d13518867945e7e7419f54d8caa`,
+  career stats
+  `c2cfb23f4247baf3baefd40f2dd9cfe34a5ca7c532da9f77238a0bc4a2dc3773`,
+  and team context
+  `45e60f70ee341a4fe805ad463a1ff6db52fa456004aeec4097788e6b2b5189eb`.
+- Git diff whitespace validation passed. Tracked files and 109 history commits
+  passed the targeted secret scan; tracked/history private producer filenames
+  were absent.
 
 ## Current human gate and remaining Phase 7E boundary
 
