@@ -14,8 +14,9 @@ PROFESSIONAL_WORKBOOKS = (
 
 
 def test_professional_fact_packet_comparison_and_change_modules_do_not_import_college():
+    facts = (ROOT / "src/ausl_facts.py").read_text(encoding="utf-8")
+    assert "build_college_connection_facts" in facts
     for relative in (
-        "src/ausl_facts.py",
         "src/ausl_rundown.py",
         "src/ausl_comparison.py",
         "src/ausl_changes.py",

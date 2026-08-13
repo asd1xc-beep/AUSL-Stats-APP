@@ -26,7 +26,13 @@ CORE_NAMES = (
 
 def _starting_bytes(relative: str) -> bytes:
     payload = subprocess.run(
-        ["git", "show", f"{STARTING_SHA}:{relative}"],
+        [
+            "git",
+            "-c",
+            f"safe.directory={ROOT}",
+            "show",
+            f"{STARTING_SHA}:{relative}",
+        ],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -39,7 +45,13 @@ def _starting_bytes(relative: str) -> bytes:
         )
         git_dir = Path(
             subprocess.run(
-                ["git", "rev-parse", "--git-common-dir"],
+                [
+                    "git",
+                    "-c",
+                    f"safe.directory={ROOT}",
+                    "rev-parse",
+                    "--git-common-dir",
+                ],
                 cwd=ROOT,
                 check=True,
                 capture_output=True,

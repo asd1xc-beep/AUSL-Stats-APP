@@ -22,13 +22,13 @@ def test_phase7c_required_documents_exist_and_preserve_phase_boundary():
     assert "c4c315ceebc976d791060bcf8ce1b8760176fd768cb1be410b694bd25f056891" in acceptance
 
 
-def test_tracker_records_owner_acceptance_without_starting_phase7e():
+def test_tracker_preserves_phase7c_acceptance_after_phase7e_progress():
     tracker = (GUIDE / "AUSL_Broadcast_Stats_Improvement_Tracker.md").read_text(encoding="utf-8")
     assert "[x] `COLLEGE-003`" in tracker
     assert "[x] `COLLEGE-006`" in tracker
     assert "PROJECT-OWNER REVIEWED 2026-08-11" in tracker
     assert "[x] `COLLEGE-002`" in tracker
-    assert "[ ] `COLLEGE-007`" in tracker
+    assert "[x] `COLLEGE-007`" in tracker
     assert "[ ] `COLLEGE-008`" in tracker
 
 

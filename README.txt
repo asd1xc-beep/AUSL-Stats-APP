@@ -38,7 +38,9 @@ The 2026 coverage manifest accounts for all 118 exact roster IDs. On
 2026-08-12, the project owner approved all 11 bounded batches after reporting
 no mistakes, clear unavailable labels, and matching schools. The resulting
 aggregate is 9 Verified and 109 Partial; review did not invent absent fields.
-The project owner then double-checked and approved all eight exact college
+Historical gate: PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED.
+Phase 7E data integration followed that authorization. The project owner then
+double-checked and approved all eight exact college
 connection wordings. Those immutable evidence versions now appear in College
 Résumé and eligible selected-game fact workflows, including copy, pin,
 rundown, used-on-air, session restore, What Changed, and the explicit
