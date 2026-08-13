@@ -18,6 +18,8 @@ from ausl_college import (
     resolve_candidates,
 )
 from ausl_college_approval import ApprovedCollegeArtifact
+from ausl_college_batch_approval import ApprovedAggregateArtifact
+from ausl_college_connection_approval import ApprovedConnectionArtifact
 from ausl_enrichment import EnrichmentMode
 
 
@@ -33,6 +35,22 @@ class CollegeFieldView:
     copy_eligible: bool
     block_reason: str
     candidate_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CollegeConnectionFieldView:
+    connection_id: str
+    connection_type: str
+    headline: str
+    school_season: str
+    display_text: str
+    copy_text: str
+    copy_with_source: str
+    source_summary: str
+    source_details: tuple[str, ...]
+    evidence_hash: str
+    copy_eligible: bool
+    block_reason: str
 
 
 @dataclass(frozen=True)
@@ -57,6 +75,7 @@ class CollegeResumeView:
     summary_copy_with_source: str
     summary_copy_eligible: bool
     summary_block_reason: str
+    connection_fields: tuple[CollegeConnectionFieldView, ...] = ()
 
 
 _METRIC_ORDER = {
@@ -265,16 +284,106 @@ def _achievement_field(
     )
 
 
+def _connection_fields(
+    connection_approval: ApprovedConnectionArtifact | None,
+    *,
+    player_id: str,
+    sources: dict[str, SourceProvenance],
+    mode: EnrichmentMode,
+) -> tuple[CollegeConnectionFieldView, ...]:
+    if connection_approval is None:
+        return ()
+    reviewed_date = connection_approval.manifest.review_date
+    fields = []
+    for candidate in connection_approval.connections.candidates:
+        if player_id not in candidate.subject_player_ids:
+            continue
+        used_sources = tuple(
+            sources[source_id]
+            for source_id in candidate.evidence_source_ids
+            if source_id in sources
+        )
+        complete_sources = len(used_sources) == len(candidate.evidence_source_ids)
+        eligible = bool(
+            mode is EnrichmentMode.PRODUCER_APPROVED
+            and candidate.air_ready
+            and complete_sources
+        )
+        if mode is not EnrichmentMode.PRODUCER_APPROVED:
+            reason = "Developer review mode is not air ready."
+        elif not candidate.air_ready:
+            reason = "Connection approval or evidence version is unavailable."
+        elif not complete_sources:
+            reason = "Connection source provenance is unavailable."
+        else:
+            reason = ""
+        source_details = tuple(
+            f"{source.organization} — {source.title} ({source.locator})"
+            + (
+                f" — {source.url or source.local_document_id}"
+                if source.url or source.local_document_id
+                else ""
+            )
+            for source in used_sources
+        )
+        source_summary = (
+            "Sources: "
+            + "; ".join(
+                f"{source.organization}, {source.title}" for source in used_sources
+            )
+            + f" · reviewed {reviewed_date}"
+        )
+        program_text = " / ".join(candidate.program_display_names)
+        season_text = " / ".join(candidate.season_scope)
+        school_season = " · ".join(
+            value for value in (program_text, season_text) if value
+        )
+        source_lines = "\n".join(f"Source: {item}" for item in source_details)
+        copy_with_source = "\n".join(
+            value
+            for value in (
+                candidate.wording,
+                "Status: APPROVED",
+                f"School/season: {school_season or 'Unavailable'}",
+                f"Reviewed: {reviewed_date}",
+                source_lines,
+                f"Connection ID: {candidate.connection_id}",
+                f"Evidence: {candidate.evidence_version_hash}",
+            )
+            if value
+        )
+        fields.append(
+            CollegeConnectionFieldView(
+                connection_id=candidate.connection_id,
+                connection_type=candidate.connection_type.value,
+                headline=candidate.connection_type.value.replace("_", " ").upper(),
+                school_season=school_season,
+                display_text=candidate.wording,
+                copy_text=candidate.wording,
+                copy_with_source=copy_with_source,
+                source_summary=source_summary,
+                source_details=source_details,
+                evidence_hash=candidate.evidence_version_hash,
+                copy_eligible=eligible,
+                block_reason=reason,
+            )
+        )
+    return tuple(fields)
+
+
 def build_college_resume_view(
-    artifact_or_envelope: ApprovedCollegeArtifact | CollegeEnvelope,
+    artifact_or_envelope: ApprovedCollegeArtifact | ApprovedAggregateArtifact | CollegeEnvelope,
     *,
     player_id: str,
     mode: EnrichmentMode | str,
     current_team: str = "",
     current_status: str = "",
+    connection_approval: ApprovedConnectionArtifact | None = None,
 ) -> CollegeResumeView:
     selected_mode = mode if isinstance(mode, EnrichmentMode) else EnrichmentMode(mode)
-    if isinstance(artifact_or_envelope, ApprovedCollegeArtifact):
+    if isinstance(
+        artifact_or_envelope, (ApprovedCollegeArtifact, ApprovedAggregateArtifact)
+    ):
         artifact = artifact_or_envelope
         envelope = artifact.envelope
         approved_ids = set(artifact.manifest.candidate_ids)
@@ -317,6 +426,12 @@ def build_college_resume_view(
         )
     resume = matches[0]
     source_map = {source.source_id: source for source in envelope.sources}
+    connection_fields = _connection_fields(
+        connection_approval,
+        player_id=resume.player_id,
+        sources=source_map,
+        mode=selected_mode,
+    )
     copy_mode_allowed = (
         selected_mode is EnrichmentMode.PRODUCER_APPROVED and approval_valid
     )
@@ -405,4 +520,5 @@ def build_college_resume_view(
         summary_with_source,
         bool(copyable),
         summary_reason,
+        connection_fields,
     )
