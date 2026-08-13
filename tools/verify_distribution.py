@@ -25,6 +25,16 @@ from ausl_college_approval import (
     APPROVED_ENVELOPE_NAME as COLLEGE_APPROVED_ENVELOPE_NAME,
     validate_approved_payload,
 )
+from ausl_college_batch_approval import (
+    AGGREGATE_ENVELOPE_NAME,
+    AGGREGATE_MANIFEST_NAME,
+    validate_aggregate_approval,
+)
+from ausl_college_connection_approval import (
+    APPROVED_CONNECTION_ARTIFACT_NAME,
+    CONNECTION_APPROVAL_MANIFEST_NAME,
+    validate_connection_approval,
+)
 
 
 _FORBIDDEN_PATHS = {
@@ -115,6 +125,9 @@ _APPROVED_DISTRIBUTION_EXPORT_NAMES = (
         _APPROVED_ENRICHMENT_MANIFEST,
         COLLEGE_APPROVED_ENVELOPE_NAME,
         COLLEGE_APPROVAL_MANIFEST_NAME,
+        AGGREGATE_MANIFEST_NAME,
+        APPROVED_CONNECTION_ARTIFACT_NAME,
+        CONNECTION_APPROVAL_MANIFEST_NAME,
     }
 )
 _SECRET_DATA_SUFFIXES = {".cfg", ".db", ".ini", ".json", ".pickle", ".sqlite", ".txt", ".yaml", ".yml"}
@@ -577,9 +590,13 @@ def _approved_manifest_violations(
                 )
             packaged_frames[key] = frame
 
+        aggregate_manifest_entry = entries_by_key.get(
+            f"{prefix}{AGGREGATE_MANIFEST_NAME}".casefold()
+        )
+        use_aggregate = aggregate_manifest_entry is not None
         college_names = (
-            COLLEGE_APPROVED_ENVELOPE_NAME,
-            COLLEGE_APPROVAL_MANIFEST_NAME,
+            AGGREGATE_ENVELOPE_NAME,
+            AGGREGATE_MANIFEST_NAME if use_aggregate else COLLEGE_APPROVAL_MANIFEST_NAME,
         )
         college_sources = {
             name: entries_by_key.get(f"{prefix}{name}".casefold())
@@ -603,10 +620,32 @@ def _approved_manifest_violations(
                     for name, source_entry in college_sources.items()
                     if source_entry is not None
                 }
-                college_artifact = validate_approved_payload(
-                    college_payloads[COLLEGE_APPROVED_ENVELOPE_NAME],
-                    college_payloads[COLLEGE_APPROVAL_MANIFEST_NAME],
+                college_artifact = (
+                    validate_aggregate_approval(
+                        college_payloads[AGGREGATE_ENVELOPE_NAME],
+                        college_payloads[AGGREGATE_MANIFEST_NAME],
+                    )
+                    if use_aggregate
+                    else validate_approved_payload(
+                        college_payloads[COLLEGE_APPROVED_ENVELOPE_NAME],
+                        college_payloads[COLLEGE_APPROVAL_MANIFEST_NAME],
+                    )
                 )
+                if use_aggregate:
+                    roster_ids = []
+                    for value in roster["player_id"]:
+                        if pd.isna(value):
+                            raise ValueError("packaged roster contains a missing player ID")
+                        if isinstance(value, float) and value.is_integer():
+                            value = int(value)
+                        roster_ids.append(str(value).strip())
+                    if (
+                        len(roster_ids) != len(set(roster_ids))
+                        or set(college_artifact.manifest.player_ids) != set(roster_ids)
+                    ):
+                        raise ValueError(
+                            "Phase 7E college player IDs do not exactly match packaged roster"
+                        )
             except (OSError, ValueError) as exc:
                 violations.append(
                     Violation(
@@ -652,7 +691,11 @@ def _approved_manifest_violations(
                 if (
                     record.get("row_count") != expected_count
                     or record.get("validation")
-                    != "producer_approved_phase_7d_college"
+                    != (
+                        "producer_approved_phase_7e_college"
+                        if use_aggregate
+                        else "producer_approved_phase_7d_college"
+                    )
                 ):
                     violations.append(
                         Violation(
@@ -685,8 +728,117 @@ def _approved_manifest_violations(
                 )
             )
 
+        connection_names = (
+            APPROVED_CONNECTION_ARTIFACT_NAME,
+            CONNECTION_APPROVAL_MANIFEST_NAME,
+        )
+        connection_sources = {
+            name: entries_by_key.get(f"{prefix}{name}".casefold())
+            for name in connection_names
+        }
+        connections_available = all(connection_sources.values())
+        if any(connection_sources.values()) and not connections_available:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved college connection artifact and manifest must be packaged together",
+                )
+            )
+        connection_artifact = None
+        connection_payloads: dict[str, bytes] = {}
+        if connections_available:
+            try:
+                connection_payloads = {
+                    name: read_entry(source_entry)
+                    for name, source_entry in connection_sources.items()
+                    if source_entry is not None
+                }
+                if not use_aggregate or college_artifact is None:
+                    raise ValueError(
+                        "approved connections require validated Phase 7E college data"
+                    )
+                connection_artifact = validate_connection_approval(
+                    connection_payloads[APPROVED_CONNECTION_ARTIFACT_NAME],
+                    connection_payloads[CONNECTION_APPROVAL_MANIFEST_NAME],
+                )
+                player_ids = set(college_artifact.manifest.player_ids)
+                source_ids = {
+                    source.source_id for source in college_artifact.envelope.sources
+                }
+                for candidate in connection_artifact.connections.candidates:
+                    if not set(candidate.subject_player_ids) <= player_ids:
+                        raise ValueError("approved connection has an unknown player ID")
+                    if not set(candidate.evidence_source_ids) <= source_ids:
+                        raise ValueError("approved connection has an unknown source ID")
+            except (OSError, ValueError) as exc:
+                violations.append(
+                    Violation(
+                        target,
+                        f"{prefix}{APPROVED_CONNECTION_ARTIFACT_NAME}",
+                        f"college connection approval/hash validation failed: {exc}",
+                    )
+                )
+            expected_connection_count = (
+                len(connection_artifact.connections.candidates)
+                if connection_artifact is not None
+                else manifest.get("college_connection_count")
+            )
+            for name in connection_names:
+                record = records.get(name)
+                payload = connection_payloads.get(name, b"")
+                source_entry = connection_sources[name]
+                if record is None:
+                    violations.append(
+                        Violation(
+                            target,
+                            str(source_entry),
+                            "approved college connection file is absent from approval manifest",
+                        )
+                    )
+                    continue
+                if (
+                    record.get("sha256") != hashlib.sha256(payload).hexdigest()
+                    or record.get("bytes") != len(payload)
+                    or record.get("row_count") != expected_connection_count
+                    or record.get("validation")
+                    != "producer_approved_phase_7e_connections"
+                ):
+                    violations.append(
+                        Violation(
+                            target,
+                            str(source_entry),
+                            "approved college connection manifest validation is invalid",
+                        )
+                    )
+        else:
+            for name in connection_names:
+                if name in records:
+                    violations.append(
+                        Violation(
+                            target,
+                            manifest_entry,
+                            f"approved manifest lists missing college connection file: {name}",
+                        )
+                    )
+        actual_connection_count = (
+            len(connection_artifact.connections.candidates)
+            if connection_artifact is not None
+            else 0
+        )
+        if manifest.get("college_connection_count", 0) != actual_connection_count:
+            violations.append(
+                Violation(
+                    target,
+                    manifest_entry,
+                    "approved-enrichment college connection count is invalid",
+                )
+            )
+
         unexpected_records = set(records).difference(
-            set(_APPROVED_ENRICHMENT_WORKBOOKS) | set(college_names)
+            set(_APPROVED_ENRICHMENT_WORKBOOKS)
+            | set(college_names)
+            | set(connection_names)
         )
         for filename in sorted(unexpected_records):
             violations.append(
@@ -742,7 +894,9 @@ def _approved_manifest_violations(
                 )
             )
         expected_fallback = (
-            "core_only" if not packaged_frames and not college_available else "none"
+            "core_only"
+            if not packaged_frames and not college_available and not connections_available
+            else "none"
         )
         if manifest.get("fallback") != expected_fallback:
             violations.append(
