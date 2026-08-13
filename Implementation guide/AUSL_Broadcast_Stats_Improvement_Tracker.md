@@ -529,6 +529,131 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 
 - [ ] `FUTURE-006` — Shared multi-user workflow only after ownership, authentication, conflict handling, and offline behavior are designed. **P3 · BACKLOG**
 
+### P. UI responsiveness and data-path separation
+
+Opened: 2026-08-13. Source: post-Phase-7 stability review of `main` at
+`d55ee43` before producer feedback is folded into Phase 8.
+
+All measurements below were taken on a clean worktree of `d55ee43` using the
+pinned Python 3.12.10 environment, real Tk, nine tabs realised, and one
+official game selected (61 facts). Absolute figures varied between runs
+(Game Day resize measured 218–330 ms/step across five runs); only the
+within-run A/B deltas are treated as reliable.
+
+Baseline evidence at `d55ee43`:
+
+- Complete offline suite: **1,063 passed in 84.12 s** with warnings as errors.
+- `compileall` passed; `pip check` reported no broken requirements.
+- Window **move** costs 4–9 ms/step and is not a defect.
+- Window **resize** costs 80–95 ms/step on eight tabs and 218–330 ms/step on
+  Game Day.
+- `_render_fact_cards()` costs **824–1303 ms per call** and has seven call
+  sites.
+- Game Day holds 971 widgets; the fact container alone holds 886.
+
+---
+
+- [ ] `PERF-001` — Extract one shared, debounced scrollable-frame helper. **P1**
+  - Five panels duplicate the same `<Configure>` pair with no shared helper:
+    `src/ausl_stats_app.py` lines 2558, 2681, 2781, 2969, and 3488. Each new
+    scrollable panel copies the cost.
+  - The canvas `<Configure>` handler writes `itemconfigure(window,
+    width=event.width)`, which relayouts every widget inside the container.
+    On Game Day that is 886 widgets per resize step.
+  - Replace all five with one helper that debounces the width write on a
+    120 ms timer (`after` plus `after_cancel`) and coalesces the scrollregion
+    update to a single `after_idle` callback.
+  - Measured on a prototype of exactly this change: Game Day resize improved
+    from **217.7 ms/step to 121.6 ms/step (44.1% faster)**, which matches the
+    123.0 ms ceiling measured by unbinding the handlers entirely. Scrollregion
+    remained valid (`0 0 1089 9735`) and `yview_moveto(0.5)` still resolved
+    correctly.
+  - Acceptance: all five panels use the helper; scrolling, scrollregion, and
+    session scroll restore are unchanged; `PERF-004` guard passes.
+
+- [ ] `PERF-002` — Make fact-card rendering incremental. **P1**
+  - `_render_fact_cards()` destroys every child and rebuilds roughly 14
+    widgets per card. Cost scales linearly: 10 facts 108 ms, 30 facts 328 ms,
+    59 facts 654 ms, 61 facts 824–1303 ms. Teardown alone costs 102 ms with
+    zero facts.
+  - Seven call sites currently pay the full rebuild: lines 1919, 2571, 5524,
+    5549, 5682, 6367, and 6826.
+  - Diff against the previously rendered fact list and reuse card widgets
+    whose content is unchanged; create and destroy only what actually differs.
+  - This is the longest single UI freeze in the application and the one most
+    visible to a producer changing a filter mid-broadcast.
+  - Acceptance: a filter change that alters one card does not rebuild the
+    other 60; re-render of an unchanged list is under 50 ms; pinned, used,
+    and copy state survive re-render.
+
+- [ ] `PERF-003` — Separate the runtime refresh target from the canonical
+  checked-in snapshot. **P0**
+  - `ausl_data.py:215` reads `app_root()/data/exports`, and `update_all_data`
+    writes every workbook back to that same directory. Running the app
+    therefore overwrites the canonical committed snapshot in place, so
+    `git status` is never clean and real changes hide among modified
+    binaries.
+  - **`data/exports` must stay tracked.** It serves three roles: test fixture
+    for twelve-plus modules including `test_production_snapshot_regression.py`,
+    `test_season_pitching.py`, and `test_selected_game.py`; CI integrity
+    baseline through `tools/verify_distribution.py`, which checks SHA-256 and
+    byte counts against `update_manifest.json` and rejects LFS pointer text;
+    and the data payload shipped by the portable build. Adding it to
+    `.gitignore` would break CI and ship an empty application.
+  - Route refresh output to an untracked `data/runtime/exports`, and have the
+    loader prefer that directory when present and fall back to the canonical
+    tracked snapshot otherwise. Add `data/runtime/` to `.gitignore`, matching
+    the existing precedent for `data/exports/game_packets/` and `data/manual/`.
+  - Promotion of a local refresh into the canonical snapshot becomes a
+    deliberate, explicit step rather than a side effect of pressing refresh.
+  - Acceptance: a full refresh leaves `git status` clean; the tracked LFS
+    hashes for all four workbooks are unchanged; CI and the portable build
+    still resolve the canonical snapshot.
+
+- [ ] `PERF-004` — Add a resize-budget regression guard. **P1**
+  - Same shape as the `SEASON-001` hardcoded-year guard: a test that fails if
+    responsiveness silently regresses as Phase 8 panels are added.
+  - Assert widget-count and structural budgets rather than wall-clock time,
+    so the guard is stable in CI: no scrollable panel may bind an
+    undebounced `<Configure>` width write, and the Game Day fact container
+    may not exceed an agreed widget ceiling.
+  - Keep any wall-clock assertion out of CI, or mark it clearly as
+    advisory-only and local-only, given the 218–330 ms run-to-run spread
+    observed during this review.
+  - Acceptance: the guard fails when a raw duplicated `<Configure>` pair is
+    reintroduced, and passes on the `PERF-001` implementation.
+
+- [ ] `PERF-005` — Align the local interpreter and refresh the CI label. **P2**
+  - The project owner's default `python` on PATH is 3.14.6 while CI and the
+    virtual environment pin 3.12.10, so any tool script invoked as bare
+    `python` silently runs on the unpinned interpreter.
+  - Document the pinned interpreter in `README.txt`, or have tool scripts
+    assert their own version at start.
+  - `.github/workflows/ci.yml` is still titled `Phase 5 CI`. Rename it to
+    something phase-independent.
+  - Acceptance: running a tool script on 3.14 produces a clear, immediate
+    error rather than silent divergence; the workflow name no longer names a
+    specific phase.
+
+---
+
+#### Rejected during this review
+
+- **Removing `wraplength` from fact-card labels.** Game Day carries 188
+  labels with a non-zero `wraplength`, and re-wrapping was a plausible
+  suspect. Stripping it from 177 labels measured **121.2 ms/step against
+  121.6 ms/step** with the debounce alone — no measurable benefit. Not worth
+  the readability cost.
+- **Treating `bbox("all")` as a bottleneck.** Each canvas holds exactly one
+  item, so the call measures 0.002 ms. It is not the problem.
+- **Changing the 25 ms `_drain_main_thread_results` poll.** It self-terminates
+  correctly whenever no work is in flight and holds no timer open at rest.
+  No change warranted.
+- **Fact count as the resize driver.** One run measured Game Day at
+  330 ms/step with an empty fact panel against 281 ms/step with 61 facts
+  loaded. The container's existence and the width-propagation chain drive the
+  cost, not how many cards are in it.
+
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
