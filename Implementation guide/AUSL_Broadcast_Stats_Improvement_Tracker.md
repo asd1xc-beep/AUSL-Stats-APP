@@ -1,10 +1,10 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
-Project source reviewed through merged Phase 7C GitHub `main` at
-`5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`, then the Phase 7D
-implementation on `agent/phase7d-college-resume-ui`.
+Project source reviewed through merged Phase 7D and portable-build GitHub
+`main` at `930217d55cb562a6c18cfa9642c7f0c6858d1d97`, then Phase 7E on
+`agent/phase7e-college-scale-connections`.
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -49,14 +49,17 @@ the normalized, provenance-first college data foundation. Phase 7C built the
 ten-player developer-review pilot. The project owner reported on 2026-08-11
 that all ten exact players and displayed pilot facts were reviewed, looked
 correct, and Phase 7D was authorized. This is project-owner acceptance; it is
-not represented as a personal AUSL producer review. Phase 7D now adds the
-separate approved College Résumé workflow. Windows display-scaling sign-off is
-still pending, and Phase 7E has not started.
+not represented as a personal AUSL producer review. Phase 7D adds the separate
+approved College Résumé workflow. The project owner reported on 2026-08-12
+that Windows display scaling passed at 100%, 125%, and 150%, closing the Phase
+7D acceptance gate and authorizing Phase 7E.
+Historical implementation milestone: **PHASE 7D IMPLEMENTATION COMPLETE**;
+the later owner scaling report advanced that milestone to accepted.
 
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
+Status: **PHASE 7 COMPLETE**
 
 ## Approved next roadmap
 
@@ -72,8 +75,8 @@ be reused by the college layer.
 | 3 | Phase 7A | Promote only approved optional enrichment to producer-facing use | Complete |
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Complete |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
-| 6 | Phase 7D | Add the separate College Résumé tab | Implementation complete; scaling sign-off pending |
-| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Phase 7D scaling acceptance |
+| 6 | Phase 7D | Add the separate College Résumé tab | Accepted; owner-reported 100%/125%/150% scaling passed 2026-08-12 |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Complete; final owner-reported 100%/125%/150% Windows checks passed |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -475,7 +478,7 @@ The college layer must remain visually and statistically separate from AUSL prof
 - [x] `COLLEGE-001` — Write the normalized college-data specification before importing data. **P1 · COMPLETE — PHASE 7B**
   - Support multiple schools, seasons, transfers, shortened seasons, extra eligibility, and two-way players.
 
-- [x] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · IMPLEMENTATION COMPLETE — PHASE 7D; WINDOWS SCALING SIGN-OFF PENDING**
+- [x] `COLLEGE-002` — Add a separate `College Résumé` tab. **P2 · FULLY ACCEPTED — PHASE 7D**
   - Sections: Snapshot, Schools/Transfer Timeline, College Career Totals,
     Season-by-Season Summary, Honors/Records, WCWS/Championships, Broadcast
     Connections, and Sources/Completeness.
@@ -498,7 +501,7 @@ The college layer must remain visually and statistically separate from AUSL prof
   - The pilot target is a verified useful résumé, not forced completeness for
     every season and field.
 
-- [ ] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · PLANNED — PHASE 7E**
+- [x] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · COMPLETE — ALL 8 EXACT CONNECTIONS PROJECT-OWNER APPROVED**
   - Former teammates, conference rivals, champions, homecomings, coaches, and role changes.
 
 - [ ] `COLLEGE-008` — Consider complete season-by-season college statistics only after the pilot proves useful. **P3 · DEFERRED — PRODUCER DECISION AFTER PHASE 7D**
@@ -566,7 +569,37 @@ Fill in one record when a milestone or major item is completed.
   excluded.
 - Detailed evidence: `Implementation guide/Phase_7D_Acceptance_Record.md`.
 
-**PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
+Project-owner scaling report: passed at 100%, 125%, and 150% on 2026-08-12.
+No unsupplied package, hardware, or interaction detail is inferred.
+
+**PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
+
+### Phase 7E-A — Current-roster coverage and bounded import
+
+- Starting remote `main`: `930217d55cb562a6c18cfa9642c7f0c6858d1d97`.
+- Clean baseline: 985 offline tests passed with warnings treated as errors.
+- All 118 exact IDs in the canonical 2026 roster are accounted for.
+- The ten Phase 7D résumés remain approved: nine Verified and one Partial.
+- The remaining 108 exact IDs were reviewed in 11 deterministic batches. On
+  2026-08-12, the project owner approved Batch 01 through Batch 11 after
+  reporting no mistakes, clear unavailable labels, and matching schools.
+- The full approved aggregate is 9 Verified and 109 Partial. No name fallback,
+  absent statistic, season, role, award, WCWS, championship, or connection
+  approval was generated.
+- Review artifacts remain outside startup, refresh, facts, core, and
+  approved-enrichment distributions.
+- Phase 7E-B generated eight review-only connection candidates and 244 exact
+  suppression records. The project owner separately double-checked and
+  approved all eight exact wordings. Only those tamper-evident evidence
+  versions are integrated into producer workflows and approved packaging.
+- The project owner reported that the final expanded-content Windows scaling
+  pass succeeded at 100%, 125%, and 150%. Phase 7 is complete; no unsupplied
+  package, hardware, display, or interaction detail is inferred.
+- `COLLEGE-008` remains deferred.
+
+Detailed review instructions: `Phase_7E_Review_Packet.md`.
+
+**PHASE 7 COMPLETE**
 
 ### Phase 7B — College data foundation
 

@@ -1,6 +1,6 @@
 # Phase 7D Acceptance Record
 
-Status: **PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
+Status: **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
 
 ## Baseline, branch, and owner review
 
@@ -19,6 +19,10 @@ Status: **PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING 
   and displayed pilot facts were reviewed, looked correct, and Phase 7D was
   authorized. The neutral reviewer role is `project_owner`; this record does
   not claim a personal AUSL producer review or publish a personal name.
+- The project-owner reported on 2026-08-12 that the Phase 7D Windows scaling test
+  passed at 100%, 125%, and 150%. This closes the owner-only scaling gate. No
+  hardware, package variant, interaction detail, or personal AUSL producer
+  review beyond the supplied report is inferred here.
 
 ## Approval transaction and checked-in artifacts
 
@@ -130,10 +134,11 @@ one.
 
 - The reviewed producer surface intentionally contains ten players only.
 - No college Broadcast Connections are generated in Phase 7D.
-- Windows display scaling at 100%, 125%, and 150% requires separate
-  project-owner sign-off; it is not claimed by automation.
+- Windows display scaling at 100%, 125%, and 150% was reported passed by the
+  project owner on 2026-08-12; it remains an owner-reported manual result, not
+  an automated assertion.
 - `COLLEGE-007` remains incomplete. `COLLEGE-008` remains deferred pending
   later producer evaluation.
-- Phase 7E must not start until scaling acceptance is reported.
+- The scaling acceptance gate is closed and Phase 7E is authorized.
 
-**PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED**
+**PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**

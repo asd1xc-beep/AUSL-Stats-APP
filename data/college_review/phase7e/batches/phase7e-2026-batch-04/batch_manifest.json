@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-04",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Montana Fouts",
+      "player_id": "932"
+    },
+    {
+      "display_name": "Jordyn Rudd-Lee",
+      "player_id": "934"
+    },
+    {
+      "display_name": "Baylee Klingler",
+      "player_id": "935"
+    },
+    {
+      "display_name": "Karli Spaid",
+      "player_id": "936"
+    },
+    {
+      "display_name": "Erin Coffel",
+      "player_id": "937"
+    },
+    {
+      "display_name": "Maddie Penta",
+      "player_id": "938"
+    },
+    {
+      "display_name": "Payton Gottshall",
+      "player_id": "939"
+    },
+    {
+      "display_name": "Sarah Willis",
+      "player_id": "941"
+    },
+    {
+      "display_name": "McKenzie Clark",
+      "player_id": "944"
+    },
+    {
+      "display_name": "Jadelyn Allchin",
+      "player_id": "948"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}

@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-03",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Sydney Sherrill",
+      "player_id": "311"
+    },
+    {
+      "display_name": "Mariah Mazon",
+      "player_id": "325"
+    },
+    {
+      "display_name": "Sydney McKinney",
+      "player_id": "655"
+    },
+    {
+      "display_name": "Megan Faraimo",
+      "player_id": "656"
+    },
+    {
+      "display_name": "Delanie Wisz",
+      "player_id": "657"
+    },
+    {
+      "display_name": "Caroline Jacobsen",
+      "player_id": "721"
+    },
+    {
+      "display_name": "Rachel Becker",
+      "player_id": "722"
+    },
+    {
+      "display_name": "Kat Sandercock",
+      "player_id": "723"
+    },
+    {
+      "display_name": "Keilani Ricketts",
+      "player_id": "927"
+    },
+    {
+      "display_name": "Haley Lee",
+      "player_id": "928"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}

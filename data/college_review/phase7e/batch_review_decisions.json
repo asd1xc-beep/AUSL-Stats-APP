@@ -1,0 +1,20 @@
+{
+  "schema_name": "ausl-college-batch-review-decisions",
+  "schema_version": 1,
+  "reviewer_role": "project_owner",
+  "review_date": "2026-08-12",
+  "review_note": "Project owner reviewed all eleven batches, found no mistakes, confirmed unavailable fields are clearly unavailable, and confirmed all school values match.",
+  "decisions": [
+    {"batch_id": "phase7e-2026-batch-01", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "5133bd9265474a57fba3202a69d15da3061c1e6489f1459442154c65e085213f", "developer_review_envelope_sha256": "1e0bca445ffe3947ee647f666df4f197db82a0608b7cbada4ff62b086a21e5cc"},
+    {"batch_id": "phase7e-2026-batch-02", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "4bf4968447ace59acf7e11b47f0ab617edb1c784331da6d7858d8dbace76fb63", "developer_review_envelope_sha256": "7522a9164fa4e1131f098a342d92a5f7e322b31eca1108c603563faaeb8e5a16"},
+    {"batch_id": "phase7e-2026-batch-03", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "4cd98ec69af6ae6728c95298c6c831077b64764132dbb9c91cf4f4456dfc5d39", "developer_review_envelope_sha256": "25b961ef56e572c5e8256b8a0237c7b87de00a8e2f9568cb1eb6463b5ed0e90f"},
+    {"batch_id": "phase7e-2026-batch-04", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "5ed47b16c701f53060fbfcc599c1fda6a3de8cc60dd0126be7ef5fd159ade542", "developer_review_envelope_sha256": "d35a405cf43cbae27bf82dd3305bb26fd2f2c3f9f85b776aad3c6b45e070f332"},
+    {"batch_id": "phase7e-2026-batch-05", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "83b6e77569a0366a90e2722154381c4cacf48bbb1269112886dea2786293b5b9", "developer_review_envelope_sha256": "85f1108aee3bcc8e55cfb8e312976776a4e72105dab8d6d1fbe21c409eeb6f82"},
+    {"batch_id": "phase7e-2026-batch-06", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "928b9294bd9bdf87380b17f8da1fef2ed2d462af81e8c3c1de36e84d78eaa64d", "developer_review_envelope_sha256": "615f1d84902fe41a674b8aa3114c57f7086cea6ae7ad17b4993e8b5177a0327a"},
+    {"batch_id": "phase7e-2026-batch-07", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "8766ffc81f563a874a5e2da0af55d3eea740da9471a0eb76cb2dfa54a8cc784c", "developer_review_envelope_sha256": "654e8f060ffe4477e5e476dfd83ba67ea7bfac70674e4a94ac3c9e47a6e89a23"},
+    {"batch_id": "phase7e-2026-batch-08", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "893642622ddb6c8c7bfb66b64e3eb2ea5883542b3f1069fb836b3d01404d2f8a", "developer_review_envelope_sha256": "1ce68ffdee115096a6567a86ceb93c4538b8256de6cc14ceed8ebd02dda55021"},
+    {"batch_id": "phase7e-2026-batch-09", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "daf754a889b78f5d2e3e603566a8628afc0983717cdf6ac5d2b6946eef281f63", "developer_review_envelope_sha256": "a81e0c337e79cd6f2f1cc300da8cfdf6effa373c98ec32aeb9990f91feb7db37"},
+    {"batch_id": "phase7e-2026-batch-10", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "0f3cbf4d0b6b1d8b49dfa154428ef4aeb1cd4db69b4dd78ce67e5e825e708d63", "developer_review_envelope_sha256": "644eb2776c91b5ecc8dabdabf6997de3aaf34abf661d6467ab27eaf1b4aaa6ac"},
+    {"batch_id": "phase7e-2026-batch-11", "decision": "approved_for_college_resume_display", "batch_manifest_sha256": "b7193426002b6935ad6817349462e8c3c459984c0222c15238f61c13147598a8", "developer_review_envelope_sha256": "e6819ae50d453a1522e209b45f1f839d3b08ab43a8017d7dc864f7542b8d9404"}
+  ]
+}

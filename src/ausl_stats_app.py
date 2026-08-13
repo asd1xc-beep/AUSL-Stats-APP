@@ -99,7 +99,11 @@ from ausl_comparison import (
 from ausl_enrichment import EnrichmentMode
 from ausl_splits import apply_split_sample_policy
 from ausl_college_store import CollegeLoadResult, CollegeStore
-from ausl_college_view import CollegeFieldView, build_college_resume_view
+from ausl_college_view import (
+    CollegeConnectionFieldView,
+    CollegeFieldView,
+    build_college_resume_view,
+)
 
 
 CURRENT_YEAR = max(SEASONS)
@@ -3101,6 +3105,7 @@ class AUSLStatsApp:
             mode=loaded.mode,
             current_team=team,
             current_status=status,
+            connection_approval=loaded.connection_approval,
         )
         self._current_college_view = view
         if not view.available:
@@ -3218,11 +3223,57 @@ class AUSLStatsApp:
                 ).pack(side="left", padx=(5, 0))
 
         connections = self._college_section("Broadcast Connections")
-        ttk.Label(
-            connections,
-            text="No reviewed connections available. Phase 7D does not generate college storylines.",
-            style="Sub.TLabel",
-        ).pack(anchor="w")
+        if view.connection_fields:
+            for field in view.connection_fields:
+                item = ttk.Frame(connections, padding=(0, 5))
+                item.pack(fill="x")
+                item.columnconfigure(0, weight=1)
+                ttk.Label(
+                    item,
+                    text=f"COLLEGE CONNECTION · {field.headline}",
+                    style="CollegeScope.TLabel",
+                ).grid(row=0, column=0, sticky="w")
+                if field.school_season:
+                    ttk.Label(
+                        item,
+                        text=field.school_season,
+                        style="Sub.TLabel",
+                    ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+                ttk.Label(
+                    item,
+                    text=field.display_text,
+                    wraplength=790,
+                ).grid(row=2, column=0, sticky="w", pady=(2, 0))
+                ttk.Label(
+                    item,
+                    text=field.source_summary,
+                    style="Sub.TLabel",
+                    wraplength=790,
+                ).grid(row=3, column=0, sticky="w", pady=(2, 0))
+                actions = ttk.Frame(item)
+                actions.grid(row=0, column=1, rowspan=4, sticky="e", padx=(12, 0))
+                ttk.Button(
+                    actions,
+                    text="Copy College Connection",
+                    command=lambda connection_id=field.connection_id: (
+                        self.copy_college_connection(connection_id)
+                    ),
+                ).pack(fill="x")
+                ttk.Button(
+                    actions,
+                    text="Copy with Source",
+                    command=lambda connection_id=field.connection_id: (
+                        self.copy_college_connection(
+                            connection_id, with_source=True
+                        )
+                    ),
+                ).pack(fill="x", pady=(4, 0))
+        else:
+            ttk.Label(
+                connections,
+                text="No approved college connections are available for this exact player.",
+                style="Sub.TLabel",
+            ).pack(anchor="w")
 
         details = self._college_section("Sources and Completeness")
         ttk.Label(
@@ -3248,6 +3299,50 @@ class AUSLStatsApp:
         if view is None:
             return ()
         return (*view.stat_fields, *view.achievement_fields)
+
+    def _college_connection_fields(self):
+        view = getattr(self, "_current_college_view", None)
+        if view is None:
+            return ()
+        return view.connection_fields
+
+    def copy_college_connection(self, connection_id, *, with_source=False):
+        field = next(
+            (
+                item
+                for item in self._college_connection_fields()
+                if item.connection_id == connection_id
+            ),
+            None,
+        )
+        if not isinstance(field, CollegeConnectionFieldView):
+            self.college_status_var.set(
+                "College connection is unavailable; clipboard was unchanged."
+            )
+            return False
+        if not field.copy_eligible:
+            self.college_status_var.set(
+                f"College connection copy blocked — {field.block_reason} "
+                "Clipboard was unchanged."
+            )
+            return False
+        text = field.copy_with_source if with_source else field.copy_text
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        self._last_college_copy = {
+            "field_id": field.connection_id,
+            "connection_id": field.connection_id,
+            "evidence_hash": field.evidence_hash,
+            "with_source": bool(with_source),
+            "copied_at": datetime.now(timezone.utc),
+        }
+        self.college_status_var.set(
+            "Approved college connection copied with source."
+            if with_source
+            else "Approved college connection copied."
+        )
+        return True
 
     def copy_college_field(self, field_id, *, with_source=False):
         field = next(
@@ -5429,6 +5524,7 @@ class AUSLStatsApp:
             self._render_fact_cards()
             return
         database = dict(getattr(self, "db", {}) or {})
+        college_loaded = getattr(self, "_college_load_result", None)
         task = {
             "generation": generation,
             "game_id": selected.game_id,
@@ -5436,6 +5532,16 @@ class AUSLStatsApp:
             "database": database,
             "selected_game": selected,
             "lineup_lock": copy.deepcopy(self._current_lineup_lock()),
+            "college_artifact": (
+                college_loaded.approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
+            "connection_approval": (
+                college_loaded.connection_approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
         }
         if hasattr(self, "fact_panel_status_var"):
             mode = " from the installed snapshot" if self._offline_mode else ""
@@ -5482,6 +5588,8 @@ class AUSLStatsApp:
                     team_snapshot_provider=lambda code, season, data=database: (
                         official_team_snapshot(code, season, data)
                     ),
+                    college_artifact=task["college_artifact"],
+                    connection_approval=task["connection_approval"],
                 )
             except Exception as exc:
                 result = FactCollection(
@@ -5649,6 +5757,8 @@ class AUSLStatsApp:
         database,
         locked_lineups,
         *,
+        college_artifact=None,
+        connection_approval=None,
         cancel_check=None,
     ):
         """Build every exact-game canonical fact collection off the UI thread."""
@@ -5677,6 +5787,8 @@ class AUSLStatsApp:
                 team_snapshot_provider=lambda code, season, data=database: (
                     official_team_snapshot(code, season, data)
                 ),
+                college_artifact=college_artifact,
+                connection_approval=connection_approval,
             )
             if not isinstance(collection, FactCollection) or not collection.available:
                 raise ValueError(
@@ -5710,6 +5822,7 @@ class AUSLStatsApp:
         selected_game_id = (
             selected.game_id if isinstance(selected, SelectedGame) else None
         )
+        college_loaded = getattr(self, "_college_load_result", None)
         task = {
             "generation": generation,
             "database_identity": id(database),
@@ -5723,6 +5836,16 @@ class AUSLStatsApp:
             ),
             "context": self._change_comparison_context(selected_game_id),
             "affected_source": affected_source,
+            "college_artifact": (
+                college_loaded.approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
+            "connection_approval": (
+                college_loaded.connection_approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
         }
         self._change_status = "Comparing validated installed snapshots…"
         self._change_last_error = ""
@@ -5763,6 +5886,8 @@ class AUSLStatsApp:
                 facts = self._snapshot_facts_for_database(
                     task["database"],
                     task["locked_lineups"],
+                    college_artifact=task["college_artifact"],
+                    connection_approval=task["connection_approval"],
                     cancel_check=lambda current=task: (
                         current["generation"]
                         != getattr(self, "_change_build_generation", None)
@@ -6350,7 +6475,13 @@ class AUSLStatsApp:
             else "Both teams"
         )
         if team_filter != "Both teams":
-            facts = [item for item in facts if item.team_code == team_filter]
+            facts = [
+                item
+                for item in facts
+                if item.team_code == team_filter
+                or team_filter
+                in dict(item.evidence).get("subject_team_codes", "").split(",")
+            ]
         category_filter = (
             self.fact_category_filter_var.get()
             if hasattr(self, "fact_category_filter_var")

@@ -30,8 +30,9 @@ def test_only_approved_college_artifacts_enter_explicit_distribution_contract():
     )
 
 
-def test_phase7d_college_ui_remains_separate_from_professional_facts():
+def test_phase7e_connection_adapter_remains_separate_from_professional_totals():
     app = (ROOT / "src/ausl_stats_app.py").read_text(encoding="utf-8")
     facts = (ROOT / "src/ausl_facts.py").read_text(encoding="utf-8")
     assert "College Résumé" in app
-    assert "ausl_college" not in facts
+    assert "build_college_connection_facts" in facts
+    assert "college and AUSL" not in facts

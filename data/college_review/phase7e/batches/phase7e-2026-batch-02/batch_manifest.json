@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-02",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Alyssa Denham",
+      "player_id": "171"
+    },
+    {
+      "display_name": "Sami Williams",
+      "player_id": "194"
+    },
+    {
+      "display_name": "Amber Fiser",
+      "player_id": "195"
+    },
+    {
+      "display_name": "Aliyah Andrews",
+      "player_id": "197"
+    },
+    {
+      "display_name": "Sis Bates",
+      "player_id": "198"
+    },
+    {
+      "display_name": "Dejah Mulipola",
+      "player_id": "199"
+    },
+    {
+      "display_name": "Bubba Nickles-Camarena",
+      "player_id": "204"
+    },
+    {
+      "display_name": "Sierra Romero",
+      "player_id": "292"
+    },
+    {
+      "display_name": "Georgina Corrick",
+      "player_id": "307"
+    },
+    {
+      "display_name": "Mia Davidson",
+      "player_id": "310"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}

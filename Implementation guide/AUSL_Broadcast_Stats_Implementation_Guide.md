@@ -1,12 +1,12 @@
 # AUSL Broadcast Stats — Codex Implementation Guide
 
-Version: 1.3
+Version: 1.4
 
-Roadmap updated: 2026-08-11
+Roadmap updated: 2026-08-12
 
-Prepared from: merged Phase 7C GitHub `main` at
-`5996ef1f1a959f0c3c28f93d1fb1360f4c40111b`, then updated through Phase 7D
-on `agent/phase7d-college-resume-ui`.
+Prepared from: merged Phase 7D and portable-build GitHub `main` at
+`930217d55cb562a6c18cfa9642c7f0c6858d1d97`, then updated for Phase 7E on
+`agent/phase7e-college-scale-connections`.
 
 Primary files: `src/ausl_stats_app.py`, `src/ausl_data.py`
 
@@ -84,8 +84,25 @@ reported that 100%/125%/150% Windows display scaling, truck-hardware smoke,
 and producer rehearsal passed. The full Phase 6 acceptance record is closed.
 Phases 7A and 7B are complete. The project owner accepted the ten-player Phase
 7C pilot on 2026-08-11 and authorized Phase 7D without claiming personal AUSL
-producer review. Phase 7D implementation is complete; Windows scaling sign-off
-at 100%, 125%, and 150% remains pending. Phase 7E has not started.
+producer review. The project owner reported on 2026-08-12 that Phase 7D passed
+Windows scaling at 100%, 125%, and 150%. Phase 7D is accepted and Phase 7E is
+authorized.
+Phase 7D implementation is complete and its later manual scaling gate is now
+accepted; this sentence preserves the earlier implementation milestone while
+the status below records the current gate.
+
+Phase 7E-A now accounts for all 118 exact IDs in the checked-in 2026 roster.
+On 2026-08-12, the project owner explicitly approved all 11 bounded batches
+after reporting no mistakes, clear unavailable labels, and matching schools.
+The resulting approved aggregate is 9 Verified and 109 Partial; absent fields
+remain unavailable. Phase 7E-B produced eight deterministic connection
+candidates with stable identity, evidence hashes, and a complete suppression
+ledger. The project owner separately double-checked and approved all eight
+exact wordings. Those immutable versions now pass the producer workflow and
+package gates; changed evidence requires a new review. The project owner
+reported that the final expanded-content Windows scaling checks passed at
+100%, 125%, and 150%, closing Phase 7 without inferring unsupplied details.
+**PHASE 7 COMPLETE**
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -905,6 +922,8 @@ Implementation status (2026-07-29): complete on
 `Phase_7A_Acceptance_Record.md`. Phase 7B is accepted in
 `Phase_7B_Acceptance_Record.md`; Phase 7C's developer-review technical pilot
 is complete, producer review is pending, and Phase 7D remains not started.
+Historical boundary at that checkpoint: Phase 7E has not started. The current
+Phase 7E status is recorded in the roadmap and next-work sections below.
 
 `src/ausl_enrichment.py` defines the typed CORE_ONLY, PRODUCER_APPROVED, and
 DEVELOPER_REVIEW modes and the defensive row gates. Ordinary startup and
@@ -1385,15 +1404,29 @@ Do not start media-guide parsing, game-note classification, or a UI redesign in 
 
 ## 13. Current next work order
 
-Phase 7D implementation is complete on the ten-player reviewed cohort.
+Phase 7D is accepted on the ten-player reviewed cohort.
 
-1. The project owner performs Windows display-scaling checks at 100%, 125%,
-   and 150% and reports the result.
-2. Keep Phase 7E blocked until that sign-off is recorded.
+1. The project owner reported on 2026-08-12 that Windows display-scaling checks
+   passed at 100%, 125%, and 150%.
+2. Record **PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED** without inferring
+   unsupplied hardware, package, interaction, or producer-review details.
 3. Preserve the current exact-ID, field-provenance, approval-hash, incomplete
    field, and college-versus-AUSL separation gates.
-4. If scaling passes, begin Phase 7E with a bounded roster-scaling plan; do not
+4. Begin Phase 7E with a bounded roster-scaling plan; do not
    silently add new résumé values or generated connections.
+
+**PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED**
+
+Phase 7E-A produced deterministic coverage for 118 exact roster IDs and the
+project owner approved all 11 bounded batches on 2026-08-12. The aggregate now
+contains 9 Verified and 109 Partial résumés. The project owner separately
+double-checked and approved all eight Phase 7E-B connection wordings. Exact-
+version UI, fact, copy, rundown, session, What Changed, and explicit approved-
+enrichment integration pass their technical gates. The project owner reported
+that the expanded-content Windows scaling checks passed at 100%, 125%, and
+150%, closing Phase 7.
+
+**PHASE 7 COMPLETE**
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College

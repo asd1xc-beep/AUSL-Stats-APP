@@ -9,7 +9,8 @@ Phases 1-7C are implemented. The project owner accepted the exact ten-player
 Phase 7C college pilot on 2026-08-11 and authorized Phase 7D; this is recorded
 as project-owner acceptance, not as a claim of personal AUSL producer review.
 Phase 7D adds the ninth main tab, College Résumé, using only a hash-validated
-approved local envelope and exact player IDs.
+approved local envelope and exact player IDs. The project owner reported on
+2026-08-12 that the Phase 7D scaling test passed at 100%, 125%, and 150%.
 
 The clean Phase 7A baseline passed 769 offline tests. The accepted Phase 7A
 source passes 847 tests with warnings treated as errors. The deterministic
@@ -32,9 +33,23 @@ was run and the resulting real fact cards were manually reviewed without
 dubious facts or enrichment issues being observed. This is an owner-reported
 content audit only; no unsupplied samples, dates, or test details are asserted.
 
-Status: PHASE 7D IMPLEMENTATION COMPLETE — WINDOWS SCALING SIGN-OFF PENDING — PHASE 7E NOT STARTED.
-The project owner still needs to report display-scaling results at 100%, 125%,
-and 150% before Phase 7D is accepted and Phase 7E begins. This remains an assisted
+Status: PHASE 7 COMPLETE.
+The 2026 coverage manifest accounts for all 118 exact roster IDs. On
+2026-08-12, the project owner approved all 11 bounded batches after reporting
+no mistakes, clear unavailable labels, and matching schools. The resulting
+aggregate is 9 Verified and 109 Partial; review did not invent absent fields.
+Historical gate: PHASE 7D ACCEPTED — PHASE 7E AUTHORIZED.
+Phase 7E data integration followed that authorization. The project owner then
+double-checked and approved all eight exact college
+connection wordings. Those immutable evidence versions now appear in College
+Résumé and eligible selected-game fact workflows, including copy, pin,
+rundown, used-on-air, session restore, What Changed, and the explicit
+approved-enrichment package. Changed future evidence requires new review.
+The project owner reported that the final expanded-content Windows scaling
+checks passed at 100%, 125%, and 150%. This closes Phase 7 without asserting
+unsupplied package, hardware, display, or interaction details.
+The reported scaling result closes the Phase 7D start gate without asserting
+unsupplied hardware, package, or interaction details. This remains an assisted
 broadcast tool, not a candidate for unattended on-air use: cards that do not
 pass exact identity, provenance, freshness, source-health, and approval gates
 stay VERIFY, STALE, or UNAVAILABLE and cannot use ordinary air-line copy.

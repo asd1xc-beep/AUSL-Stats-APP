@@ -1,0 +1,11 @@
+AUSL Phase 7E Batch Approval
+Batch: phase7e-2026-batch-06
+Review role: project_owner
+Review date: 2026-08-12
+Decision: approved_for_college_resume_display
+Input manifest SHA-256: 928b9294bd9bdf87380b17f8da1fef2ed2d462af81e8c3c1de36e84d78eaa64d
+Input envelope SHA-256: 615f1d84902fe41a674b8aa3114c57f7086cea6ae7ad17b4993e8b5177a0327a
+Approved envelope SHA-256: 9231c247db21c92419a360a220c299507f290ddf3ce0f52b20b8a8381df00a86
+Exact player IDs: 1101, 1103, 1106, 1107, 1110, 1111, 1112, 1113, 1114, 1131
+Completeness: Partial=10
+Unavailable sections retained: statistics, achievements

@@ -1,0 +1,51 @@
+{
+  "batch_id": "phase7e-2026-batch-07",
+  "coverage_manifest_id": "phase7e-roster-coverage-2026-v1",
+  "generated_at": "2026-07-23T18:08:06.854069+00:00",
+  "mode": "developer_review",
+  "players": [
+    {
+      "display_name": "Paige Sinicki",
+      "player_id": "1184"
+    },
+    {
+      "display_name": "Aliyah Binford",
+      "player_id": "1185"
+    },
+    {
+      "display_name": "Mac Barbara",
+      "player_id": "1255"
+    },
+    {
+      "display_name": "Rylie Boone",
+      "player_id": "1258"
+    },
+    {
+      "display_name": "Alyssa Brito",
+      "player_id": "1259"
+    },
+    {
+      "display_name": "Ally Carda",
+      "player_id": "1261"
+    },
+    {
+      "display_name": "Jayda Coleman",
+      "player_id": "1262"
+    },
+    {
+      "display_name": "Jailyn Ford",
+      "player_id": "1265"
+    },
+    {
+      "display_name": "Jenna Laird",
+      "player_id": "1278"
+    },
+    {
+      "display_name": "KK Madrey",
+      "player_id": "1283"
+    }
+  ],
+  "schema_name": "ausl-college-review-batch",
+  "schema_version": 1,
+  "season": 2026
+}

@@ -27,6 +27,16 @@ from ausl_college_approval import (
     APPROVED_ENVELOPE_NAME as COLLEGE_APPROVED_ENVELOPE_NAME,
     validate_approved_payload,
 )
+from ausl_college_batch_approval import (
+    AGGREGATE_ENVELOPE_NAME,
+    AGGREGATE_MANIFEST_NAME,
+    validate_aggregate_approval,
+)
+from ausl_college_connection_approval import (
+    APPROVED_CONNECTION_ARTIFACT_NAME,
+    CONNECTION_APPROVAL_MANIFEST_NAME,
+    validate_connection_approval,
+)
 from tools.generate_distribution_manifest import (
     CORE_EXPORTS,
     generate_distribution_manifest,
@@ -137,6 +147,30 @@ def _hash_record(
     }
 
 
+def _source_file(source: Path, name: str, checked_directory: str) -> Path:
+    direct = source / name
+    checked_in = source.parent / checked_directory / name
+    return direct if direct.is_file() else checked_in
+
+
+def _roster_player_ids(roster: pd.DataFrame) -> set[str]:
+    if "player_id" not in roster.columns:
+        raise ValueError("Roster workbook is missing exact player IDs")
+    player_ids: list[str] = []
+    for value in roster["player_id"]:
+        if pd.isna(value):
+            raise ValueError("Roster workbook contains a missing player ID")
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        player_id = str(value).strip()
+        if not player_id:
+            raise ValueError("Roster workbook contains a missing player ID")
+        player_ids.append(player_id)
+    if len(player_ids) != len(set(player_ids)):
+        raise ValueError("Roster workbook contains duplicate exact player IDs")
+    return set(player_ids)
+
+
 def stage_distribution_profile(
     source_exports: Path,
     destination_exports: Path,
@@ -211,21 +245,37 @@ def stage_distribution_profile(
             }
         )
 
-    college_sources = []
-    for name in (COLLEGE_APPROVED_ENVELOPE_NAME, COLLEGE_APPROVAL_MANIFEST_NAME):
-        direct = source / name
-        checked_in = source.parent / "college_approved" / name
-        college_sources.append(direct if direct.is_file() else checked_in)
+    aggregate_sources = (
+        _source_file(source, AGGREGATE_ENVELOPE_NAME, "college_approved_phase7e"),
+        _source_file(source, AGGREGATE_MANIFEST_NAME, "college_approved_phase7e"),
+    )
+    pilot_sources = (
+        _source_file(source, COLLEGE_APPROVED_ENVELOPE_NAME, "college_approved"),
+        _source_file(source, COLLEGE_APPROVAL_MANIFEST_NAME, "college_approved"),
+    )
+    use_aggregate = aggregate_sources[1].is_file()
+    college_sources = aggregate_sources if use_aggregate else pilot_sources
     college_player_count = 0
+    college_artifact = None
     if any(path.is_file() for path in college_sources):
         if not all(path.is_file() for path in college_sources):
             raise ValueError(
                 "Approved college packaging requires both envelope and approval manifest"
             )
-        artifact = validate_approved_payload(
-            college_sources[0].read_bytes(), college_sources[1].read_bytes()
+        college_artifact = (
+            validate_aggregate_approval(
+                college_sources[0].read_bytes(), college_sources[1].read_bytes()
+            )
+            if use_aggregate
+            else validate_approved_payload(
+                college_sources[0].read_bytes(), college_sources[1].read_bytes()
+            )
         )
-        college_player_count = len(artifact.envelope.resumes)
+        college_player_count = len(college_artifact.envelope.resumes)
+        if use_aggregate and set(college_artifact.manifest.player_ids) != _roster_player_ids(roster):
+            raise ValueError(
+                "Approved Phase 7E college roster does not exactly match the packaged roster"
+            )
         for source_path in college_sources:
             destination_path = destination / source_path.name
             shutil.copyfile(source_path, destination_path)
@@ -233,7 +283,55 @@ def stage_distribution_profile(
                 _hash_record(
                     destination_path,
                     row_count=college_player_count,
-                    validation="producer_approved_phase_7d_college",
+                    validation=(
+                        "producer_approved_phase_7e_college"
+                        if use_aggregate
+                        else "producer_approved_phase_7d_college"
+                    ),
+                )
+            )
+
+    connection_sources = (
+        _source_file(
+            source,
+            APPROVED_CONNECTION_ARTIFACT_NAME,
+            "college_connections_approved",
+        ),
+        _source_file(
+            source,
+            CONNECTION_APPROVAL_MANIFEST_NAME,
+            "college_connections_approved",
+        ),
+    )
+    college_connection_count = 0
+    if any(path.is_file() for path in connection_sources):
+        if not all(path.is_file() for path in connection_sources):
+            raise ValueError(
+                "Approved college connection packaging requires artifact and manifest"
+            )
+        if not use_aggregate or college_artifact is None:
+            raise ValueError(
+                "Approved college connections require the Phase 7E full-roster approval"
+            )
+        connection_artifact = validate_connection_approval(
+            connection_sources[0].read_bytes(), connection_sources[1].read_bytes()
+        )
+        player_ids = set(college_artifact.manifest.player_ids)
+        source_ids = {item.source_id for item in college_artifact.envelope.sources}
+        for candidate in connection_artifact.connections.candidates:
+            if not set(candidate.subject_player_ids) <= player_ids:
+                raise ValueError("Approved college connection has an unknown player ID")
+            if not set(candidate.evidence_source_ids) <= source_ids:
+                raise ValueError("Approved college connection has an unknown source ID")
+        college_connection_count = len(connection_artifact.connections.candidates)
+        for source_path in connection_sources:
+            destination_path = destination / source_path.name
+            shutil.copyfile(source_path, destination_path)
+            file_records.append(
+                _hash_record(
+                    destination_path,
+                    row_count=college_connection_count,
+                    validation="producer_approved_phase_7e_connections",
                 )
             )
 
@@ -244,6 +342,7 @@ def stage_distribution_profile(
         "files": sorted(file_records, key=lambda item: item["name"]),
         "profile": "approved-enrichment",
         "college_player_count": college_player_count,
+        "college_connection_count": college_connection_count,
         "provenance_columns": provenance_columns,
         "row_counts": row_counts,
         "schema_version": 1,
