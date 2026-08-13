@@ -128,7 +128,7 @@ def test_review_packet_is_deterministic_and_never_calls_candidates_air_ready():
     assert "Alpha Player — AUSL ID 10" in first
     assert "Beta Pitcher — AUSL ID 11" in first
     assert "air-ready" not in first.casefold()
-    assert "https://theausl.com" in first
+    assert first.splitlines().count("- Reference: https://theausl.com") == 2
 
 
 def test_batch_promotion_is_idempotent_and_failure_retains_last_known_good(tmp_path):
