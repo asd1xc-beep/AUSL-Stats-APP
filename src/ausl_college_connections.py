@@ -213,8 +213,6 @@ class CollegeConnectionCandidate:
         object.__setattr__(self, "suppression_reason", _optional(self.suppression_reason, "suppression_reason"))
         if self.review_state is ConnectionReviewState.SUPPRESSED and not self.suppression_reason:
             raise ValueError("suppressed connection requires a reason")
-        if self.approval_state is ConnectionApprovalState.APPROVED:
-            raise ValueError("the Phase 7E candidate engine cannot create approval")
 
     @property
     def connection_id(self) -> str:
