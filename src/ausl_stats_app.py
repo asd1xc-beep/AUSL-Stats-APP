@@ -5524,6 +5524,7 @@ class AUSLStatsApp:
             self._render_fact_cards()
             return
         database = dict(getattr(self, "db", {}) or {})
+        college_loaded = getattr(self, "_college_load_result", None)
         task = {
             "generation": generation,
             "game_id": selected.game_id,
@@ -5531,6 +5532,16 @@ class AUSLStatsApp:
             "database": database,
             "selected_game": selected,
             "lineup_lock": copy.deepcopy(self._current_lineup_lock()),
+            "college_artifact": (
+                college_loaded.approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
+            "connection_approval": (
+                college_loaded.connection_approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
         }
         if hasattr(self, "fact_panel_status_var"):
             mode = " from the installed snapshot" if self._offline_mode else ""
@@ -5577,6 +5588,8 @@ class AUSLStatsApp:
                     team_snapshot_provider=lambda code, season, data=database: (
                         official_team_snapshot(code, season, data)
                     ),
+                    college_artifact=task["college_artifact"],
+                    connection_approval=task["connection_approval"],
                 )
             except Exception as exc:
                 result = FactCollection(
@@ -5744,6 +5757,8 @@ class AUSLStatsApp:
         database,
         locked_lineups,
         *,
+        college_artifact=None,
+        connection_approval=None,
         cancel_check=None,
     ):
         """Build every exact-game canonical fact collection off the UI thread."""
@@ -5772,6 +5787,8 @@ class AUSLStatsApp:
                 team_snapshot_provider=lambda code, season, data=database: (
                     official_team_snapshot(code, season, data)
                 ),
+                college_artifact=college_artifact,
+                connection_approval=connection_approval,
             )
             if not isinstance(collection, FactCollection) or not collection.available:
                 raise ValueError(
@@ -5805,6 +5822,7 @@ class AUSLStatsApp:
         selected_game_id = (
             selected.game_id if isinstance(selected, SelectedGame) else None
         )
+        college_loaded = getattr(self, "_college_load_result", None)
         task = {
             "generation": generation,
             "database_identity": id(database),
@@ -5818,6 +5836,16 @@ class AUSLStatsApp:
             ),
             "context": self._change_comparison_context(selected_game_id),
             "affected_source": affected_source,
+            "college_artifact": (
+                college_loaded.approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
+            "connection_approval": (
+                college_loaded.connection_approval
+                if isinstance(college_loaded, CollegeLoadResult)
+                else None
+            ),
         }
         self._change_status = "Comparing validated installed snapshots…"
         self._change_last_error = ""
@@ -5858,6 +5886,8 @@ class AUSLStatsApp:
                 facts = self._snapshot_facts_for_database(
                     task["database"],
                     task["locked_lineups"],
+                    college_artifact=task["college_artifact"],
+                    connection_approval=task["connection_approval"],
                     cancel_check=lambda current=task: (
                         current["generation"]
                         != getattr(self, "_change_build_generation", None)
@@ -6445,7 +6475,13 @@ class AUSLStatsApp:
             else "Both teams"
         )
         if team_filter != "Both teams":
-            facts = [item for item in facts if item.team_code == team_filter]
+            facts = [
+                item
+                for item in facts
+                if item.team_code == team_filter
+                or team_filter
+                in dict(item.evidence).get("subject_team_codes", "").split(",")
+            ]
         category_filter = (
             self.fact_category_filter_var.get()
             if hasattr(self, "fact_category_filter_var")

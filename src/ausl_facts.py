@@ -20,6 +20,15 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import pandas as pd
 
 from ausl_data import normalize_roster_status
+from ausl_college_approval import ApprovedCollegeArtifact, validate_approved_payload
+from ausl_college_batch_approval import (
+    ApprovedAggregateArtifact,
+    validate_aggregate_approval,
+)
+from ausl_college_connection_approval import (
+    ApprovedConnectionArtifact,
+    validate_connection_approval,
+)
 from ausl_splits import apply_split_sample_policy, innings_to_outs as split_innings_to_outs
 
 
@@ -36,6 +45,7 @@ class FactCategory(str, Enum):
     TEAM_CONTEXT = "team_context"
     BACKGROUND = "background"
     MANUAL_NOTE = "manual_note"
+    COLLEGE_CONNECTION = "college_connection"
 
 
 class FactSubjectType(str, Enum):
@@ -416,6 +426,22 @@ def copy_with_source_text(fact: BroadcastFact) -> str:
         f"Fact ID: {fact.fact_id}",
         f"Evidence: {fact.evidence_hash}",
     ]
+    for index, source in enumerate(fact.provenance[1:], 2):
+        source_bits = [source.source_name or "Source unavailable"]
+        if source.source_game_id:
+            source_bits.append(f"Game {source.source_game_id}")
+        if source.source_page:
+            source_bits.append(f"page {source.source_page}")
+        lines.extend(
+            [
+                f"Source {index}: {', '.join(source_bits)}",
+                f"Source {index} date: {source.source_date or 'Unavailable'}",
+                (
+                    f"Source {index} snapshot: "
+                    f"{source.snapshot_timestamp or 'Unavailable'}"
+                ),
+            ]
+        )
     if fact.warning_reason:
         lines.append(f"Warning: {fact.warning_reason}")
     return "\n".join(lines)
@@ -434,6 +460,7 @@ _CATEGORY_PRIORITY = {
     FactCategory.CAREER_SUMMARY: 7,
     FactCategory.MANUAL_NOTE: 8,
     FactCategory.BACKGROUND: 8,
+    FactCategory.COLLEGE_CONNECTION: 8,
 }
 
 
@@ -1752,6 +1779,239 @@ def _team_context_facts(
     return facts
 
 
+def _validated_college_artifact(
+    artifact: ApprovedCollegeArtifact | ApprovedAggregateArtifact | None,
+) -> ApprovedCollegeArtifact | ApprovedAggregateArtifact | None:
+    try:
+        if isinstance(artifact, ApprovedAggregateArtifact):
+            return validate_aggregate_approval(
+                artifact.envelope_payload, artifact.manifest_payload
+            )
+        if isinstance(artifact, ApprovedCollegeArtifact):
+            return validate_approved_payload(
+                artifact.envelope_payload, artifact.manifest_payload
+            )
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def build_college_connection_facts(
+    database: Mapping[str, Any],
+    selected_game: Any,
+    *,
+    college_artifact: ApprovedCollegeArtifact | ApprovedAggregateArtifact | None,
+    connection_approval: ApprovedConnectionArtifact | None,
+    maximum_facts: int = 3,
+    maximum_per_player: int = 2,
+) -> list[BroadcastFact]:
+    """Adapt only validated, approved college connections to BroadcastFact.
+
+    The adapter is local-only.  It revalidates both approval byte sets, checks
+    every connection subject against the current exact-ID roster, and applies
+    bounded Game Day diversity without changing the underlying connection.
+    """
+
+    if maximum_facts < 1 or maximum_per_player < 1:
+        return []
+    college = _validated_college_artifact(college_artifact)
+    if college is None or connection_approval is None:
+        return []
+    try:
+        approved = validate_connection_approval(
+            connection_approval.candidate_payload,
+            connection_approval.manifest_payload,
+        )
+    except (OSError, ValueError):
+        return []
+    game_id = _identifier(_field(selected_game, "game_id"))
+    season_value = _number(_field(selected_game, "season"), integer=True)
+    if not game_id or season_value is None:
+        return []
+    season = int(season_value)
+    away_code = _text(_field(selected_game, "away_team_code")).upper()
+    home_code = _text(_field(selected_game, "home_team_code")).upper()
+    team_order = tuple(code for code in (away_code, home_code) if code)
+    if len(set(team_order)) != 2:
+        return []
+    roster = database.get("roster") if isinstance(database, Mapping) else None
+    required = {"player_id", "player_name", "team_code", "roster_status"}
+    if not isinstance(roster, pd.DataFrame) or not required.issubset(roster.columns):
+        return []
+    rows_by_player: dict[str, pd.Series] = {}
+    duplicate_ids: set[str] = set()
+    for _, row in roster.iterrows():
+        player_id = _identifier(row.get("player_id"))
+        if not player_id:
+            continue
+        if player_id in rows_by_player:
+            duplicate_ids.add(player_id)
+        else:
+            rows_by_player[player_id] = row
+    source_by_id = {source.source_id: source for source in college.envelope.sources}
+    snapshot = college.envelope.generated_at.astimezone(timezone.utc).isoformat()
+    team_names = _selected_team_names(selected_game)
+    approval_record_prefix = (
+        f"{approved.manifest.approval_schema_name}:"
+        f"{approved.manifest.approved_candidate_sha256}"
+    )
+    proposed: list[tuple[BroadcastFact, tuple[str, ...], tuple[str, ...], int]] = []
+    for candidate in approved.connections.candidates:
+        if not candidate.air_ready:
+            continue
+        if any(
+            player_id in duplicate_ids or player_id not in rows_by_player
+            for player_id in candidate.subject_player_ids
+        ):
+            continue
+        subject_rows = tuple(
+            rows_by_player[player_id] for player_id in candidate.subject_player_ids
+        )
+        subject_team_codes = tuple(
+            _text(row.get("team_code")).upper() for row in subject_rows
+        )
+        relevant_teams = tuple(
+            code for code in team_order if code in subject_team_codes
+        )
+        if not relevant_teams:
+            continue
+        used_sources = tuple(
+            source_by_id[source_id]
+            for source_id in candidate.evidence_source_ids
+            if source_id in source_by_id
+        )
+        if (
+            len(used_sources) != len(candidate.evidence_source_ids)
+            or any(source.verification_state != "verified" for source in used_sources)
+        ):
+            continue
+        statuses = tuple(normalize_roster_status(row.get("roster_status")) for row in subject_rows)
+        inactive = tuple(
+            candidate.subject_display_names[index]
+            for index, status in enumerate(statuses)
+            if status != "Active"
+        )
+        warning = (
+            "Current roster status requires verification for " + ", ".join(inactive) + "."
+            if inactive
+            else ""
+        )
+        state = VerificationState.VERIFY if warning else VerificationState.VERIFIED
+        provenance = tuple(
+            SourceProvenance(
+                source_name=f"{source.organization} — {source.title}",
+                source_reference=(
+                    source.url
+                    or source.local_document_id
+                    or f"local:college-source:{source.source_id}"
+                ),
+                source_date=(
+                    source.effective_date
+                    or source.retrieved_at.astimezone(timezone.utc).date().isoformat()
+                ),
+                source_page=source.locator or None,
+                snapshot_timestamp=snapshot,
+                parser_version=source.version,
+                approval_record_id=(
+                    f"{approval_record_prefix}:{candidate.connection_id}"
+                ),
+                source_record_id=(
+                    f"{candidate.connection_id}:{source.source_id}"
+                ),
+            )
+            for source in used_sources
+        )
+        primary_team = relevant_teams[0]
+        display_names = " / ".join(candidate.subject_display_names)
+        program_season = " · ".join(
+            value
+            for value in (
+                " / ".join(candidate.program_display_names),
+                " / ".join(candidate.season_scope),
+            )
+            if value
+        )
+        fact = _fact(
+            category=FactCategory.COLLEGE_CONNECTION,
+            subject_type=FactSubjectType.PLAYER,
+            subject_id="+".join(candidate.subject_player_ids),
+            season=season,
+            game_id=game_id,
+            source_record_identity=candidate.connection_id,
+            concept_key=f"college-connection:{candidate.connection_type.value}",
+            headline=f"COLLEGE CONNECTION — {display_names.upper()}",
+            air_copy=candidate.wording,
+            supporting_context=(
+                f"Approved college connection · {program_season}"
+                if program_season
+                else "Approved college connection."
+            ),
+            subject_display_name=display_names,
+            team_code=primary_team,
+            team_display_name=team_names.get(primary_team) or primary_team,
+            opponent_context=f"Game {game_id} · {away_code} vs {home_code}",
+            provenance=provenance,
+            verification_state=state,
+            source_health="green",
+            warning_reason=warning,
+            producer_confirmation_required=bool(warning),
+            readiness_blocking=False,
+            evidence=(
+                ("approved_connection_sha256", approved.manifest.approved_candidate_sha256),
+                ("connection_evidence_hash", candidate.evidence_version_hash),
+                ("connection_id", candidate.connection_id),
+                ("connection_type", candidate.connection_type.value),
+                ("program_ids", ",".join(candidate.program_ids)),
+                ("season_scope", ",".join(candidate.season_scope)),
+                ("source_record_ids", ",".join(candidate.evidence_record_ids)),
+                ("subject_player_ids", ",".join(candidate.subject_player_ids)),
+                ("subject_team_codes", ",".join(subject_team_codes)),
+            ),
+        )
+        proposed.append(
+            (fact, candidate.subject_player_ids, relevant_teams, candidate.priority_score)
+        )
+
+    remaining = sorted(
+        proposed,
+        key=lambda item: (
+            -len(item[2]),
+            -item[3],
+            item[0].source_record_identity,
+        ),
+    )
+    selected: list[BroadcastFact] = []
+    player_counts: dict[str, int] = {}
+    team_counts = {code: 0 for code in team_order}
+    while remaining and len(selected) < maximum_facts:
+        eligible = [
+            item
+            for item in remaining
+            if all(
+                player_counts.get(player_id, 0) < maximum_per_player
+                for player_id in item[1]
+            )
+        ]
+        if not eligible:
+            break
+        choice = min(
+            eligible,
+            key=lambda item: (
+                -len(item[2]),
+                min(team_counts[code] for code in item[2]),
+                -item[3],
+                item[0].source_record_identity,
+            ),
+        )
+        remaining.remove(choice)
+        selected.append(choice[0])
+        for player_id in choice[1]:
+            player_counts[player_id] = player_counts.get(player_id, 0) + 1
+        for code in choice[2]:
+            team_counts[code] += 1
+    return selected
+
+
 def build_selected_game_facts(
     database: Mapping[str, Any],
     selected_game: Any,
@@ -1759,6 +2019,8 @@ def build_selected_game_facts(
     lineup_lock: Mapping[str, Any] | None = None,
     media_approval_validator: Callable[..., str] | None = None,
     team_snapshot_provider: Callable[[str, int], Any] | None = None,
+    college_artifact: ApprovedCollegeArtifact | ApprovedAggregateArtifact | None = None,
+    connection_approval: ApprovedConnectionArtifact | None = None,
 ) -> FactCollection:
     """Build one deterministic, exact-game fact collection without I/O."""
 
@@ -1811,6 +2073,12 @@ def build_selected_game_facts(
         *_manual_note_facts(database, selected_game, roster, snapshot),
         *_team_context_facts(
             database, selected_game, snapshot, team_snapshot_provider
+        ),
+        *build_college_connection_facts(
+            database,
+            selected_game,
+            college_artifact=college_artifact,
+            connection_approval=connection_approval,
         ),
     ]
     facts = order_facts(
