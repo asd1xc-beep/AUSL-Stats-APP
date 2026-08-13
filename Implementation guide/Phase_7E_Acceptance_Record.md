@@ -1,6 +1,6 @@
 # Phase 7E Interim Acceptance Record
 
-Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 
 ## Starting gate and baseline
 
@@ -46,8 +46,35 @@ Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
   teammate relationship.
 - Missing season, unverified source, ambiguous identity, Needs Review
   completeness, and insufficient relationship evidence fail closed.
-- No connection has project-owner approval, producer eligibility, UI loading,
-  fact conversion, or distribution inclusion.
+- At that checkpoint no connection had project-owner approval, producer
+  eligibility, UI loading, fact conversion, or distribution inclusion.
+
+## Completed checkpoint: 7E-C exact connection approval
+
+- On 2026-08-12, the project owner reported that all eight exact connection
+  wordings were double-checked, correct, and approved.
+- Commit `1689169` records the tamper-evident approval transaction; it binds
+  the reviewed artifact hash, every stable connection ID, relationship type,
+  exact player and program IDs, season scope, wording, sources, and input and
+  approved evidence hashes.
+- Approved connection artifact SHA-256:
+  `ead4ebeffecdf5557ef2eefe4899b87b12cde6fad960ffaae92a841eaac7c553`.
+- Future changed evidence or wording does not inherit this approval.
+
+## Completed checkpoint: 7E-D/E producer and package integration
+
+- The default approved college store now validates and loads all 118 reviewed
+  résumés and all eight exact approved connections with complete last-known-
+  good fallback.
+- College Résumé, selected-game Broadcast Fact, copy, pin, rundown,
+  used-on-air history, session restore, and What Changed preserve stable and
+  evidence-version identity. Game Day adds at most three relevant college
+  connections and at most two per player without outranking stronger current
+  AUSL facts.
+- The explicit approved-enrichment profile includes only the validated
+  aggregate envelope/manifest and connection artifact/manifest. Review
+  decisions, packets, staging, summaries, and suppressions remain excluded;
+  core distributions remain college-free.
 
 ## Failing-first evidence
 
@@ -60,6 +87,10 @@ Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
   ten focused checks.
 - Four updated documentation checks failed against the obsolete batch-pending
   state before the living documents and connection specification were updated.
+- Five Phase 7E package tests failed before the builder and verifier understood
+  the full-roster aggregate and separately approved connections.
+- Four documentation tests failed against the obsolete connection-review gate
+  before the exact owner decision and final Windows gate were recorded.
 
 ## Verification so far
 
@@ -87,19 +118,28 @@ Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
   `57cf838cb618317a4902462aaf1effa6c216fa7143499d04cbd4042168494c72`.
   They contain only the existing ten-player approved college envelope and
   manifest; no Phase 7E review artifact is present.
+- Connection approval and tamper tests: **20 passed**.
+- Full-roster College Résumé/connection UI tests: **28 passed**.
+- Fact, rundown, session, What Changed, callback, and refresh-state matrix:
+  **232 passed**.
+- Phase 7E approved-package failing-first group: **5 passed**.
+- Windows 10 source real-Tk smoke passed on Python 3.12.10 / Tk 8.6.15 at
+  1120x720 with network blocked. It exercised all nine tabs, approved
+  connection copy/source copy, no-connection and Partial states, Game Day,
+  pin/used evidence identity, and Local/Offline rebuilding.
 
 ## Current human gate and remaining Phase 7E boundary
 
 - Human batch review: complete for all eleven batches.
 - Full-roster aggregate approval: complete for the exact reviewed scope.
 - Connection engine: complete.
-- Connection wording review and approval: pending for all 8 candidates.
+- Connection wording review and approval: complete for all 8 exact versions.
 - Producer UI, `BroadcastFact`, session, What Changed, and expanded
-  approved-enrichment integration: not started.
+  approved-enrichment integration: complete and verified.
 - Final Windows scaling pass for expanded Phase 7E content: not started.
-- `COLLEGE-007` remains incomplete and `COLLEGE-008` remains deferred.
+- `COLLEGE-007` is technically complete and `COLLEGE-008` remains deferred.
 
-Phase 7 is not complete. Continue only after explicit project-owner decisions
-for the eight candidate IDs in the connection review packet.
+Phase 7 is not complete. The remaining gate is a project-owner expanded-
+content Windows scaling pass at 100%, 125%, and 150%.
 
-**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**

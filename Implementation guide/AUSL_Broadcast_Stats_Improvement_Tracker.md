@@ -59,7 +59,7 @@ the later owner scaling report advanced that milestone to accepted.
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 
 ## Approved next roadmap
 
@@ -76,7 +76,7 @@ be reused by the college layer.
 | 4 | Phase 7B | Define the normalized, provenance-first college data foundation | Complete |
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
 | 6 | Phase 7D | Add the separate College Résumé tab | Accepted; owner-reported 100%/125%/150% scaling passed 2026-08-12 |
-| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | 11 batches approved; 8 connection candidates pending exact-wording review |
+| 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Data accepted; final 100%/125%/150% Windows sign-off pending |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -501,7 +501,7 @@ The college layer must remain visually and statistically separate from AUSL prof
   - The pilot target is a verified useful résumé, not forced completeness for
     every season and field.
 
-- [ ] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · CONNECTION ENGINE COMPLETE — PROJECT-OWNER WORDING REVIEW PENDING**
+- [x] `COLLEGE-007` — Add college-based broadcast connections and storylines after producer review. **P2 · TECHNICALLY COMPLETE — ALL 8 EXACT CONNECTIONS PROJECT-OWNER APPROVED**
   - Former teammates, conference rivals, champions, homecomings, coaches, and role changes.
 
 - [ ] `COLLEGE-008` — Consider complete season-by-season college statistics only after the pilot proves useful. **P3 · DEFERRED — PRODUCER DECISION AFTER PHASE 7D**
@@ -589,12 +589,15 @@ No unsupplied package, hardware, or interaction detail is inferred.
 - Review artifacts remain outside startup, refresh, facts, core, and
   approved-enrichment distributions.
 - Phase 7E-B generated eight review-only connection candidates and 244 exact
-  suppression records. Connection wording review is still required before
-  any producer integration.
+  suppression records. The project owner separately double-checked and
+  approved all eight exact wordings. Only those tamper-evident evidence
+  versions are integrated into producer workflows and approved packaging.
+- Phase 7 closure still requires the final expanded-content Windows scaling
+  pass at 100%, 125%, and 150%; `COLLEGE-008` remains deferred.
 
 Detailed review instructions: `Phase_7E_Review_Packet.md`.
 
-**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 
 ### Phase 7B — College data foundation
 

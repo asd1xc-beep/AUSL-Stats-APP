@@ -1,6 +1,6 @@
 # Phase 7E Full-Roster and Connection Review Packet
 
-Status: **CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+Status: **PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 
 ## Project-owner batch decision
 
@@ -42,14 +42,15 @@ seasons, statistics, achievements, roles, or newly generated connections.
   `d02a63cfc45190590cb7fb8ee66972a09efd697e1ddace591319511a3e4ce081`.
 
 The approved artifacts are in `data/college_approved_batches/phase7e` and
-`data/college_approved_phase7e`. They remain outside ordinary startup,
-refresh, facts, and producer distributions at this checkpoint.
+`data/college_approved_phase7e`. The aggregate is loaded only through its
+validated producer path and is eligible for the explicit approved-enrichment
+distribution.
 
 The original review inputs remain available under
 `data/college_review/phase7e/batches`. Every batch retains its exact
 `batch_manifest.json`, `developer_review_envelope.json`, and `review_packet.md`.
 
-## Connection candidates now ready for review
+## Project-owner connection decision
 
 The separate deterministic connection engine produced eight candidates and
 244 exact suppression records. Its review files are:
@@ -64,16 +65,28 @@ source references. The JSON contains the complete suppression ledger. Of the
 overlapping attendance that does not independently prove a teammate
 relationship.
 
-No connection has project-owner approval. The eight candidates **must not enter producer-facing use**
-until the project owner approves, rejects, or corrects
-each exact connection ID and wording. Approval of Batch 01 through Batch 11
-does not satisfy this separate gate.
+After completing the batch review, the project owner separately reported that
+all eight exact connection wordings were double-checked, correct, and
+approved. The decision file binds the SHA-256 of the reviewed artifact and
+each candidate's stable ID and input evidence hash. The generated approval
+manifest additionally binds connection type, exact player IDs, program IDs,
+season scope, wording, source IDs, and approved evidence hash.
 
-## Current gate
+The approval applies only to those eight immutable evidence versions. It does
+not approve the 244 suppressed relationships or a connection rebuilt from
+changed wording, evidence, identity, season scope, or provenance.
 
-Review the connection packet and return a decision for each of its eight
-stable IDs. Until that happens, `COLLEGE-007` remains incomplete, the
-connections are not loaded by the app, and final Phase 7E integration must not
-begin.
+## Producer integration and remaining gate
 
-**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+The validated eight-connection artifact is available in the College Résumé
+view and the bounded selected-game Broadcast Fact collection. Exact evidence
+identity is retained through copy, pin, rundown, used-on-air history, session
+restore, and What Changed. The approved-enrichment profile packages only the
+validated 118-player aggregate and eight-connection approval files; review
+decisions, packets, staging files, summaries, and suppressions remain excluded.
+
+`COLLEGE-007` is technically complete. Phase 7 is not yet closed: the project
+owner must complete the expanded-content Windows scaling pass at 100%, 125%,
+and 150%. `COLLEGE-008` remains deferred.
+
+**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**

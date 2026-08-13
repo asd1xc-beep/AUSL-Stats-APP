@@ -95,10 +95,13 @@ Phase 7E-A now accounts for all 118 exact IDs in the checked-in 2026 roster.
 On 2026-08-12, the project owner explicitly approved all 11 bounded batches
 after reporting no mistakes, clear unavailable labels, and matching schools.
 The resulting approved aggregate is 9 Verified and 109 Partial; absent fields
-remain unavailable. Phase 7E-B has produced eight deterministic, review-only
-connection candidates with stable identity, evidence hashes, and a complete
-suppression ledger. The connection wording has not been approved.
-**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+remain unavailable. Phase 7E-B produced eight deterministic connection
+candidates with stable identity, evidence hashes, and a complete suppression
+ledger. The project owner separately double-checked and approved all eight
+exact wordings. Those immutable versions now pass the producer workflow and
+package gates; changed evidence requires a new review. The final expanded-
+content Windows scaling sign-off at 100%, 125%, and 150% remains open.
+**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 Direct producer feedback makes the College Résumé the next major product
 feature; approved optional enrichment is promoted first because the college
 layer must reuse the same trust, provenance, freshness, and last-known-good
@@ -1415,14 +1418,13 @@ Phase 7D is accepted on the ten-player reviewed cohort.
 
 Phase 7E-A produced deterministic coverage for 118 exact roster IDs and the
 project owner approved all 11 bounded batches on 2026-08-12. The aggregate now
-contains 9 Verified and 109 Partial résumés. Phase 7E-B generated eight
-evidence-backed connection candidates, but none has connection approval. The
-project owner must inspect
-`data/college_review/phase7e/connections/connection_review_packet.md` and
-return an exact decision for each stable ID and wording before app, fact,
-session, What Changed, or distribution integration begins.
+contains 9 Verified and 109 Partial résumés. The project owner separately
+double-checked and approved all eight Phase 7E-B connection wordings. Exact-
+version UI, fact, copy, rundown, session, What Changed, and explicit approved-
+enrichment integration now pass their technical gates. Phase 7 remains open
+only for the final owner-run expanded-content Windows scaling sign-off.
 
-**CONNECTION ENGINE COMPLETE — CONNECTION REVIEW PENDING**
+**PHASE 7E DATA ACCEPTED — FINAL WINDOWS SIGN-OFF PENDING**
 
 Do not combine Phase 7A with college ingestion in one implementation pass. The
 purpose of 7A is to prove the producer-facing trust boundary that the College
