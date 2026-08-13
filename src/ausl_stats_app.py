@@ -499,6 +499,104 @@ def resolve_manual_note_player(roster, selection):
     return None, "Player selection is unresolved; choose an exact picker entry"
 
 
+class DebouncedScrollableFrame:
+    """Shared ``<Configure>`` plumbing for one scrollable canvas panel.
+
+    Five panels used to duplicate the same pair of bindings. The canvas half
+    wrote ``itemconfigure(window, width=event.width)`` on every resize step,
+    and that width write relayouts every widget inside the container — 886 of
+    them on Game Day, which cost about half of each resize step. The width
+    write is debounced onto a single timer here, and the container's
+    scrollregion update is coalesced into one ``after_idle`` callback, so a
+    drag across many pixels pays for one relayout instead of one per step.
+    """
+
+    # The interval has to clear the cost of a single Game Day relayout, or the
+    # timer expires inside every drag step and the write happens anyway. One
+    # relayout measured ~156 ms here, and a 120 ms interval produced no gain
+    # (294.4 ms/step against an undebounced 288.8). At 250 ms the drag costs
+    # 159.3 ms/step, which is the 156.2 ms ceiling measured by unbinding the
+    # handler entirely. See Phase_8_Perf_Acceptance_Record.md.
+    WIDTH_DEBOUNCE_MS = 250
+
+    def __init__(self, canvas, window_id, container):
+        self.canvas = canvas
+        self.window_id = window_id
+        self.container = container
+        self.pending_width_id = None
+        self.pending_scrollregion_id = None
+        self.applied_width = None
+        self.width_writes = 0
+        self.scrollregion_writes = 0
+        self._requested_width = None
+        container.bind("<Configure>", self._on_container_configure)
+        canvas.bind("<Configure>", self._on_canvas_configure)
+
+    def _on_canvas_configure(self, event):
+        self._requested_width = int(getattr(event, "width", 0) or 0)
+        self._cancel_width_timer()
+        try:
+            self.pending_width_id = self.canvas.after(
+                self.WIDTH_DEBOUNCE_MS, self._apply_pending_width
+            )
+        except (tk.TclError, ValueError):
+            self.pending_width_id = None
+
+    def _cancel_width_timer(self):
+        timer_id = self.pending_width_id
+        self.pending_width_id = None
+        if timer_id is None:
+            return
+        try:
+            self.canvas.after_cancel(timer_id)
+        except (tk.TclError, ValueError):
+            return
+
+    def _apply_pending_width(self):
+        self.pending_width_id = None
+        width = self._requested_width
+        self._requested_width = None
+        if width is None or width == self.applied_width:
+            return
+        try:
+            self.canvas.itemconfigure(self.window_id, width=width)
+        except (tk.TclError, ValueError):
+            return
+        self.applied_width = width
+        self.width_writes += 1
+
+    def _on_container_configure(self, _event=None):
+        if self.pending_scrollregion_id is not None:
+            return
+        try:
+            self.pending_scrollregion_id = self.canvas.after_idle(
+                self._apply_scrollregion
+            )
+        except (tk.TclError, ValueError):
+            self.pending_scrollregion_id = None
+
+    def _apply_scrollregion(self):
+        self.pending_scrollregion_id = None
+        try:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        except (tk.TclError, ValueError):
+            return
+        self.scrollregion_writes += 1
+
+    def cancel_pending(self):
+        """Drop both timers so teardown during shutdown cannot raise."""
+
+        self._cancel_width_timer()
+        timer_id = self.pending_scrollregion_id
+        self.pending_scrollregion_id = None
+        if timer_id is None:
+            return
+        try:
+            self.canvas.after_cancel(timer_id)
+        except (tk.TclError, ValueError):
+            return
+
+
 @dataclass(frozen=True)
 class SelectedGame:
     game_id: str
@@ -2104,6 +2202,8 @@ class AUSLStatsApp:
         if change_lock is not None:
             with change_lock:
                 self._change_build_pending = None
+        for binder in getattr(self, "_scrollable_frames", {}).values():
+            binder.cancel_pending()
         self.root.destroy()
 
     def _style(self):
@@ -2461,6 +2561,22 @@ class AUSLStatsApp:
             wraplength=350,
         ).pack(fill="x", pady=(8, 0))
 
+    def _bind_scrollable_frame(self, name, canvas, window_id, container):
+        """Register one scrollable panel with the shared debounced helper.
+
+        Every scrollable panel goes through here so a new Phase 8 panel cannot
+        quietly reintroduce the per-resize-step width write. `PERF-004` guards
+        that.
+        """
+
+        binders = getattr(self, "_scrollable_frames", None)
+        if binders is None:
+            binders = {}
+            self._scrollable_frames = binders
+        binder = DebouncedScrollableFrame(canvas, window_id, container)
+        binders[name] = binder
+        return binder
+
     def _build_fact_panel(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(0, weight=1)
@@ -2554,17 +2670,11 @@ class AUSLStatsApp:
             window=self.fact_cards_container,
             anchor="nw",
         )
-        self.fact_cards_container.bind(
-            "<Configure>",
-            lambda _event: self.fact_cards_canvas.configure(
-                scrollregion=self.fact_cards_canvas.bbox("all")
-            ),
-        )
-        self.fact_cards_canvas.bind(
-            "<Configure>",
-            lambda event: self.fact_cards_canvas.itemconfigure(
-                self._fact_canvas_window, width=event.width
-            ),
+        self._bind_scrollable_frame(
+            "fact_cards_canvas",
+            self.fact_cards_canvas,
+            self._fact_canvas_window,
+            self.fact_cards_container,
         )
         self._bind_fact_cards_mousewheel(self.fact_cards_canvas)
         self._bind_fact_cards_mousewheel(self.fact_cards_container)
@@ -2677,17 +2787,11 @@ class AUSLStatsApp:
             window=self.what_changed_container,
             anchor="nw",
         )
-        self.what_changed_container.bind(
-            "<Configure>",
-            lambda _event: self.what_changed_canvas.configure(
-                scrollregion=self.what_changed_canvas.bbox("all")
-            ),
-        )
-        self.what_changed_canvas.bind(
-            "<Configure>",
-            lambda event: self.what_changed_canvas.itemconfigure(
-                self._change_canvas_window, width=event.width
-            ),
+        self._bind_scrollable_frame(
+            "what_changed_canvas",
+            self.what_changed_canvas,
+            self._change_canvas_window,
+            self.what_changed_container,
         )
         self._bind_change_cards_mousewheel(self.what_changed_canvas)
         self._bind_change_cards_mousewheel(self.what_changed_container)
@@ -2777,17 +2881,11 @@ class AUSLStatsApp:
             window=self.rundown_container,
             anchor="nw",
         )
-        self.rundown_container.bind(
-            "<Configure>",
-            lambda _event: self.rundown_canvas.configure(
-                scrollregion=self.rundown_canvas.bbox("all")
-            ),
-        )
-        self.rundown_canvas.bind(
-            "<Configure>",
-            lambda event: self.rundown_canvas.itemconfigure(
-                self._rundown_canvas_window, width=event.width
-            ),
+        self._bind_scrollable_frame(
+            "rundown_canvas",
+            self.rundown_canvas,
+            self._rundown_canvas_window,
+            self.rundown_container,
         )
         self._bind_rundown_mousewheel(self.rundown_canvas)
         self._bind_rundown_mousewheel(self.rundown_container)
@@ -2965,17 +3063,11 @@ class AUSLStatsApp:
         self._college_canvas_window = self.college_canvas.create_window(
             (0, 0), window=self.college_content, anchor="nw"
         )
-        self.college_content.bind(
-            "<Configure>",
-            lambda _event: self.college_canvas.configure(
-                scrollregion=self.college_canvas.bbox("all")
-            ),
-        )
-        self.college_canvas.bind(
-            "<Configure>",
-            lambda event: self.college_canvas.itemconfigure(
-                self._college_canvas_window, width=event.width
-            ),
+        self._bind_scrollable_frame(
+            "college_canvas",
+            self.college_canvas,
+            self._college_canvas_window,
+            self.college_content,
         )
         for widget in (self.college_canvas, self.college_content):
             widget.bind("<MouseWheel>", self._on_college_mousewheel, add="+")
@@ -3484,17 +3576,11 @@ class AUSLStatsApp:
         self._comparison_canvas_window = self.comparison_canvas.create_window(
             (0, 0), window=self.comparison_container, anchor="nw"
         )
-        self.comparison_container.bind(
-            "<Configure>",
-            lambda _event: self.comparison_canvas.configure(
-                scrollregion=self.comparison_canvas.bbox("all")
-            ),
-        )
-        self.comparison_canvas.bind(
-            "<Configure>",
-            lambda event: self.comparison_canvas.itemconfigure(
-                self._comparison_canvas_window, width=event.width
-            ),
+        self._bind_scrollable_frame(
+            "comparison_canvas",
+            self.comparison_canvas,
+            self._comparison_canvas_window,
+            self.comparison_container,
         )
         self._bind_comparison_mousewheel(self.comparison_canvas)
         self._bind_comparison_mousewheel(self.comparison_container)
