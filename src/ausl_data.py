@@ -211,12 +211,97 @@ def app_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def export_dir() -> Path:
+def canonical_export_dir() -> Path:
+    """The tracked snapshot directory.
+
+    `data/exports` serves three roles at once: the offline test fixture for a
+    dozen modules, the CI integrity baseline `tools/verify_distribution.py`
+    checks against `update_manifest.json`, and the data payload the portable
+    build ships. It is checked in, and a refresh must never overwrite it.
+    """
+
     path = app_root() / "data" / "exports"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
+def export_dir() -> Path:
+    """The configured snapshot directory.
+
+    Unchanged: producer-local state (manual notes, locked lineups, game
+    packets) and the distribution all resolve from here. The portable build,
+    the GUI smokes, and the tests redirect this deliberately.
+    """
+
+    return canonical_export_dir()
+
+
+def runtime_export_dir() -> Path:
+    """Untracked refresh output. Never created just by reading."""
+
+    return app_root() / "data" / "runtime" / "exports"
+
+
+def _configured_override() -> Path | None:
+    """Return an explicitly redirected export directory, if there is one.
+
+    A caller that has pointed `export_dir` somewhere specific — the portable
+    build, a GUI smoke, a test — owns that location for both read and write.
+    The runtime/canonical split only applies to a default installation.
+    """
+
+    configured = export_dir()
+    return None if configured == canonical_export_dir() else configured
+
+
+def refresh_output_dir() -> Path:
+    """Where a refresh writes. Deliberately not the canonical snapshot."""
+
+    override = _configured_override()
+    if override is not None:
+        return override
+    path = runtime_export_dir()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _usable_core_snapshot(directory: Path) -> bool:
+    """True when `directory` holds a complete, non-empty core snapshot."""
+
+    for filename in CORE_SNAPSHOT_FILENAMES:
+        path = directory / filename
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                return False
+        except OSError:
+            return False
+    return True
+
+
+def active_export_dir() -> Path:
+    """Where the app reads from: the runtime snapshot when it is complete.
+
+    A partial runtime directory is ignored rather than merged, so a fresh
+    runtime roster can never be combined with a stale canonical workbook into
+    a snapshot no `update_manifest.json` describes.
+    """
+
+    override = _configured_override()
+    if override is not None:
+        return override
+    runtime = runtime_export_dir()
+    if _usable_core_snapshot(runtime):
+        return runtime
+    return canonical_export_dir()
+
+
+CORE_SNAPSHOT_FILENAMES = (
+    "ausl_rosters.xlsx",
+    "ausl_season_stats.xlsx",
+    "ausl_career_stats.xlsx",
+    "ausl_team_context.xlsx",
+    "update_manifest.json",
+)
 REFRESH_ATTEMPT_FILENAME = "refresh_attempt.json"
 _CORE_REFRESH_COMMIT_LOCK = threading.Lock()
 _REFRESH_EXECUTION_LOCK = threading.Lock()
@@ -248,7 +333,28 @@ def _write_json_atomic(path: Path, payload: object, *, prefix: str = ".json-") -
 
 
 def _refresh_attempt_path(output: Path | None = None) -> Path:
-    return (Path(output) if output is not None else export_dir()) / REFRESH_ATTEMPT_FILENAME
+    """Where the newest refresh attempt is read from.
+
+    Prefers the runtime copy so a local refresh is what the health display
+    reflects, and falls back to the canonical snapshot so a fresh install
+    still reads the attempt that shipped with it.
+    """
+
+    if output is not None:
+        return Path(output) / REFRESH_ATTEMPT_FILENAME
+    override = _configured_override()
+    if override is not None:
+        return override / REFRESH_ATTEMPT_FILENAME
+    runtime = runtime_export_dir() / REFRESH_ATTEMPT_FILENAME
+    if runtime.exists():
+        return runtime
+    return canonical_export_dir() / REFRESH_ATTEMPT_FILENAME
+
+
+def _refresh_attempt_write_path() -> Path:
+    """Where a refresh attempt is written: beside the refresh output."""
+
+    return refresh_output_dir() / REFRESH_ATTEMPT_FILENAME
 
 
 def load_refresh_attempt(output: Path | None = None) -> dict:
@@ -265,7 +371,11 @@ def load_refresh_attempt(output: Path | None = None) -> dict:
 def _persist_refresh_attempt(attempt: dict, *, output: Path | None = None) -> bool:
     """Persist the newest refresh attempt without letting stale workers win."""
 
-    path = _refresh_attempt_path(output)
+    path = (
+        Path(output) / REFRESH_ATTEMPT_FILENAME
+        if output is not None
+        else _refresh_attempt_write_path()
+    )
     started_at = str(attempt.get("started_at") or "")
     with _REFRESH_ATTEMPT_LOCK:
         current = load_refresh_attempt(path.parent)
@@ -3371,7 +3481,7 @@ def _update_all_data_impl(
         frames = [frame for frame in frames if not frame.empty]
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-    output = export_dir()
+    output = refresh_output_dir()
     roster_path = output / "ausl_rosters.xlsx"
     season_path = output / "ausl_season_stats.xlsx"
     career_path = output / "ausl_career_stats.xlsx"
@@ -3769,7 +3879,7 @@ def load_database(
         enrichment_mode=enrichment_mode,
         include_enrichment=include_enrichment,
     )
-    output = export_dir()
+    output = active_export_dir()
     paths = {
         "roster": output / "ausl_rosters.xlsx",
         "season": output / "ausl_season_stats.xlsx",

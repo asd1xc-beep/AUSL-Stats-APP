@@ -1,10 +1,12 @@
 # AUSL Broadcast Stats — Improvement Tracker
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 Project source reviewed through merged Phase 7D and portable-build GitHub
 `main` at `930217d55cb562a6c18cfa9642c7f0c6858d1d97`, then Phase 7E on
-`agent/phase7e-college-scale-connections`.
+`agent/phase7e-college-scale-connections`, then the Phase 8 responsiveness
+and data-path pass on `agent/phase8-perf-responsiveness` from `main` at
+`d55ee43`.
 
 Detailed plan: `AUSL_Broadcast_Stats_Implementation_Guide.md`
 
@@ -36,6 +38,26 @@ Priority legend:
 
 ## Current milestone
 
+### Milestone 8 — UI responsiveness and data-path separation
+
+Phase 7 is closed. Phase 8 opened on 2026-08-13 from the post-Phase-7
+stability review recorded in section `P`, before producer feedback is folded
+in.
+
+`PERF-001`, `PERF-003`, and `PERF-004` are complete on
+`agent/phase8-perf-responsiveness`, starting from `main` at `d55ee43`. Game
+Day resize improved from 288.8 ms/step to 159.8 ms/step (44.7%), refresh
+output no longer overwrites the canonical tracked snapshot, and a structural
+guard fails if either regression returns. Evidence:
+`Implementation guide/Phase_8_Perf_Acceptance_Record.md`.
+
+`PERF-002` (incremental fact-card rendering) and `PERF-005` (interpreter
+alignment and the CI label) remain open. `PERF-002` touches pinned, used, and
+copy state and was deliberately excluded from this pass so it can have its
+own review.
+
+Status: **PHASE 8 IN PROGRESS — PERF-001, PERF-003, PERF-004 COMPLETE**
+
 ### Milestone 7D — Producer-facing College Résumé
 
 Phase 6F completed on 2026-07-29. The stabilization changes merged in PR #11
@@ -59,7 +81,8 @@ the later owner scaling report advanced that milestone to accepted.
 The master list below is the single source of task status. No item is
 complete until its tests and stated acceptance behavior pass.
 
-Status: **PHASE 7 COMPLETE**
+Status: **PHASE 7 COMPLETE** (superseded as the current milestone by
+Phase 8 above; retained as the Phase 7 record)
 
 ## Approved next roadmap
 
@@ -77,6 +100,7 @@ be reused by the college layer.
 | 5 | Phase 7C | Build and validate a varied ten-player college résumé pilot | Accepted by project owner on 2026-08-11 |
 | 6 | Phase 7D | Add the separate College Résumé tab | Accepted; owner-reported 100%/125%/150% scaling passed 2026-08-12 |
 | 7 | Phase 7E | Scale to the roster and add college-based broadcast connections | Complete; final owner-reported 100%/125%/150% Windows checks passed |
+| 8 | Phase 8 (first pass) | `PERF-001`, `PERF-003`, `PERF-004` — resize responsiveness, runtime/canonical data-path separation, and the regression guard | Complete on `agent/phase8-perf-responsiveness`; `PERF-002` and `PERF-005` remain open |
 
 The college milestone takes precedence over `NOTE-004`, live milestone watch,
 scenario calculations, news intake, and multi-user work unless a new producer
@@ -529,9 +553,193 @@ College and AUSL numbers must never be combined into one unlabeled career total.
 
 - [ ] `FUTURE-006` — Shared multi-user workflow only after ownership, authentication, conflict handling, and offline behavior are designed. **P3 · BACKLOG**
 
+### P. UI responsiveness and data-path separation
+
+Opened: 2026-08-13. Source: post-Phase-7 stability review of `main` at
+`d55ee43` before producer feedback is folded into Phase 8.
+
+All measurements below were taken on a clean worktree of `d55ee43` using the
+pinned Python 3.12.10 environment, real Tk, nine tabs realised, and one
+official game selected (61 facts). Absolute figures varied between runs
+(Game Day resize measured 218–330 ms/step across five runs); only the
+within-run A/B deltas are treated as reliable.
+
+Baseline evidence at `d55ee43`:
+
+- Complete offline suite: **1,063 passed in 84.12 s** with warnings as errors.
+- `compileall` passed; `pip check` reported no broken requirements.
+- Window **move** costs 4–9 ms/step and is not a defect.
+- Window **resize** costs 80–95 ms/step on eight tabs and 218–330 ms/step on
+  Game Day.
+- `_render_fact_cards()` costs **824–1303 ms per call** and has seven call
+  sites.
+- Game Day holds 971 widgets; the fact container alone holds 886.
+
+---
+
+- [x] `PERF-001` — Extract one shared, debounced scrollable-frame helper.
+  **P1 · COMPLETE**
+  - Implemented on `agent/phase8-perf-responsiveness`. All five panels now go
+    through `DebouncedScrollableFrame` via `_bind_scrollable_frame`.
+  - **The shipped interval is 250 ms, not the 120 ms proposed below.** A
+    single Game Day relayout measured ~156 ms on the review machine, so a
+    120 ms timer expired inside every drag step and the debounce bought
+    nothing: **294.4 ms/step against an undebounced 288.8**. At 250 ms the
+    interval clears the relayout and the drag costs **159.8 ms/step**, which
+    is the **156.2 ms** ceiling measured by unbinding the handler entirely —
+    a **44.7%** improvement, matching the 44.1% the prototype predicted.
+  - Scrollregion stayed valid (`0 0 1225 9735`) and `yview_moveto(0.5)`
+    resolved to 0.5. `phase6f_gui_smoke` reports `session_restored_exactly`
+    and `comparison_scroll`; `phase7e_gui_smoke` passes.
+  - Evidence: `Implementation guide/Phase_8_Perf_Acceptance_Record.md`.
+  - Five panels duplicate the same `<Configure>` pair with no shared helper:
+    `src/ausl_stats_app.py` lines 2558, 2681, 2781, 2969, and 3488. Each new
+    scrollable panel copies the cost.
+  - The canvas `<Configure>` handler writes `itemconfigure(window,
+    width=event.width)`, which relayouts every widget inside the container.
+    On Game Day that is 886 widgets per resize step.
+  - Replace all five with one helper that debounces the width write on a
+    120 ms timer (`after` plus `after_cancel`) and coalesces the scrollregion
+    update to a single `after_idle` callback.
+  - Measured on a prototype of exactly this change: Game Day resize improved
+    from **217.7 ms/step to 121.6 ms/step (44.1% faster)**, which matches the
+    123.0 ms ceiling measured by unbinding the handlers entirely. Scrollregion
+    remained valid (`0 0 1089 9735`) and `yview_moveto(0.5)` still resolved
+    correctly.
+  - Acceptance: all five panels use the helper; scrolling, scrollregion, and
+    session scroll restore are unchanged; `PERF-004` guard passes.
+
+- [ ] `PERF-002` — Make fact-card rendering incremental. **P1**
+  - `_render_fact_cards()` destroys every child and rebuilds roughly 14
+    widgets per card. Cost scales linearly: 10 facts 108 ms, 30 facts 328 ms,
+    59 facts 654 ms, 61 facts 824–1303 ms. Teardown alone costs 102 ms with
+    zero facts.
+  - Seven call sites currently pay the full rebuild: lines 1919, 2571, 5524,
+    5549, 5682, 6367, and 6826.
+  - Diff against the previously rendered fact list and reuse card widgets
+    whose content is unchanged; create and destroy only what actually differs.
+  - This is the longest single UI freeze in the application and the one most
+    visible to a producer changing a filter mid-broadcast.
+  - Acceptance: a filter change that alters one card does not rebuild the
+    other 60; re-render of an unchanged list is under 50 ms; pinned, used,
+    and copy state survive re-render.
+
+- [x] `PERF-003` — Separate the runtime refresh target from the canonical
+  checked-in snapshot. **P0 · COMPLETE**
+  - Implemented on `agent/phase8-perf-responsiveness`. `canonical_export_dir`,
+    `runtime_export_dir`, `refresh_output_dir`, and `active_export_dir` now
+    have separate roles; refresh writes to `data/runtime/exports` and the
+    loader prefers it only when it holds a complete snapshot.
+  - A partial runtime directory is ignored rather than merged, so a fresh
+    runtime roster can never join a stale canonical workbook into a snapshot
+    no `update_manifest.json` describes.
+  - College artifacts stay canonical-only; refresh never writes them and
+    approval semantics are unchanged.
+  - `tools/promote_runtime_snapshot.py` makes promotion explicit: it verifies
+    a staged copy with the same `scan_distribution` CI runs, refuses LFS
+    pointer text and incomplete snapshots, and is a dry run without
+    `--confirm`. No UI, as scoped.
+  - `git diff --stat -- data/exports` is empty, the four LFS hashes are
+    unchanged, and `verify_distribution.py data/exports` passes.
+  - Evidence: `Implementation guide/Phase_8_Perf_Acceptance_Record.md`.
+  - `ausl_data.py:215` reads `app_root()/data/exports`, and `update_all_data`
+    writes every workbook back to that same directory. Running the app
+    therefore overwrites the canonical committed snapshot in place, so
+    `git status` is never clean and real changes hide among modified
+    binaries.
+  - **`data/exports` must stay tracked.** It serves three roles: test fixture
+    for twelve-plus modules including `test_production_snapshot_regression.py`,
+    `test_season_pitching.py`, and `test_selected_game.py`; CI integrity
+    baseline through `tools/verify_distribution.py`, which checks SHA-256 and
+    byte counts against `update_manifest.json` and rejects LFS pointer text;
+    and the data payload shipped by the portable build. Adding it to
+    `.gitignore` would break CI and ship an empty application.
+  - Route refresh output to an untracked `data/runtime/exports`, and have the
+    loader prefer that directory when present and fall back to the canonical
+    tracked snapshot otherwise. Add `data/runtime/` to `.gitignore`, matching
+    the existing precedent for `data/exports/game_packets/` and `data/manual/`.
+  - Promotion of a local refresh into the canonical snapshot becomes a
+    deliberate, explicit step rather than a side effect of pressing refresh.
+  - Acceptance: a full refresh leaves `git status` clean; the tracked LFS
+    hashes for all four workbooks are unchanged; CI and the portable build
+    still resolve the canonical snapshot.
+
+- [x] `PERF-004` — Add a resize-budget regression guard. **P1 · COMPLETE**
+  - Implemented as `tests/test_ui_responsiveness_budget.py`. Structural
+    budgets only; the one wall-clock check is advisory, asserts nothing, and
+    is skipped unless `AUSL_ADVISORY_RESIZE_TIMING=1` is set.
+  - Verified by reintroducing a raw duplicated `<Configure>` pair in
+    `_build_rundown_panel`: three guard tests failed with actionable
+    messages, then the pair was reverted and all fifteen
+    `PERF-001`/`PERF-004` tests passed.
+  - Evidence: `Implementation guide/Phase_8_Perf_Acceptance_Record.md`.
+  - Same shape as the `SEASON-001` hardcoded-year guard: a test that fails if
+    responsiveness silently regresses as Phase 8 panels are added.
+  - Assert widget-count and structural budgets rather than wall-clock time,
+    so the guard is stable in CI: no scrollable panel may bind an
+    undebounced `<Configure>` width write, and the Game Day fact container
+    may not exceed an agreed widget ceiling.
+  - Keep any wall-clock assertion out of CI, or mark it clearly as
+    advisory-only and local-only, given the 218–330 ms run-to-run spread
+    observed during this review.
+  - Acceptance: the guard fails when a raw duplicated `<Configure>` pair is
+    reintroduced, and passes on the `PERF-001` implementation.
+
+- [ ] `PERF-005` — Align the local interpreter and refresh the CI label. **P2**
+  - The project owner's default `python` on PATH is 3.14.6 while CI and the
+    virtual environment pin 3.12.10, so any tool script invoked as bare
+    `python` silently runs on the unpinned interpreter.
+  - Document the pinned interpreter in `README.txt`, or have tool scripts
+    assert their own version at start.
+  - `.github/workflows/ci.yml` is still titled `Phase 5 CI`. Rename it to
+    something phase-independent.
+  - Acceptance: running a tool script on 3.14 produces a clear, immediate
+    error rather than silent divergence; the workflow name no longer names a
+    specific phase.
+
+---
+
+#### Rejected during this review
+
+- **Removing `wraplength` from fact-card labels.** Game Day carries 188
+  labels with a non-zero `wraplength`, and re-wrapping was a plausible
+  suspect. Stripping it from 177 labels measured **121.2 ms/step against
+  121.6 ms/step** with the debounce alone — no measurable benefit. Not worth
+  the readability cost.
+- **Treating `bbox("all")` as a bottleneck.** Each canvas holds exactly one
+  item, so the call measures 0.002 ms. It is not the problem.
+- **Changing the 25 ms `_drain_main_thread_results` poll.** It self-terminates
+  correctly whenever no work is in flight and holds no timer open at rest.
+  No change warranted.
+- **Fact count as the resize driver.** One run measured Game Day at
+  330 ms/step with an empty fact panel against 281 ms/step with 61 facts
+  loaded. The container's existence and the width-propagation chain drive the
+  cost, not how many cards are in it.
+
 ## Acceptance records
 
 Fill in one record when a milestone or major item is completed.
+
+### Phase 8 (first pass) — UI responsiveness and data-path separation
+
+- Technical completion date: 2026-08-13.
+- Starting commit and branch: `d55ee43`;
+  `agent/phase8-perf-responsiveness`.
+- Technically completed tracker scope: `PERF-001`, `PERF-003`, `PERF-004`.
+  `PERF-002` was deliberately excluded — it touches pinned, used, and copy
+  state and needs its own pass. `PERF-005` was not started.
+- Game Day resize improved from 288.8 ms/step to 159.8 ms/step (44.7%),
+  landing on the 156.2 ms ceiling measured by unbinding the width handler.
+  The shipped debounce is 250 ms; 120 ms was measured and produced no gain.
+- Refresh output moved to an untracked `data/runtime/exports`; the four
+  tracked LFS workbooks are byte-identical to `d55ee43` and
+  `verify_distribution.py data/exports` is clean.
+- 1,093 passed and 1 advisory local-only test skipped, with warnings as
+  errors, up from the 1,063 baseline.
+- No producer or truck-hardware verification. This is offline developer
+  verification on one Windows 10 machine; it is not represented as an AUSL
+  producer review, and Windows display scaling was not re-checked.
+- Detailed evidence: `Implementation guide/Phase_8_Perf_Acceptance_Record.md`.
 
 ### Phase 7C — Developer-review college pilot
 

@@ -47,6 +47,13 @@ def production_snapshot(monkeypatch):
     """Load only the checked-in July 23 snapshot; never touch local notes or the web."""
 
     monkeypatch.setattr(ausl_data, "load_manual_notes", lambda: pd.DataFrame())
+    # PERF-003 routes refresh output to data/runtime/exports and lets the
+    # loader prefer it. This file is the checked-in snapshot's regression
+    # guard, so it must read the tracked workbooks whether or not the machine
+    # running it happens to have a local refresh installed.
+    monkeypatch.setattr(
+        ausl_data, "active_export_dir", ausl_data.canonical_export_dir
+    )
     database = ausl_data.load_database()
     assert database["manifest"]["updated_at"] == EXPECTED_SNAPSHOT_UPDATED_AT
     return database
